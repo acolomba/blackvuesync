@@ -16,14 +16,67 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import argparse
+import datetime
+from collections import namedtuple
 import re
 import os
 import urllib
 import urllib.parse
 import urllib.request
 
+# represents a recording: filename and metadata
+Recording = namedtuple('Recording', 'filename datetime type direction extension')
 
-def get_filenames(base_url):
+# globals
+dry_run = None
+
+filename_re = re.compile(r"""^(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+    _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d)
+    _(?P<type>[NEPM])
+    (?P<direction>[FR])
+    \.(?P<extension>\w+)$""", re.VERBOSE)
+
+
+def get_recording(filename):
+    """extracts recording information from a filename"""
+    filename_match = re.fullmatch(filename_re, filename)
+
+    if filename_match is None:
+        return None
+
+    year = int(filename_match.group("year"))
+    month = int(filename_match.group("month"))
+    day = int(filename_match.group("day"))
+    hour = int(filename_match.group("hour"))
+    minute = int(filename_match.group("minute"))
+    second = int(filename_match.group("second"))
+
+    recording_datetime = datetime.datetime(year, month, day, hour, minute, second)
+    recording_type = filename_match.group("type")
+    recording_direction = filename_match.group("direction")
+    recording_extension = filename_match.group("extension")
+
+    return Recording(filename, recording_datetime, recording_type, recording_direction, recording_extension)
+
+
+# pattern of a recording filename as returned in each line from from the dashcam index page
+file_line_re = re.compile(r"n:/Record/(?P<filename>.*\.mp4),s:1000000\r\n")
+
+
+def get_filenames(file_lines):
+    """extracts the recording filenames from the lines returned by the dashcam index page"""
+    filenames = []
+    for file_line in file_lines:
+        file_line_match = re.fullmatch(file_line_re, file_line)
+        # the first line is "v:1.00", which won't match, so we skip it
+        if file_line_match:
+            filenames.append(file_line_match.group("filename"))
+
+    return filenames
+
+
+def get_dashcam_filenames(base_url):
+    """gets the recording filenames from the dashcam at the """
     url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
     request = urllib.request.Request(url)
     response = urllib.request.urlopen(request)
@@ -34,17 +87,12 @@ def get_filenames(base_url):
     charset = response.info().get_param('charset', 'UTF-8')
     file_lines = [x.decode(charset) for x in response.readlines()]
 
-    filenames = []
-    for file_line in file_lines:
-        filename_match = re.search("n:/Record/(.*\.mp4),s:1000000\r\n", file_line)
-        # the first line is "v:1.00", which won't match, so we skip it
-        if filename_match:
-            filenames.append(filename_match.group(1))
-
-    return filenames
+    return get_filenames(file_lines)
 
 
 def download_file(base_url, filename, destination):
+    global dry_run
+
     filepath = os.path.join(destination, filename)
 
     if os.path.exists(filepath):
@@ -79,14 +127,15 @@ def download_recording(base_url, filename, destination):
         download_file(base_url, tgf_filename, destination)
 
 
-def sync(address, destination):
-    base_url = "http://%s" % address
-    filenames = get_filenames(base_url)
-    for filename in filenames:
-        download_recording(base_url, filename, destination)
+def get_destination_recordings(destination):
+    existing_files = os.listdir(destination)
+
+    return [x for x in [get_recording(x) for x in existing_files] if x is not None]
 
 
-def prepare_destination(destination):
+def prepare_destination(destination, keep_range):
+    global dry_run
+
     # if no destination, creates it
     if not os.path.exists(destination):
         os.makedirs(destination)
@@ -100,21 +149,53 @@ def prepare_destination(destination):
     if not os.access(destination, os.W_OK):
         raise Exception("destination directory not writable : %s" % destination)
 
+    if keep_range:
+        keep_range_timedelta = datetime.timedelta(days=int(keep_range))
 
-if __name__ == "__main__":
+        existing_recordings = get_destination_recordings(destination)
+
+        today = datetime.date.today()
+        outdated_recordings = [x for x in existing_recordings
+                               if today - x.datetime.date() > keep_range_timedelta]
+
+        for outdated_recording in outdated_recordings:
+            outdated_filepath = os.path.join(destination, outdated_recording.filename)
+            if not dry_run:
+                    os.remove(outdated_filepath)
+            else:
+                print("Would remove : %s" % outdated_filepath)
+
+
+def sync(address, destination):
+    base_url = "http://%s" % address
+    filenames = get_dashcam_filenames(base_url)
+    for filename in filenames:
+        download_recording(base_url, filename, destination)
+
+
+def run():
+    # dry-run is a global setting
+    global dry_run
+
     arg_parser = argparse.ArgumentParser(description="Synchronizes BlackVue dashcam recordings with a local directory.",
                                          epilog="Bug reports: https://github.com/acolomba/BlackVueSync")
-    arg_parser.add_argument("address", help="dashcam IP address or name")
+    arg_parser.add_argument("address", metavar="ADDRESS",
+                            help="dashcam IP address or name")
     arg_parser.add_argument("-d", "--destination", metavar="DEST",
                             help="destination directory (defaults to current directory)")
-    arg_parser.add_argument("--dry-run", help="", action='store_true')
+    arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
+                            help="keeps recordings in the given range, removing the rest (days)")
+    arg_parser.add_argument("--dry-run", help="shows what the program would do", action='store_true')
     args = arg_parser.parse_args()
 
-    # dry-run is a global setting
     dry_run = args.dry_run
 
     # prepares the local file destination
     destination = args.destination or os.getcwd()
-    prepare_destination(destination)
+    prepare_destination(destination, args.keep)
 
     sync(args.address, destination)
+
+
+if __name__ == "__main__":
+    run()
