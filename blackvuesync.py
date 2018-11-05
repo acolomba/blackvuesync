@@ -50,8 +50,8 @@ def get_recording(filename):
     hour = int(filename_match.group("hour"))
     minute = int(filename_match.group("minute"))
     second = int(filename_match.group("second"))
-
     recording_datetime = datetime.datetime(year, month, day, hour, minute, second)
+
     recording_type = filename_match.group("type")
     recording_direction = filename_match.group("direction")
     recording_extension = filename_match.group("extension")
@@ -77,12 +77,16 @@ def get_filenames(file_lines):
 
 def get_dashcam_filenames(base_url):
     """gets the recording filenames from the dashcam at the """
-    url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
-    request = urllib.request.Request(url)
-    response = urllib.request.urlopen(request)
+    try:
+        url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
+        request = urllib.request.Request(url)
+        response = urllib.request.urlopen(request)
+    except urllib.error.URLError as e:
+        raise Exception("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
 
-    if response.getcode() != 200:
-        raise Exception("bad response")
+    response_status_code = response.getcode()
+    if response_status_code != 200:
+        raise Exception("Error response from : %s ; status code : %s" % (base_url, response_status_code))
 
     charset = response.info().get_param('charset', 'UTF-8')
     file_lines = [x.decode(charset) for x in response.readlines()]
@@ -91,6 +95,7 @@ def get_dashcam_filenames(base_url):
 
 
 def download_file(base_url, filename, destination):
+    """downloads a file from the dashcam to the destination directory"""
     global dry_run
 
     filepath = os.path.join(destination, filename)
@@ -114,6 +119,8 @@ def download_file(base_url, filename, destination):
 
 
 def download_recording(base_url, filename, destination):
+    """downloads the set of recordings, including gps data, for the given filename from the dashcam to the destination
+    directory"""
     download_file(base_url, filename, destination)
 
     # only normal recordings have gps data
@@ -128,12 +135,14 @@ def download_recording(base_url, filename, destination):
 
 
 def get_destination_recordings(destination):
+    """reads files from the destination directory and returns them as recording structures"""
     existing_files = os.listdir(destination)
 
     return [x for x in [get_recording(x) for x in existing_files] if x is not None]
 
 
 def prepare_destination(destination, keep_range):
+    """prepares the destination, esuring it's valid and removing excess recordings"""
     global dry_run
 
     # if no destination, creates it
@@ -167,34 +176,45 @@ def prepare_destination(destination, keep_range):
 
 
 def sync(address, destination):
+    """synchronizes the recordings at the dashcam address with the destination directory"""
     base_url = "http://%s" % address
     filenames = get_dashcam_filenames(base_url)
     for filename in filenames:
         download_recording(base_url, filename, destination)
 
 
-def run():
-    # dry-run is a global setting
-    global dry_run
-
+def parse_args():
+    """parses the command-line arguments"""
     arg_parser = argparse.ArgumentParser(description="Synchronizes BlackVue dashcam recordings with a local directory.",
                                          epilog="Bug reports: https://github.com/acolomba/BlackVueSync")
     arg_parser.add_argument("address", metavar="ADDRESS",
                             help="dashcam IP address or name")
     arg_parser.add_argument("-d", "--destination", metavar="DEST",
-                            help="destination directory (defaults to current directory)")
+                            help="destination directory (defaults to c  urrent directory)")
     arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
                             help="keeps recordings in the given range, removing the rest (days)")
     arg_parser.add_argument("--dry-run", help="shows what the program would do", action='store_true')
-    args = arg_parser.parse_args()
+
+    return arg_parser.parse_args()
+
+
+def run():
+    # dry-run is a global setting
+    global dry_run
+
+    args = parse_args()
 
     dry_run = args.dry_run
 
-    # prepares the local file destination
-    destination = args.destination or os.getcwd()
-    prepare_destination(destination, args.keep)
+    try:
+        # prepares the local file destination
+        destination = args.destination or os.getcwd()
+        prepare_destination(destination, args.keep)
 
-    sync(args.address, destination)
+        sync(args.address, destination)
+    except Exception as e:
+        print(e)
+        return 1
 
 
 if __name__ == "__main__":
