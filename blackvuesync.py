@@ -118,9 +118,10 @@ def download_file(base_url, filename, destination):
         print("Dry run: would download : %s; to : %s" % (filename, filepath))
 
 
-def download_recording(base_url, filename, destination):
+def download_recording(base_url, recording, destination):
     """downloads the set of recordings, including gps data, for the given filename from the dashcam to the destination
     directory"""
+    filename = recording.filename
     download_file(base_url, filename, destination)
 
     # only normal recordings have gps data
@@ -141,6 +142,26 @@ def get_destination_recordings(destination):
     return [x for x in [get_recording(x) for x in existing_files] if x is not None]
 
 
+def get_outdated_recordings(recordings, keep_range):
+    """returns the recordings that are outside of the keep range"""
+    if keep_range is None:
+        return recordings
+
+    keep_range_timedelta = datetime.timedelta(days=int(keep_range))
+    today = datetime.date.today()
+    return [x for x in recordings if today - x.datetime.date() > keep_range_timedelta]
+
+
+def get_current_recordings(recordings, keep_range):
+    """returns the recordings that are within the keep range"""
+    if keep_range is None:
+        return recordings
+
+    keep_range_timedelta = datetime.timedelta(days=int(keep_range))
+    today = datetime.date.today()
+    return [x for x in recordings if today - x.datetime.date() <= keep_range_timedelta]
+
+
 def prepare_destination(destination, keep_range):
     """prepares the destination, esuring it's valid and removing excess recordings"""
     global dry_run
@@ -159,13 +180,9 @@ def prepare_destination(destination, keep_range):
         raise Exception("destination directory not writable : %s" % destination)
 
     if keep_range:
-        keep_range_timedelta = datetime.timedelta(days=int(keep_range))
-
         existing_recordings = get_destination_recordings(destination)
 
-        today = datetime.date.today()
-        outdated_recordings = [x for x in existing_recordings
-                               if today - x.datetime.date() > keep_range_timedelta]
+        outdated_recordings = get_outdated_recordings(existing_recordings, keep_range)
 
         for outdated_recording in outdated_recordings:
             outdated_filepath = os.path.join(destination, outdated_recording.filename)
@@ -175,12 +192,15 @@ def prepare_destination(destination, keep_range):
                 print("Would remove : %s" % outdated_filepath)
 
 
-def sync(address, destination):
+def sync(address, destination, keep_range):
     """synchronizes the recordings at the dashcam address with the destination directory"""
     base_url = "http://%s" % address
-    filenames = get_dashcam_filenames(base_url)
-    for filename in filenames:
-        download_recording(base_url, filename, destination)
+    dashcam_filenames = get_dashcam_filenames(base_url)
+    dashcam_recordings = [get_recording(x) for x in dashcam_filenames]
+    current_dashcam_recordings = get_current_recordings(dashcam_recordings, keep_range)
+
+    for recording in current_dashcam_recordings:
+        download_recording(base_url, recording, destination)
 
 
 def parse_args():
@@ -211,7 +231,7 @@ def run():
         destination = args.destination or os.getcwd()
         prepare_destination(destination, args.keep)
 
-        sync(args.address, destination)
+        sync(args.address, destination, args.keep)
     except Exception as e:
         print(e)
         return 1
