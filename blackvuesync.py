@@ -18,8 +18,11 @@
 import argparse
 import datetime
 from collections import namedtuple
+import fcntl
 import re
 import os
+import shutil
+import stat
 import urllib
 import urllib.parse
 import urllib.request
@@ -30,6 +33,9 @@ Recording = namedtuple('Recording', 'filename datetime type direction extension'
 
 # indicator that we're doing a dry run
 dry_run = None
+
+# max disk usage percent
+max_disk_used_percent = None
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""", re.VERBOSE)
@@ -153,6 +159,16 @@ def download_file(base_url, filename, destination):
 def download_recording(base_url, recording, destination):
     """downloads the set of recordings, including gps data, for the given filename from the dashcam to the destination
     directory"""
+    global max_disk_used_percent
+
+    # first checks that we have enough room left
+    disk_usage = shutil.disk_usage(destination)
+    disk_used_percent = disk_usage.used / disk_usage.total * 100.0
+
+    if disk_used_percent > max_disk_used_percent:
+        raise Exception("Not enough disk space left. Max used disk space percentage allowed : %s%%"
+                        % max_disk_used_percent)
+
     filename = recording.filename
     download_file(base_url, filename, destination)
 
@@ -187,11 +203,8 @@ def get_current_recordings(recordings):
     return recordings if cutoff_date is None else [x for x in recordings if x.datetime.date() >= cutoff_date]
 
 
-def prepare_destination(destination):
-    """prepares the destination, esuring it's valid and removing excess recordings"""
-    global dry_run
-    global cutoff_date
-
+def verify_destination(destination):
+    """ensures the destination directory exists, creates if not, verifies it's writeable"""
     # if no destination, creates it
     if not os.path.exists(destination):
         os.makedirs(destination)
@@ -204,6 +217,12 @@ def prepare_destination(destination):
     # destination is a directory, tests if writable
     if not os.access(destination, os.W_OK):
         raise Exception("destination directory not writable : %s" % destination)
+
+
+def prepare_destination(destination):
+    """prepares the destination, esuring it's valid and removing excess recordings"""
+    global dry_run
+    global cutoff_date
 
     if cutoff_date:
         existing_recordings = get_destination_recordings(destination)
@@ -219,6 +238,8 @@ def prepare_destination(destination):
 
 def sync(address, destination):
     """synchronizes the recordings at the dashcam address with the destination directory"""
+    prepare_destination(destination)
+
     base_url = "http://%s" % address
     dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [get_recording(x) for x in dashcam_filenames]
@@ -226,6 +247,30 @@ def sync(address, destination):
 
     for recording in current_dashcam_recordings:
         download_recording(base_url, recording, destination)
+
+
+def lock(destination):
+    """creates a lock to ensure only one instance is running on a given destination; adapted from:
+    https://stackoverflow.com/questions/220525/ensure-a-single-instance-of-an-application-in-linux
+    """
+    # Establish lock file settings
+    lf_path = os.path.join(destination, ".blackvuesync.lock")
+    lf_flags = os.O_WRONLY | os.O_CREAT
+    lf_mode = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH  # This is 0o222, i.e. 146
+
+    # Create lock file
+    # Regarding umask, see https://stackoverflow.com/a/15015748/832230
+    umask_original = os.umask(0)
+
+    try:
+        lf_fd = os.open(lf_path, lf_flags, lf_mode)
+    finally:
+        os.umask(umask_original)
+
+    try:
+        fcntl.lockf(lf_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        raise Exception("Another instance is already running for destination : %s" % destination)
 
 
 def parse_args():
@@ -237,7 +282,11 @@ def parse_args():
     arg_parser.add_argument("-d", "--destination", metavar="DEST",
                             help="destination directory (defaults to c  urrent directory)")
     arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
-                            help="keeps recordings in the given range, removing the rest; defaults to days, but can suffix with d, w for days or weeks respectively)")
+                            help="""keeps recordings in the given range, removing the rest; defaults to days, but can
+                            suffix with d, w for days or weeks respectively""")
+    arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
+                            type=int, choices=range(5, 99),
+                            help="will not exceed more than DISK_USAGE_PERCENT used disk space; defaults to 90%%")
     arg_parser.add_argument("--dry-run", help="shows what the program would do", action='store_true')
 
     return arg_parser.parse_args()
@@ -246,11 +295,14 @@ def parse_args():
 def run():
     # dry-run is a global setting
     global dry_run
+    global max_disk_used_percent
     global cutoff_date
 
     args = parse_args()
 
     dry_run = args.dry_run
+    max_disk_used_percent = args.max_used_disk
+
     if args.keep:
         cutoff_date = calc_cutoff_date(args.keep)
         print("Cutoff date : %s" % cutoff_date)
@@ -258,7 +310,9 @@ def run():
     try:
         # prepares the local file destination
         destination = args.destination or os.getcwd()
-        prepare_destination(destination)
+        verify_destination
+
+        lock(destination)
 
         sync(args.address, destination)
     except Exception as e:
