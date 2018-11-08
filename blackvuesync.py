@@ -24,17 +24,49 @@ import urllib
 import urllib.parse
 import urllib.request
 
+
 # represents a recording: filename and metadata
 Recording = namedtuple('Recording', 'filename datetime type direction extension')
 
-# globals
+# indicator that we're doing a dry run
 dry_run = None
 
-filename_re = re.compile(r"""^(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+# keep and cutoff date; only recordings from this date on are downloaded and kept
+keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""", re.VERBOSE)
+cutoff_date = None
+
+
+def calc_cutoff_date(keep):
+    keep_match = re.fullmatch(keep_re, keep)
+
+    if keep_match is None:
+        raise Exception("KEEP must be in the format <number>[dw]")
+
+    keep_range = int(keep_match.group("range"))
+
+    if keep_range < 1:
+        raise Exception("KEEP must be greater than one.")
+
+    keep_unit = keep_match.group("unit") or "d"
+
+    today = datetime.date.today()
+
+    if keep_unit == "d" or keep_unit is None:
+        keep_range_timedelta = datetime.timedelta(days=keep_range)
+    elif keep_unit is "w":
+        keep_range_timedelta = datetime.timedelta(weeks=keep_range)
+    else:
+        # this indicates a coding error
+        raise Exception("unknown KEEP unit : %s" % keep_unit)
+
+    return today - keep_range_timedelta
+
+
+filename_re = re.compile(r"""(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d)
     _(?P<type>[NEPM])
     (?P<direction>[FR])
-    \.(?P<extension>\w+)$""", re.VERBOSE)
+    \.(?P<extension>\w+)""", re.VERBOSE)
 
 
 def get_recording(filename):
@@ -142,29 +174,23 @@ def get_destination_recordings(destination):
     return [x for x in [get_recording(x) for x in existing_files] if x is not None]
 
 
-def get_outdated_recordings(recordings, keep_range):
-    """returns the recordings that are outside of the keep range"""
-    if keep_range is None:
-        return recordings
+def get_outdated_recordings(recordings):
+    """returns the recordings that are prior to the cutoff date"""
+    global cutoff_date
 
-    keep_range_timedelta = datetime.timedelta(days=int(keep_range))
-    today = datetime.date.today()
-    return [x for x in recordings if today - x.datetime.date() > keep_range_timedelta]
+    return [] if cutoff_date is None else [x for x in recordings if x.datetime.date() < cutoff_date]
 
 
-def get_current_recordings(recordings, keep_range):
-    """returns the recordings that are within the keep range"""
-    if keep_range is None:
-        return recordings
-
-    keep_range_timedelta = datetime.timedelta(days=int(keep_range))
-    today = datetime.date.today()
-    return [x for x in recordings if today - x.datetime.date() <= keep_range_timedelta]
+def get_current_recordings(recordings):
+    """returns the recordings that are after or on the cutoff date"""
+    global cutoff_date
+    return recordings if cutoff_date is None else [x for x in recordings if x.datetime.date() >= cutoff_date]
 
 
-def prepare_destination(destination, keep_range):
+def prepare_destination(destination):
     """prepares the destination, esuring it's valid and removing excess recordings"""
     global dry_run
+    global cutoff_date
 
     # if no destination, creates it
     if not os.path.exists(destination):
@@ -179,10 +205,9 @@ def prepare_destination(destination, keep_range):
     if not os.access(destination, os.W_OK):
         raise Exception("destination directory not writable : %s" % destination)
 
-    if keep_range:
+    if cutoff_date:
         existing_recordings = get_destination_recordings(destination)
-
-        outdated_recordings = get_outdated_recordings(existing_recordings, keep_range)
+        outdated_recordings = get_outdated_recordings(existing_recordings)
 
         for outdated_recording in outdated_recordings:
             outdated_filepath = os.path.join(destination, outdated_recording.filename)
@@ -192,12 +217,12 @@ def prepare_destination(destination, keep_range):
                 print("Would remove : %s" % outdated_filepath)
 
 
-def sync(address, destination, keep_range):
+def sync(address, destination):
     """synchronizes the recordings at the dashcam address with the destination directory"""
     base_url = "http://%s" % address
     dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [get_recording(x) for x in dashcam_filenames]
-    current_dashcam_recordings = get_current_recordings(dashcam_recordings, keep_range)
+    current_dashcam_recordings = get_current_recordings(dashcam_recordings)
 
     for recording in current_dashcam_recordings:
         download_recording(base_url, recording, destination)
@@ -212,7 +237,7 @@ def parse_args():
     arg_parser.add_argument("-d", "--destination", metavar="DEST",
                             help="destination directory (defaults to c  urrent directory)")
     arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
-                            help="keeps recordings in the given range, removing the rest (days)")
+                            help="keeps recordings in the given range, removing the rest; defaults to days, but can suffix with d, w for days or weeks respectively)")
     arg_parser.add_argument("--dry-run", help="shows what the program would do", action='store_true')
 
     return arg_parser.parse_args()
@@ -221,17 +246,21 @@ def parse_args():
 def run():
     # dry-run is a global setting
     global dry_run
+    global cutoff_date
 
     args = parse_args()
 
     dry_run = args.dry_run
+    if args.keep:
+        cutoff_date = calc_cutoff_date(args.keep)
+        print("Cutoff date : %s" % cutoff_date)
 
     try:
         # prepares the local file destination
         destination = args.destination or os.getcwd()
-        prepare_destination(destination, args.keep)
+        prepare_destination(destination)
 
-        sync(args.address, destination, args.keep)
+        sync(args.address, destination)
     except Exception as e:
         print(e)
         return 1
