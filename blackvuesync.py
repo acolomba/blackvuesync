@@ -19,6 +19,7 @@ import argparse
 import datetime
 from collections import namedtuple
 import fcntl
+import logging
 import re
 import os
 import shutil
@@ -28,8 +29,22 @@ import urllib.parse
 import urllib.request
 
 
+# logging
+logging.basicConfig(format="%(asctime)s: %(levelname)s %(message)s")
+logger = logging.getLogger()
+
+
+def set_verbosity(verbosity):
+    if verbosity == -1:
+        logger.setLevel(logging.ERROR)
+    elif verbosity == 0:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.DEBUG)
+
+
 # represents a recording: filename and metadata
-Recording = namedtuple('Recording', 'filename datetime type direction extension')
+Recording = namedtuple("Recording", "filename datetime type direction extension")
 
 # indicator that we're doing a dry run
 dry_run = None
@@ -126,7 +141,7 @@ def get_dashcam_filenames(base_url):
     if response_status_code != 200:
         raise Exception("Error response from : %s ; status code : %s" % (base_url, response_status_code))
 
-    charset = response.info().get_param('charset', 'UTF-8')
+    charset = response.info().get_param("charset", "UTF-8")
     file_lines = [x.decode(charset) for x in response.readlines()]
 
     return get_filenames(file_lines)
@@ -139,21 +154,20 @@ def download_file(base_url, filename, destination):
     filepath = os.path.join(destination, filename)
 
     if os.path.exists(filepath):
-        print("Already downloaded : %s" % filename)
+        logger.debug("Ignoring already downloaded recording : %s", filename)
         return
 
     temp_filepath = os.path.join(destination, ".%s" % filename)
     if os.path.exists(temp_filepath):
-        print("Found unfinished download : %s" % temp_filepath)
+        logger.debug("Found incomplete download : %s", temp_filepath)
 
     url = urllib.parse.urljoin(base_url, "Record/%s" % filename)
     if not dry_run:
-        print("Downloading : %s; to : %s..." % (filename, filepath), end="", flush=True)
         urllib.request.urlretrieve(url, temp_filepath)
         os.rename(temp_filepath, filepath)
-        print("done.")
+        logger.info("Downloaded recording : %s", filename)
     else:
-        print("Dry run: would download : %s; to : %s" % (filename, filepath))
+        logger.info("DRY RUN Would download : %s", filename)
 
 
 def download_recording(base_url, recording, destination):
@@ -231,9 +245,10 @@ def prepare_destination(destination):
         for outdated_recording in outdated_recordings:
             outdated_filepath = os.path.join(destination, outdated_recording.filename)
             if not dry_run:
-                    os.remove(outdated_filepath)
+                logger.info("Removing outdated recording : %s", outdated_recording.filename)
+                os.remove(outdated_filepath)
             else:
-                print("Would remove : %s" % outdated_filepath)
+                logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.filename)
 
 
 def sync(address, destination):
@@ -269,8 +284,15 @@ def lock(destination):
 
     try:
         fcntl.lockf(lf_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        return lf_fd
     except IOError:
         raise Exception("Another instance is already running for destination : %s" % destination)
+
+
+def unlock(lf_fd):
+    """unlocks the lock file; does not remove because another process may lock it in the meantime"""
+    fcntl.lockf(lf_fd, fcntl.LOCK_UN)
 
 
 def parse_args():
@@ -287,7 +309,14 @@ def parse_args():
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
                             help="will not exceed more than DISK_USAGE_PERCENT used disk space; defaults to 90%%")
-    arg_parser.add_argument("--dry-run", help="shows what the program would do", action='store_true')
+    arg_parser.add_argument("-v", "--verbose", action="count",
+                            help="increases verbosity")
+    arg_parser.add_argument("-q", "--quiet", action="store_true",
+                            help="quiets down output messages; overrides verbosity options")
+    arg_parser.add_argument("--dry-run", action="store_true",
+                            help="shows what the program would do")
+    arg_parser.add_argument("--version", action="version", version="%(prog)s 0.x",
+                            help="shows this script's version and exists")
 
     return arg_parser.parse_args()
 
@@ -301,23 +330,32 @@ def run():
     args = parse_args()
 
     dry_run = args.dry_run
+    if dry_run:
+        logger.info("DRY RUN No action will be taken.")
+
     max_disk_used_percent = args.max_used_disk
+
+    set_verbosity(-1 if args.quiet else args.verbose)
 
     if args.keep:
         cutoff_date = calc_cutoff_date(args.keep)
-        print("Cutoff date : %s" % cutoff_date)
+        logger.info("Recording cutoff date : %s", cutoff_date)
 
     try:
         # prepares the local file destination
         destination = args.destination or os.getcwd()
-        verify_destination
 
-        lock(destination)
+        verify_destination(destination)
+
+        lf_fd = lock(destination)
 
         sync(args.address, destination)
     except Exception as e:
-        print(e)
+        logger.exception(e)
         return 1
+    finally:
+        if lf_fd:
+            unlock(lf_fd)
 
 
 if __name__ == "__main__":
