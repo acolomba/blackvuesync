@@ -38,6 +38,8 @@ def set_verbosity(verbosity):
     if verbosity == -1:
         logger.setLevel(logging.ERROR)
     elif verbosity == 0:
+        logger.setLevel(logging.WARN)
+    elif verbosity == 1:
         logger.setLevel(logging.INFO)
     else:
         logger.setLevel(logging.DEBUG)
@@ -61,12 +63,12 @@ def calc_cutoff_date(keep):
     keep_match = re.fullmatch(keep_re, keep)
 
     if keep_match is None:
-        raise Exception("KEEP must be in the format <number>[dw]")
+        raise RuntimeError("KEEP must be in the format <number>[dw]")
 
     keep_range = int(keep_match.group("range"))
 
     if keep_range < 1:
-        raise Exception("KEEP must be greater than one.")
+        raise RuntimeError("KEEP must be greater than one.")
 
     keep_unit = keep_match.group("unit") or "d"
 
@@ -78,7 +80,7 @@ def calc_cutoff_date(keep):
         keep_range_timedelta = datetime.timedelta(weeks=keep_range)
     else:
         # this indicates a coding error
-        raise Exception("unknown KEEP unit : %s" % keep_unit)
+        raise RuntimeError("unknown KEEP unit : %s" % keep_unit)
 
     return today - keep_range_timedelta
 
@@ -135,11 +137,11 @@ def get_dashcam_filenames(base_url):
         request = urllib.request.Request(url)
         response = urllib.request.urlopen(request)
     except urllib.error.URLError as e:
-        raise Exception("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
+        raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
 
     response_status_code = response.getcode()
     if response_status_code != 200:
-        raise Exception("Error response from : %s ; status code : %s" % (base_url, response_status_code))
+        raise RuntimeError("Error response from : %s ; status code : %s" % (base_url, response_status_code))
 
     charset = response.info().get_param("charset", "UTF-8")
     file_lines = [x.decode(charset) for x in response.readlines()]
@@ -180,8 +182,8 @@ def download_recording(base_url, recording, destination):
     disk_used_percent = disk_usage.used / disk_usage.total * 100.0
 
     if disk_used_percent > max_disk_used_percent:
-        raise Exception("Not enough disk space left. Max used disk space percentage allowed : %s%%"
-                        % max_disk_used_percent)
+        raise RuntimeError("Not enough disk space left. Max used disk space percentage allowed : %s%%"
+                           % max_disk_used_percent)
 
     filename = recording.filename
     download_file(base_url, filename, destination)
@@ -226,11 +228,11 @@ def verify_destination(destination):
 
     # destination exists, tests if directory
     if not os.path.isdir(destination):
-        raise Exception("destination is not a directory : %s" % destination)
+        raise RuntimeError("destination is not a directory : %s" % destination)
 
     # destination is a directory, tests if writable
     if not os.access(destination, os.W_OK):
-        raise Exception("destination directory not writable : %s" % destination)
+        raise RuntimeError("destination directory not writable : %s" % destination)
 
 
 def prepare_destination(destination):
@@ -287,7 +289,7 @@ def lock(destination):
 
         return lf_fd
     except IOError:
-        raise Exception("Another instance is already running for destination : %s" % destination)
+        raise UserWarning("Another instance is already running for destination : %s" % destination)
 
 
 def unlock(lf_fd):
@@ -309,7 +311,7 @@ def parse_args():
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
                             help="will not exceed more than DISK_USAGE_PERCENT used disk space; defaults to 90%%")
-    arg_parser.add_argument("-v", "--verbose", action="count",
+    arg_parser.add_argument("-v", "--verbose", action="count", default=0,
                             help="increases verbosity")
     arg_parser.add_argument("-q", "--quiet", action="store_true",
                             help="quiets down output messages; overrides verbosity options")
@@ -337,22 +339,30 @@ def run():
 
     set_verbosity(-1 if args.quiet else args.verbose)
 
-    if args.keep:
-        cutoff_date = calc_cutoff_date(args.keep)
-        logger.info("Recording cutoff date : %s", cutoff_date)
+    # lock file file descriptor
+    lf_fd = None
 
     try:
+        if args.keep:
+            cutoff_date = calc_cutoff_date(args.keep)
+            logger.info("Recording cutoff date : %s", cutoff_date)
+
         # prepares the local file destination
         destination = args.destination or os.getcwd()
-
         verify_destination(destination)
 
         lf_fd = lock(destination)
 
         sync(args.address, destination)
+    except UserWarning as e:
+        logger.warning(e.args[0])
+        return 1
+    except RuntimeError as e:
+        logger.error(e.args[0])
+        return 2
     except Exception as e:
         logger.exception(e)
-        return 1
+        return 3
     finally:
         if lf_fd:
             unlock(lf_fd)
