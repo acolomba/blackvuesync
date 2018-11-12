@@ -57,9 +57,12 @@ max_disk_used_percent = None
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""", re.VERBOSE)
 cutoff_date = None
+today = datetime.date.today()
 
 
 def calc_cutoff_date(keep):
+    global today
+
     keep_match = re.fullmatch(keep_re, keep)
 
     if keep_match is None:
@@ -71,8 +74,6 @@ def calc_cutoff_date(keep):
         raise RuntimeError("KEEP must be greater than one.")
 
     keep_unit = keep_match.group("unit") or "d"
-
-    today = datetime.date.today()
 
     if keep_unit == "d" or keep_unit is None:
         keep_range_timedelta = datetime.timedelta(days=keep_range)
@@ -92,7 +93,7 @@ filename_re = re.compile(r"""(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     \.(?P<extension>\w+)""", re.VERBOSE)
 
 
-def get_recording(filename):
+def to_recording(filename):
     """extracts recording information from a filename"""
     filename_match = re.fullmatch(filename_re, filename)
 
@@ -203,7 +204,7 @@ def get_destination_recordings(destination):
     """reads files from the destination directory and returns them as recording structures"""
     existing_files = os.listdir(destination)
 
-    return [x for x in [get_recording(x) for x in existing_files] if x is not None]
+    return [x for x in [to_recording(x) for x in existing_files] if x is not None]
 
 
 def get_outdated_recordings(recordings):
@@ -259,7 +260,7 @@ def sync(address, destination):
 
     base_url = "http://%s" % address
     dashcam_filenames = get_dashcam_filenames(base_url)
-    dashcam_recordings = [get_recording(x) for x in dashcam_filenames]
+    dashcam_recordings = [to_recording(x) for x in dashcam_filenames]
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
 
     for recording in current_dashcam_recordings:
