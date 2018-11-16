@@ -31,22 +31,28 @@ import urllib.request
 
 # logging
 logging.basicConfig(format="%(asctime)s: %(levelname)s %(message)s")
+
+# root logger
 logger = logging.getLogger()
 
+# the cron logger remains active in cron mode
+cron_logger = logging.getLogger("cron")
 
-def set_verbosity(verbosity):
+
+def set_verbosity(verbosity, is_cron_mode):
     if verbosity == -1:
         logger.setLevel(logging.ERROR)
+        cron_logger.setLevel(logging.ERROR)
     elif verbosity == 0:
-        logger.setLevel(logging.WARN)
+        logger.setLevel(logging.ERROR if is_cron_mode else logging.WARN)
+        cron_logger.setLevel(logging.INFO if is_cron_mode else logging.WARN)
     elif verbosity == 1:
         logger.setLevel(logging.INFO)
+        cron_logger.setLevel(logging.INFO)
     else:
         logger.setLevel(logging.DEBUG)
+        cron_logger.setLevel(logging.DEBUG)
 
-
-# represents a recording: filename and metadata
-Recording = namedtuple("Recording", "filename datetime type direction extension")
 
 # indicator that we're doing a dry run
 dry_run = None
@@ -85,9 +91,12 @@ def calc_cutoff_date(keep):
 
     return today - keep_range_timedelta
 
+# represents a recording: filename and metadata
+Recording = namedtuple("Recording", "filename base_filename datetime type direction extension")
 
-filename_re = re.compile(r"""(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
-    _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d)
+
+filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+    _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPM])
     (?P<direction>[FR])
     \.(?P<extension>\w+)""", re.VERBOSE)
@@ -108,11 +117,13 @@ def to_recording(filename):
     second = int(filename_match.group("second"))
     recording_datetime = datetime.datetime(year, month, day, hour, minute, second)
 
+    recording_base_filename = filename_match.group("base_filename")
     recording_type = filename_match.group("type")
     recording_direction = filename_match.group("direction")
     recording_extension = filename_match.group("extension")
 
-    return Recording(filename, recording_datetime, recording_type, recording_direction, recording_extension)
+    return Recording(filename, recording_base_filename, recording_datetime, recording_type, recording_direction,
+                     recording_extension)
 
 
 # pattern of a recording filename as returned in each line from from the dashcam index page
@@ -151,14 +162,14 @@ def get_dashcam_filenames(base_url):
 
 
 def download_file(base_url, filename, destination):
-    """downloads a file from the dashcam to the destination directory"""
+    """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
     global dry_run
 
     filepath = os.path.join(destination, filename)
 
     if os.path.exists(filepath):
         logger.debug("Ignoring already downloaded recording : %s", filename)
-        return
+        return False
 
     temp_filepath = os.path.join(destination, ".%s" % filename)
     if os.path.exists(temp_filepath):
@@ -168,9 +179,11 @@ def download_file(base_url, filename, destination):
     if not dry_run:
         urllib.request.urlretrieve(url, temp_filepath)
         os.rename(temp_filepath, filepath)
-        logger.info("Downloaded recording : %s", filename)
+        logger.debug("Downloaded file : %s", filename)
     else:
-        logger.info("DRY RUN Would download : %s", filename)
+        logger.debug("DRY RUN Would download file : %s", filename)
+
+    return True
 
 
 def download_recording(base_url, recording, destination):
@@ -186,18 +199,30 @@ def download_recording(base_url, recording, destination):
         raise RuntimeError("Not enough disk space left. Max used disk space percentage allowed : %s%%"
                            % max_disk_used_percent)
 
+    # downloads the video recording
     filename = recording.filename
-    download_file(base_url, filename, destination)
+    transferred = download_file(base_url, filename, destination)
 
-    # only normal recordings have gps data
-    if filename.endswith("_NF.mp4"):
-        base_filename = filename[:-7]
+    # recording logger, depends on type of recording
+    recording_logger = logger
 
-        gps_filename = "%s_N.gps" % base_filename
-        download_file(base_url, gps_filename, destination)
+    # downloads the gps data for normal recordings
+    if recording.type == "N":
+        # going to log in cron mode
+        recording_logger = cron_logger
 
-        tgf_filename = "%s_N.3gf" % base_filename
-        download_file(base_url, tgf_filename, destination)
+        gps_filename = "%s_N.gps" % recording.base_filename
+        transferred |= download_file(base_url, gps_filename, destination)
+
+        tgf_filename = "%s_N.3gf" % recording.base_filename
+        transferred |= download_file(base_url, tgf_filename, destination)
+
+    # logs if data was transferred (or would have been)
+    if transferred:
+        if not dry_run:
+            recording_logger.info("Downloaded recording : %s", recording.filename)
+        else:
+            recording_logger.info("DRY RUN Would download recording : %s", recording.filename)
 
 
 def get_destination_recordings(destination):
@@ -208,7 +233,7 @@ def get_destination_recordings(destination):
 
 
 def get_outdated_recordings(recordings):
-    """returns the recordings that are prior to the cutoff date"""
+    """returns the recordings prior to the cutoff date"""
     global cutoff_date
 
     return [] if cutoff_date is None else [x for x in recordings if x.datetime.date() < cutoff_date]
@@ -316,6 +341,8 @@ def parse_args():
                             help="increases verbosity")
     arg_parser.add_argument("-q", "--quiet", action="store_true",
                             help="quiets down output messages; overrides verbosity options")
+    arg_parser.add_argument("--cron", action="store_true",
+                            help="cron mode, only logs normal recordings at default verbosity")
     arg_parser.add_argument("--dry-run", action="store_true",
                             help="shows what the program would do")
     arg_parser.add_argument("--version", action="version", version="%(prog)s 0.x",
@@ -338,7 +365,7 @@ def run():
 
     max_disk_used_percent = args.max_used_disk
 
-    set_verbosity(-1 if args.quiet else args.verbose)
+    set_verbosity(-1 if args.quiet else args.verbose, args.cron)
 
     # lock file file descriptor
     lf_fd = None
