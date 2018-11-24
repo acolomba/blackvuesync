@@ -15,6 +15,8 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+__version__ = "1.0a1"
+
 import argparse
 import datetime
 from collections import namedtuple
@@ -90,6 +92,7 @@ def calc_cutoff_date(keep):
         raise RuntimeError("unknown KEEP unit : %s" % keep_unit)
 
     return today - keep_range_timedelta
+
 
 # represents a recording: filename and metadata
 Recording = namedtuple("Recording", "filename base_filename datetime type direction extension")
@@ -325,18 +328,21 @@ def unlock(lf_fd):
 
 def parse_args():
     """parses the command-line arguments"""
+    global __version__
+
     arg_parser = argparse.ArgumentParser(description="Synchronizes BlackVue dashcam recordings with a local directory.",
                                          epilog="Bug reports: https://github.com/acolomba/BlackVueSync")
     arg_parser.add_argument("address", metavar="ADDRESS",
                             help="dashcam IP address or name")
     arg_parser.add_argument("-d", "--destination", metavar="DEST",
-                            help="destination directory (defaults to c  urrent directory)")
+                            help="sets the destination directory to DEST; defaults to the current directory")
     arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
                             help="""keeps recordings in the given range, removing the rest; defaults to days, but can
                             suffix with d, w for days or weeks respectively""")
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
-                            help="will not exceed more than DISK_USAGE_PERCENT used disk space; defaults to 90%%")
+                            help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to "
+                                 "90%%")
     arg_parser.add_argument("-v", "--verbose", action="count", default=0,
                             help="increases verbosity")
     arg_parser.add_argument("-q", "--quiet", action="store_true",
@@ -345,8 +351,8 @@ def parse_args():
                             help="cron mode, only logs normal recordings at default verbosity")
     arg_parser.add_argument("--dry-run", action="store_true",
                             help="shows what the program would do")
-    arg_parser.add_argument("--version", action="version", version="%(prog)s 0.x",
-                            help="shows this script's version and exists")
+    arg_parser.add_argument("--version", action="version", default=__version__, version="%%(prog)s %s" % __version__,
+                            help="shows the version and exits")
 
     return arg_parser.parse_args()
 

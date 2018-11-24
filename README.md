@@ -1,19 +1,19 @@
 # BlackVue Sync
 
-Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN. Implements several features to facilitate operating in a scheduled, unattended fashion. A typical setup would be a NAS running a cron job.
+Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 
-BlackVue cameras expose an HTTP server -- sadly no HTTPS -- that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting recordings in a local directory to a date range.
+BlackVue dashcams expose an HTTP server -- sadly no HTTPS, that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting recordings in a local directory to a date range.
+
+A typical setup would be a NAS running a cron job or a docker container.
 
 ## Features
 
-* *Portable:* Implemented as a single, self-contained Python script with zero 3rd party dependencies. The script can just be copied and run anywhere.
 * *Smart*: Only downloads recordings that haven't been downloaded yet.
 * *Resilient*: If the data transfer is interrupted for whatever reason, at the next run the script resumes where it left off.
 * *Hands-off*: Optionally retains recordings for a limited amount of time, removing outdated ones.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
 * *Safe*: Stops executing if the disk is almost full.
 * *Friendly*: Identifies a range of known error conditions and clearly communicates them.
-
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ BlackVue cameras expose an HTTP server -- sadly no HTTPS -- that can be used to 
 
 ### Verifying connectivity to the dashcam
 
-A quick way to verify that the dashcam is available is by using curl. For all examples, we will assume that the camera address is ```dashcam.example.net```.
+A quick way to verify that the dashcam is available is by using curl. For all examples, we will assume that the camera address is ```dashcam.example.net```. An numerical IP address works just as well.
 
 ```
 $ curl http://dashcam.example.net/blackvue_vod.cgi
@@ -41,7 +41,7 @@ Another way is to simply browse to: `http://dashcam.example.net/blackvue_vod.cgi
 
 Tested with: `DR750S`
 
-Should work with: `DR900S`, `DR750S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
+Untested, but should work with: `DR900S`, `DR750S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
 
 Reports of models working or not other than those tested are appreciated.
 
@@ -50,29 +50,40 @@ Reports of models working or not other than those tested are appreciated.
 
 ### Manual Usage
 
-The most basic usage is to pass the dashcam address to the script:
+The dashcam address is the only required parameter. Specifying ```--dry-run``` makes it so that the script communicates what it would do without actually doing anything. Example:
 
 ```
-$ blackvuesync.py dashcam.example.net
+$ blackvuesync.py dashcam.example.net --dry-run
 ```
 
-It's also possible to specify a destination directory other than the current:
+It's also possible to specify a destination directory other than the current using ```--destination```:
 
 ```
-$ blackvuesync.py dashcam.example.net --destination /mnt/blackvue
+$ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --dry-run
 ```
 
-A retention period can be indicated -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination.
+A retention period can be indicated with ```-keep``` -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination.
+
+```
+$ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w --dry-run
+```
+
+A typical invocation would then be:
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
 ```
 
+Other options:
+* ```--max-used-disk```: Downloads stop once the specified used disk percentage threshold is reached. Defaults to 90%.
+* ```--quiet```: Quiets down output messages, except for unexpected errors. Takes precedence over ```-verbose```.
+* ```--verbose```: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
+
 ### Unattended Usage
 
 #### Plain cron
 
-The script can be run unattended by setting up a periodic  [cron](https://en.wikipedia.org/wiki/Cron) job on UNIX systems.
+The script can be automatically run periodically by setting up a [cron](https://en.wikipedia.org/wiki/Cron) job on UNIX systems.
 
 Simple example with crontab for a hypothetical ```media``` user:
 
