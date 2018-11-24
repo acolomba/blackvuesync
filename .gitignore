@@ -1,2 +1,5 @@
+# IDE
 .idea
-.blackvuesync.lock
+
+# testing
+tmp

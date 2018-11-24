@@ -8,6 +8,11 @@ A typical setup would be a NAS running a cron job or a docker container.
 
 ## Features
 
+This project implements several features to facilitate operating in a scheduled, unattended fashion:
+
+* *Portable implementations:* 
+    * A single, self-contained Python script with zero 3rd party dependencies can be can just be copied and run anywhere; or:
+    * A docker image that runs the script periodically via an internal cron.
 * *Smart*: Only downloads recordings that haven't been downloaded yet.
 * *Resilient*: If the data transfer is interrupted for whatever reason, at the next run the script resumes where it left off.
 * *Hands-off*: Optionally retains recordings for a limited amount of time, removing outdated ones.
@@ -104,6 +109,53 @@ The [openmediavault](http://www.openmediavault.org/) NAS solution allows for [sc
 Example:
 
 ![openmediavault Scheduled Job](docs/images/cron-example-openmediavault.png)
+
+
+#### Docker
+
+##### Overview
+
+The [acolomba/blackvuesync](https://github.com/acolomba/blackvuesync) docker image sets up a cron job internal to the image that runs the synchronization operation every 15 minutes.
+
+##### Quick Start
+
+It's a good idea to do a single, interactive dry run first with extra logging: 
+
+```
+docker run -it --rm \
+    -e ADDRESS=dashcam.example.net \
+    -e DRY_RUN=1 \
+    -e VERBOSE=1 \
+    -e RUN_ONCE=1 \
+    --name blackvuesync \
+acolomba/blackvuesync
+```
+
+Once that works, a typical invocation would be:
+
+```
+docker run -d --restart unless-stopped \
+    -e ADDRESS=dashcam.example.net \
+    -e KEEP=2w \
+    -v /mnt/dashcam:/recordings \
+    --name blackvuesync \
+acolomba/blackvuesync
+```
+
+##### Reference
+
+The docker image requires at a minimum:
+* The ```ADDRESS``` parameter set to the dashcam address.
+* The ```/recordings``` volume mapped to the desired destination of the downloaded recordings.
+    
+Other parameters:
+* ```KEEP```: If set to a value, passes that value to the ```--keep``` option. (Default: empty.)
+* ```MAX_USED_DISK```: If set to a value, passes that value to the ```--max-used-disk``` option.  (Default: empty, which means 90%.)
+* ```VERBOSE```: If set to a number greater than zero, adds as many ```--verbose``` options. (Default: 0.)
+* ```QUIET```: If set to a value, enables the ```--quiet``` option. (Default: empty.)
+* ```CRON```: Corresponds to the ```--cron``` option, and is set by default. Set to ```""``` to disable.
+* ```DRY_RUN```: If set to a value, enables the ```--dry-run``` option. (Default: empty.)
+* ```RUN_ONCE```: If set to a value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty.)
 
 
 ## License
