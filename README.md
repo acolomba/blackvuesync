@@ -14,7 +14,7 @@ This project implements several features to facilitate operating in a scheduled,
     * A single, self-contained Python script with zero 3rd party dependencies can be can just be copied and run anywhere; or:
     * A docker image that runs the script periodically via an internal cron.
 * *Smart*: Only downloads recordings that haven't been downloaded yet.
-* *Resilient*: If the data transfer is interrupted for whatever reason, at the next run the script resumes where it left off.
+* *Resilient*: If the data transfer is interrupted for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
 * *Hands-off*: Optionally retains recordings for a limited amount of time, removing outdated ones.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
 * *Safe*: Stops executing if the disk is almost full.
@@ -23,8 +23,16 @@ This project implements several features to facilitate operating in a scheduled,
 ## Prerequisites
 
 * Python 3.5+.
-* A BlackVue dashcam connected to the local network. Tested with a DR750S.
-* The destination directory must be on a local filesystem.
+* A BlackVue dashcam connected to the local network with a fixed IP address.
+* Recordings must be downloaded to a destination on a local filesystem.
+
+### Compatibility
+
+Tested with: `DR750S`
+
+Untested, but should work with: `DR900S`, `DR750S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
+
+Reports of models working or not other than those tested are appreciated.
 
 ### Verifying connectivity to the dashcam
 
@@ -41,14 +49,6 @@ $
 ```
 
 Another way is to simply browse to: `http://dashcam.example.net/blackvue_vod.cgi`.
-
-### Compatibility
-
-Tested with: `DR750S`
-
-Untested, but should work with: `DR900S`, `DR750S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
-
-Reports of models working or not other than those tested are appreciated.
 
 
 ## Usage
@@ -67,7 +67,7 @@ It's also possible to specify a destination directory other than the current usi
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --dry-run
 ```
 
-A retention period can be indicated with ```-keep``` -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination.
+A retention period can be indicated with ```-keep``` -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days, ```w``` for weeks. If no unit is indicated, days are assumed. 
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w --dry-run
@@ -115,7 +115,7 @@ Example:
 
 ##### Overview
 
-The [acolomba/blackvuesync](https://github.com/acolomba/blackvuesync) docker image sets up a cron job internal to the image that runs the synchronization operation every 15 minutes.
+The [acolomba/blackvuesync](https://github.com/acolomba/blackvuesync) docker image sets up a cron job internal to the container that runs the synchronization operation every 15 minutes.
 
 ##### Quick Start
 
@@ -131,30 +131,34 @@ docker run -it --rm \
 acolomba/blackvuesync
 ```
 
-Once that works, a typical invocation would be:
+Once that works, a typical invocation would be similar to:
 
 ```
 docker run -d --restart unless-stopped \
     -e ADDRESS=dashcam.example.net \
-    -e KEEP=2w \
     -v /mnt/dashcam:/recordings \
+    -e TZ="America/New_York"
+    -e KEEP=2w \
     --name blackvuesync \
 acolomba/blackvuesync
 ```
 
 ##### Reference
 
-The docker image requires at a minimum:
+To operate correctly, the docker image requires at a minimum:
+
 * The ```ADDRESS``` parameter set to the dashcam address.
 * The ```/recordings``` volume mapped to the desired destination of the downloaded recordings.
-    
+* The ```TZ``` parameter set to the same timezone as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
+
 Other parameters:
-* ```KEEP```: If set to a value, passes that value to the ```--keep``` option. (Default: empty.)
-* ```MAX_USED_DISK```: If set to a value, passes that value to the ```--max-used-disk``` option.  (Default: empty, which means 90%.)
-* ```VERBOSE```: If set to a number greater than zero, adds as many ```--verbose``` options. (Default: 0.)
-* ```QUIET```: If set to a value, enables the ```--quiet``` option. (Default: empty.)
-* ```CRON```: Corresponds to the ```--cron``` option, and is set by default. Set to ```""``` to disable.
-* ```DRY_RUN```: If set to a value, enables the ```--dry-run``` option. (Default: empty.)
+
+* ```KEEP```: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days, ```w``` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
+* ```MAX_USED_DISK```: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: 90, i.e. 90%.)
+* ```VERBOSE```: If set to a number greater than zero, increases logging verbosity. (Default: 0.)
+* ```QUIET```: If set to a value, quiets down logs; only unexpected errors will be logged. (Default: empty.)
+* ```CRON```: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to ```""``` to disable.
+* ```DRY_RUN```: If set to a value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
 * ```RUN_ONCE```: If set to a value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty.)
 
 

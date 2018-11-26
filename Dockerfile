@@ -14,7 +14,7 @@ ENV ADDRESS="" \
     DRY_RUN="" \
     RUN_ONCE=""
 
-RUN apk add --update python3 bash && \
+RUN apk add --update python3 bash tzdata && \
     rm -rf /var/cache/apk/* && \
     chmod +x /blackvuesync.sh
 
