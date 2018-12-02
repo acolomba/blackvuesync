@@ -137,6 +137,8 @@ Once that works, a typical invocation would be similar to:
 docker run -d --restart unless-stopped \
     -e ADDRESS=dashcam.example.net \
     -v /mnt/dashcam:/recordings \
+    -e PUID=$(id -u)
+    -e PGID=$(id -g)
     -e TZ="America/New_York"
     -e KEEP=2w \
     --name blackvuesync \
@@ -149,6 +151,7 @@ To operate correctly, the docker image requires at a minimum:
 
 * The ```ADDRESS``` parameter set to the dashcam address.
 * The ```/recordings``` volume mapped to the desired destination of the downloaded recordings.
+* The ```PUID``` and ```PGID``` parameters set to the desired destination directory's user id and group id. 
 * The ```TZ``` parameter set to the same timezone as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
 
 Other parameters:
