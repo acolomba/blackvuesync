@@ -4,39 +4,41 @@ Synchronizes recordings from a BlackVue dashcam with a local directory over a LA
 
 BlackVue dashcams expose an HTTP server -- sadly no HTTPS, that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting recordings in a local directory to a date range.
 
-A typical setup would be a NAS running a cron job or a docker container.
+A typical setup would be a periodic cron job or a docker container running on a local server.
+
 
 ## Features
 
-This project implements several features to facilitate operating in a scheduled, unattended fashion:
-
-* *Portable implementations:* 
-    * A single, self-contained Python script with zero 3rd party dependencies can be can just be copied and run anywhere; or:
-    * A docker image that runs the script periodically via an internal cron.
+* *Portable runtimes:* 
+    * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies that can be can just be copied and run anywhere either [manually](#manual-usage) or [periodically](#unattended-usage); or:
+    * A [docker image](#docker) that runs said script periodically via an internal cron job.
 * *Smart*: Only downloads recordings that haven't been downloaded yet.
-* *Resilient*: If the data transfer is interrupted for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
+* *Resilient*: If a download interrupts for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
 * *Hands-off*: Optionally retains recordings for a limited amount of time, removing outdated ones.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
 * *Safe*: Stops executing if the disk is almost full.
 * *Friendly*: Identifies a range of known error conditions and clearly communicates them.
 
+
 ## Prerequisites
 
-* Python 3.5+.
-* A BlackVue dashcam connected to the local network with a fixed IP address.
+* [Python](https://www.python.org/) 3.5+ or [Docker](https://docs.docker.com/).
+* A [BlackVue](https://www.blackvue.com/) dashcam connected to the local network with a fixed IP address.
 * Recordings must be downloaded to a destination on a local filesystem.
 
 ### Compatibility
 
 Tested with: `DR750S`
 
-Untested, but should work with: `DR900S`, `DR750S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
+Untested, but should work with: `DR900S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
 
 Reports of models working or not other than those tested are appreciated.
 
 ### Verifying connectivity to the dashcam
 
-A quick way to verify that the dashcam is available is by using curl. For all examples, we will assume that the camera address is ```dashcam.example.net```. An numerical IP address works just as well.
+For all examples, we will assume that the camera address is ```dashcam.example.net```. A numerical IP address works just as well.
+
+A quick way to verify that the dashcam is available is by using curl. 
 
 ```
 $ curl http://dashcam.example.net/blackvue_vod.cgi
@@ -67,7 +69,7 @@ It's also possible to specify a destination directory other than the current usi
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --dry-run
 ```
 
-A retention period can be indicated with ```-keep``` -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days, ```w``` for weeks. If no unit is indicated, days are assumed. 
+A retention period can be indicated with ```-keep``` -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. 
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w --dry-run
@@ -108,18 +110,17 @@ The [openmediavault](http://www.openmediavault.org/) NAS solution allows for [sc
 
 Example:
 
-![openmediavault Scheduled Job](docs/images/cron-example-openmediavault.png)
-
+![openmediavault Scheduled Job](https://raw.githubusercontent.com/acolomba/blackvuesync/master/docs/images/cron-example-openmediavault.png)
 
 #### Docker
 
 ##### Overview
 
-The [acolomba/blackvuesync](https://github.com/acolomba/blackvuesync) docker image sets up a cron job internal to the container that runs the synchronization operation every 15 minutes.
+The [acolomba/blackvuesync](https://hub.docker.com/r/acolomba/blackvuesync/) docker image sets up a cron job internal to the container that runs the synchronization operation every 15 minutes.
 
 ##### Quick Start
 
-It's a good idea to do a single, interactive dry run first with extra logging: 
+It's a good idea to do a single, interactive dry run first with verbose logging: 
 
 ```
 docker run -it --rm \
@@ -156,7 +157,7 @@ To operate correctly, the docker image requires at a minimum:
 
 Other parameters:
 
-* ```KEEP```: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days, ```w``` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
+* ```KEEP```: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
 * ```MAX_USED_DISK```: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: 90, i.e. 90%.)
 * ```VERBOSE```: If set to a number greater than zero, increases logging verbosity. (Default: 0.)
 * ```QUIET```: If set to a value, quiets down logs; only unexpected errors will be logged. (Default: empty.)
