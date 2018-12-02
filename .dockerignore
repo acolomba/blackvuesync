@@ -1,2 +1,4 @@
+*.md
+*_test.py
 tmp
 
