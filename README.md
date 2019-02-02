@@ -82,6 +82,7 @@ $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
 
 Other options:
 * ```--max-used-disk```: Downloads stop once the specified used disk percentage threshold is reached. Defaults to 90%.
+* ```--timeout```: Sets a timeout for establishing a connection to the dashcam, in seconds. This is a float. Defaults to 10.0 seconds.
 * ```--quiet```: Quiets down output messages, except for unexpected errors. Takes precedence over ```-verbose```.
 * ```--verbose```: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 
@@ -158,6 +159,7 @@ Other parameters:
 
 * ```KEEP```: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
 * ```MAX_USED_DISK```: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: 90, i.e. 90%.)
+* ```TIMEOUT```: If set to a float value, sets a connection timeout in seconds.  (Default: 10.0 seconds.)
 * ```VERBOSE```: If set to a number greater than zero, increases logging verbosity. (Default: 0.)
 * ```QUIET```: If set to a value, quiets down logs; only unexpected errors will be logged. (Default: empty.)
 * ```CRON```: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to ```""``` to disable.

@@ -11,6 +11,7 @@ ENV ADDRESS="" \
     PGID="" \
     KEEP="" \
     MAX_USED_DISK="" \
+    TIMEOUT="" \
     VERBOSE=0 \
     QUIET="" \
     CRON=1 \

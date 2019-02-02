@@ -29,6 +29,7 @@ import stat
 import urllib
 import urllib.parse
 import urllib.request
+import socket
 
 
 # logging
@@ -37,7 +38,7 @@ logging.basicConfig(format="%(asctime)s: %(levelname)s %(message)s")
 # root logger
 logger = logging.getLogger()
 
-# the cron logger remains active in cron mode
+# cron logger (remains active in cron mode)
 cron_logger = logging.getLogger("cron")
 
 
@@ -56,20 +57,22 @@ def set_verbosity(verbosity, is_cron_mode):
         cron_logger.setLevel(logging.DEBUG)
 
 
-# indicator that we're doing a dry run
-dry_run = None
-
 # max disk usage percent
 max_disk_used_percent = None
+
+# socket timeout
+socket_timeout = None
+
+# indicator that we're doing a dry run
+dry_run = None
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""", re.VERBOSE)
 cutoff_date = None
-today = datetime.date.today()
 
 
 def calc_cutoff_date(keep):
-    global today
+    """given a retention period, calculates the date before which files should be deleted"""
 
     keep_match = re.fullmatch(keep_re, keep)
 
@@ -91,7 +94,7 @@ def calc_cutoff_date(keep):
         # this indicates a coding error
         raise RuntimeError("unknown KEEP unit : %s" % keep_unit)
 
-    return today - keep_range_timedelta
+    return datetime.date.today() - keep_range_timedelta
 
 
 # represents a recording: filename and metadata
@@ -178,11 +181,14 @@ def download_file(base_url, filename, destination):
     if os.path.exists(temp_filepath):
         logger.debug("Found incomplete download : %s", temp_filepath)
 
-    url = urllib.parse.urljoin(base_url, "Record/%s" % filename)
     if not dry_run:
+        try:
+            url = urllib.parse.urljoin(base_url, "Record/%s" % filename)
         urllib.request.urlretrieve(url, temp_filepath)
         os.rename(temp_filepath, filepath)
         logger.debug("Downloaded file : %s", filename)
+        except urllib.error.URLError as e:
+            raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
     else:
         logger.debug("DRY RUN Would download file : %s", filename)
 
@@ -343,6 +349,9 @@ def parse_args():
                             type=int, choices=range(5, 99),
                             help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to "
                                  "90%%")
+    arg_parser.add_argument("-t", "--timeout", metavar="TIMEOUT", default=10.0,
+                            type=float,
+                            help="sets the connection timeout in seconds (float); defaults to 10.0 seconds")
     arg_parser.add_argument("-v", "--verbose", action="count", default=0,
                             help="increases verbosity")
     arg_parser.add_argument("-q", "--quiet", action="store_true",
@@ -362,6 +371,7 @@ def run():
     global dry_run
     global max_disk_used_percent
     global cutoff_date
+    global socket_timeout
 
     args = parse_args()
 
@@ -372,6 +382,12 @@ def run():
     max_disk_used_percent = args.max_used_disk
 
     set_verbosity(-1 if args.quiet else args.verbose, args.cron)
+
+    # sets socket timeout
+    socket_timeout = args.timeout
+    if socket_timeout <= 0:
+        raise argparse.ArgumentTypeError("TIMEOUT must be greater than zero.")
+    socket.setdefaulttimeout(socket_timeout)
 
     # lock file file descriptor
     lf_fd = None
