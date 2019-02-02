@@ -100,12 +100,15 @@ def calc_cutoff_date(keep):
 # represents a recording: filename and metadata
 Recording = namedtuple("Recording", "filename base_filename datetime type direction extension")
 
-
+# dashcam recording filename pattern
 filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPM])
     (?P<direction>[FR])
     \.(?P<extension>\w+)""", re.VERBOSE)
+
+# temp filename pattern
+temp_filename_re = re.compile(r"\.\d{8}_\d{6}_[NEPM][FR]?\.\w+")
 
 
 def to_recording(filename):
@@ -238,7 +241,7 @@ def get_destination_recordings(destination):
     """reads files from the destination directory and returns them as recording structures"""
     existing_files = os.listdir(destination)
 
-    return [x for x in [to_recording(x) for x in existing_files] if x is not None]
+    return [f for f in [to_recording(f) for f in existing_files] if f is not None]
 
 
 def get_outdated_recordings(recordings):
@@ -271,10 +274,11 @@ def verify_destination(destination):
 
 
 def prepare_destination(destination):
-    """prepares the destination, esuring it's valid and removing excess recordings"""
+    """prepares the destination, ensuring it's valid and removing excess recordings"""
     global dry_run
     global cutoff_date
 
+    # optionally removes outdated recordings
     if cutoff_date:
         existing_recordings = get_destination_recordings(destination)
         outdated_recordings = get_outdated_recordings(existing_recordings)
@@ -299,6 +303,22 @@ def sync(address, destination):
 
     for recording in current_dashcam_recordings:
         download_recording(base_url, recording, destination)
+
+
+def clean_destination(destination):
+    """removes temporary artifacts from the destination directory"""
+    global dry_run
+
+    # removes temporary files from interrupted downloads
+    filenames = os.listdir(destination)
+    temp_filenames = [f for f in filenames if temp_filename_re.fullmatch(f)]
+    for temp_filename in temp_filenames:
+        temp_filepath = os.path.join(destination, temp_filename)
+        if not dry_run:
+            logger.debug("Removing temporary file : %s" % temp_filepath)
+            os.remove(temp_filepath)
+        else:
+            logger.debug("DRY RUN Would remove temporary file : %s", temp_filepath)
 
 
 def lock(destination):
@@ -404,6 +424,9 @@ def run():
         lf_fd = lock(destination)
 
         sync(args.address, destination)
+
+        # removes temporary files (if we synced successfully, these are temp files from lost recordings)
+        clean_destination(destination)
     except UserWarning as e:
         logger.warning(e.args[0])
         return 1
