@@ -2,22 +2,21 @@
 
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 
-BlackVue dashcams expose an HTTP server -- sadly no HTTPS, that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting recordings in a local directory to a date range.
+BlackVue dashcams expose an HTTP server -- sadly no HTTPS, that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting downloads in a local directory to a date range.
 
 A typical setup would be a periodic cron job or a docker container running on a local server.
-
 
 ## Features
 
 * *Portable runtimes:* 
-    * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies that can be can just be copied and run anywhere either [manually](#manual-usage) or [periodically](#unattended-usage); or:
+    * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies that can be can just be copied and run anywhere either [manually](#manual-usage) or [periodically](#unattended-usage), or:
     * A [docker image](#docker) that runs said script periodically via an internal cron job.
 * *Smart*: Only downloads recordings that haven't been downloaded yet.
 * *Resilient*: If a download interrupts for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
 * *Hands-off*: Optionally retains recordings for a limited amount of time, removing outdated ones.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
 * *Safe*: Stops executing if the disk is almost full.
-* *Friendly*: Identifies a range of known error conditions and clearly communicates them.
+* *Friendly error reporting*: Identifies a range of known error conditions and clearly communicates them.
 
 
 ## Prerequisites
@@ -38,7 +37,7 @@ Reports of models working or not other than those tested are appreciated.
 
 For all examples, we will assume that the camera address is ```dashcam.example.net```. A numerical IP address works just as well.
 
-A quick way to verify that the dashcam is available is by using curl. 
+A quick way to verify that the dashcam is reachable via the local network is by using curl. 
 
 ```
 $ curl http://dashcam.example.net/blackvue_vod.cgi
@@ -50,7 +49,7 @@ n:/Record/20181026_140953_PF.mp4,s:1000000
 $
 ```
 
-Another way is to simply browse to: `http://dashcam.example.net/blackvue_vod.cgi`.
+Another way is to browse to: `http://dashcam.example.net/blackvue_vod.cgi`.
 
 
 ## Usage
@@ -69,7 +68,7 @@ It's also possible to specify a destination directory other than the current usi
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --dry-run
 ```
 
-A retention period can be indicated with ```-keep``` -- e.g. two weeks. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. 
+A retention period can be indicated with ```-keep``` -- e.g., two weeks. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. 
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w --dry-run
@@ -138,9 +137,9 @@ Once that works, a typical invocation would be similar to:
 docker run -d --restart unless-stopped \
     -e ADDRESS=dashcam.example.net \
     -v /mnt/dashcam:/recordings \
-    -e PUID=$(id -u)
-    -e PGID=$(id -g)
-    -e TZ="America/New_York"
+    -e PUID=$(id -u) \
+    -e PGID=$(id -g) \
+    -e TZ="America/New_York" \
     -e KEEP=2w \
     --name blackvuesync \
 acolomba/blackvuesync
