@@ -1,4 +1,4 @@
-FROM alpine:3.6
+FROM alpine:3.9
 LABEL maintainer="Alessandro Colomba https://github.com/acolomba"
 
 ADD blackvuesync.sh /blackvuesync.sh
