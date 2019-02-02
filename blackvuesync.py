@@ -15,7 +15,7 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.0"
+__version__ = "1.1"
 
 import argparse
 import datetime
@@ -184,9 +184,9 @@ def download_file(base_url, filename, destination):
     if not dry_run:
         try:
             url = urllib.parse.urljoin(base_url, "Record/%s" % filename)
-        urllib.request.urlretrieve(url, temp_filepath)
-        os.rename(temp_filepath, filepath)
-        logger.debug("Downloaded file : %s", filename)
+            urllib.request.urlretrieve(url, temp_filepath)
+            os.rename(temp_filepath, filepath)
+            logger.debug("Downloaded file : %s", filename)
         except urllib.error.URLError as e:
             raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
     else:
