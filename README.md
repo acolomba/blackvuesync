@@ -9,20 +9,20 @@ A typical setup would be a periodic cron job or a docker container running on a 
 ## Features
 
 * *Portable runtimes:* 
-    * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies that can be can just be copied and run anywhere either [manually](#manual-usage) or [periodically](#unattended-usage), or:
-    * A [docker image](#docker) that runs said script periodically via an internal cron job.
+    * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
+    * A [docker image](#docker) that runs periodically via an internal cron job.
 * *Smart*: Only downloads recordings that haven't been downloaded yet.
 * *Resilient*: If a download interrupts for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
-* *Hands-off*: Optionally retains recordings for a limited amount of time, removing outdated ones.
+* *Hands-off*: Optionally retains recordings for a limited amount of time. Outdated recordings are automatically removed.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
 * *Safe*: Stops executing if the disk is almost full.
-* *Friendly error reporting*: Identifies a range of known error conditions and clearly communicates them.
+* *Friendly error reporting*: Clearly communicates a range of known error conditions with sensible verbosity.
 
 
 ## Prerequisites
 
 * [Python](https://www.python.org/) 3.5+ or [Docker](https://docs.docker.com/).
-* A [BlackVue](https://www.blackvue.com/) dashcam connected to the local network with a fixed IP address.
+* A [BlackVue](https://www.blackvue.com/) dashcam connected via Wi-Fi to the local network with a fixed IP address.
 * Recordings must be downloaded to a destination on a local filesystem.
 
 ### Compatibility
@@ -31,7 +31,7 @@ Tested with: `DR750S`
 
 Untested, but should work with: `DR900S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
 
-Reports of models working or not other than those tested are appreciated.
+Reports of whether models other than those tested work are appreciated.
 
 ### Verifying connectivity to the dashcam
 
@@ -56,25 +56,25 @@ Another way is to browse to: `http://dashcam.example.net/blackvue_vod.cgi`.
 
 ### Manual Usage
 
-The dashcam address is the only required parameter. Specifying ```--dry-run``` makes it so that the script communicates what it would do without actually doing anything. Example:
+The dashcam address is the only required parameter. The ```--dry-run``` option makes it so that the script communicates what it would do without actually doing anything. Example:
 
 ```
 $ blackvuesync.py dashcam.example.net --dry-run
 ```
 
-It's also possible to specify a destination directory other than the current using ```--destination```:
+It's also possible to specify a destination directory other than the current directory with ```--destination```:
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --dry-run
 ```
 
-A retention period can be indicated with ```-keep``` -- e.g., two weeks. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. 
+A retention period can be indicated with ```-keep``` -- e.g., two weeks. Recordings prior to the retention period will be removed from the destination directory. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. 
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w --dry-run
 ```
 
-A typical invocation would then be:
+A typical invocation would be:
 
 ```
 $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
@@ -83,14 +83,14 @@ $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
 Other options:
 * ```--max-used-disk```: Downloads stop once the specified used disk percentage threshold is reached. Defaults to 90%.
 * ```--timeout```: Sets a timeout for establishing a connection to the dashcam, in seconds. This is a float. Defaults to 10.0 seconds.
-* ```--quiet```: Quiets down output messages, except for unexpected errors. Takes precedence over ```-verbose```.
+* ```--quiet```: Quiets down output messages, except for unexpected errors. Takes precedence over ```--verbose```.
 * ```--verbose```: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 
 ### Unattended Usage
 
 #### Plain cron
 
-The script can be automatically run periodically by setting up a [cron](https://en.wikipedia.org/wiki/Cron) job on UNIX systems.
+The script can run periodically by setting up a [cron](https://en.wikipedia.org/wiki/Cron) job on UNIX systems.
 
 Simple example with crontab for a hypothetical ```media``` user:
 
