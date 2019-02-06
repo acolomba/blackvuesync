@@ -159,6 +159,8 @@ def get_dashcam_filenames(base_url):
         response = urllib.request.urlopen(request)
     except urllib.error.URLError as e:
         raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
+    except socket.timeout as e:
+        raise UserWarning("Timeout comunicating with dashcam at address : %s; error : %s" % (base_url, e))
 
     response_status_code = response.getcode()
     if response_status_code != 200:
@@ -192,6 +194,8 @@ def download_file(base_url, filename, destination):
             logger.debug("Downloaded file : %s", filename)
         except urllib.error.URLError as e:
             raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
+        except socket.timeout as e:
+            raise UserWarning("Timeout comunicating with dashcam at address : %s; error : %s" % (base_url, e))
     else:
         logger.debug("DRY RUN Would download file : %s", filename)
 
