@@ -67,7 +67,7 @@ socket_timeout = None
 dry_run = None
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
-keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""", re.VERBOSE)
+keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
 cutoff_date = None
 
 
@@ -291,7 +291,19 @@ def prepare_destination(destination):
             outdated_filepath = os.path.join(destination, outdated_recording.filename)
             if not dry_run:
                 logger.info("Removing outdated recording : %s", outdated_recording.filename)
+
+                # removes the video recording
                 os.remove(outdated_filepath)
+
+                # removes the gps data for normal recordings
+                if outdated_recording.type == "N":
+                    gps_filename = "%s_N.gps" % outdated_recording.base_filename
+                    outdated_gps_filepath = os.path.join(destination, gps_filename)
+                    os.remove(outdated_gps_filepath)
+
+                    tgf_filename = "%s_N.3gf" % outdated_recording.base_filename
+                    outdated_tgf_filepath = os.path.join(destination, tgf_filename)
+                    os.remove(outdated_tgf_filepath)
             else:
                 logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.filename)
 
