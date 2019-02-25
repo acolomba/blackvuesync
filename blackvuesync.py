@@ -299,11 +299,13 @@ def prepare_destination(destination):
                 if outdated_recording.type == "N":
                     gps_filename = "%s_N.gps" % outdated_recording.base_filename
                     outdated_gps_filepath = os.path.join(destination, gps_filename)
-                    os.remove(outdated_gps_filepath)
+                    if os.path.is_file(outdated_gps_filepath):
+                        os.remove(outdated_gps_filepath)
 
                     tgf_filename = "%s_N.3gf" % outdated_recording.base_filename
                     outdated_tgf_filepath = os.path.join(destination, tgf_filename)
-                    os.remove(outdated_tgf_filepath)
+                    if os.path.is_file(outdated_tgf_filepath):
+                        os.remove(outdated_tgf_filepath)
             else:
                 logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.filename)
 
