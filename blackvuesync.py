@@ -160,7 +160,7 @@ def get_dashcam_filenames(base_url):
     except urllib.error.URLError as e:
         raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
     except socket.timeout as e:
-        raise UserWarning("Timeout comunicating with dashcam at address : %s; error : %s" % (base_url, e))
+        raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
 
     response_status_code = response.getcode()
     if response_status_code != 200:
@@ -193,9 +193,14 @@ def download_file(base_url, filename, destination):
             os.rename(temp_filepath, filepath)
             logger.debug("Downloaded file : %s", filename)
         except urllib.error.URLError as e:
+            # sometimes the dashcam produces a 500 for a file (corrupted?); logs and returns normally
+            if e.code == 500:
+                logger.warning("Could not download recording : %s; status code : %s; ignoring.", filename, e.code)
+                return False
+
             raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
         except socket.timeout as e:
-            raise UserWarning("Timeout comunicating with dashcam at address : %s; error : %s" % (base_url, e))
+            raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
     else:
         logger.debug("DRY RUN Would download file : %s", filename)
 
@@ -297,7 +302,7 @@ def prepare_destination(destination):
                 outdated_tgf_filename = "%s_%s.3gf" % (outdated_recording.base_filename, outdated_recording.type)
                 outdated_tgf_filepath = os.path.join(destination, outdated_tgf_filename)
                 if os.path.exists(outdated_tgf_filepath):
-                        os.remove(outdated_tgf_filepath)
+                    os.remove(outdated_tgf_filepath)
 
                 # removes the gps data for normal, event and manual recordings
                 if outdated_recording.type in ("N", "E", "M"):
