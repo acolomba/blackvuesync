@@ -219,22 +219,20 @@ def download_recording(base_url, recording, destination):
     filename = recording.filename
     transferred = download_file(base_url, filename, destination)
 
-    # recording logger, depends on type of recording
-    recording_logger = logger
+    # downloads the accelerometer data
+    tgf_filename = "%s_%s.3gf" % (recording.base_filename, recording.type)
+    transferred |= download_file(base_url, tgf_filename, destination)
 
-    # downloads the gps data for normal recordings
-    if recording.type == "N":
-        # going to log in cron mode
-        recording_logger = cron_logger
-
-        gps_filename = "%s_N.gps" % recording.base_filename
+    # downloads the gps data for normal, event and manual recordings
+    if recording.type in ("N", "E", "M"):
+        gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
         transferred |= download_file(base_url, gps_filename, destination)
-
-        tgf_filename = "%s_N.3gf" % recording.base_filename
-        transferred |= download_file(base_url, tgf_filename, destination)
 
     # logs if data was transferred (or would have been)
     if transferred:
+        # recording logger, depends on type of recording
+        recording_logger = cron_logger if recording.type in ("N", "M") else logger
+
         if not dry_run:
             recording_logger.info("Downloaded recording : %s", recording.filename)
         else:
@@ -295,17 +293,18 @@ def prepare_destination(destination):
                 # removes the video recording
                 os.remove(outdated_filepath)
 
-                # removes the gps data for normal recordings
-                if outdated_recording.type == "N":
-                    gps_filename = "%s_N.gps" % outdated_recording.base_filename
-                    outdated_gps_filepath = os.path.join(destination, gps_filename)
-                    if os.path.is_file(outdated_gps_filepath):
-                        os.remove(outdated_gps_filepath)
-
-                    tgf_filename = "%s_N.3gf" % outdated_recording.base_filename
-                    outdated_tgf_filepath = os.path.join(destination, tgf_filename)
-                    if os.path.is_file(outdated_tgf_filepath):
+                # removes the accelerometer data
+                outdated_tgf_filename = "%s_%s.3gf" % (outdated_recording.base_filename, outdated_recording.type)
+                outdated_tgf_filepath = os.path.join(destination, outdated_tgf_filename)
+                if os.path.exists(outdated_tgf_filepath):
                         os.remove(outdated_tgf_filepath)
+
+                # removes the gps data for normal, event and manual recordings
+                if outdated_recording.type in ("N", "E", "M"):
+                    outdated_gps_filename = "%s_%s.gps" % (outdated_recording.base_filename, outdated_recording.type)
+                    outdated_gps_filepath = os.path.join(destination, outdated_gps_filename)
+                    if os.path.exists(outdated_gps_filepath):
+                        os.remove(outdated_gps_filepath)
             else:
                 logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.filename)
 
