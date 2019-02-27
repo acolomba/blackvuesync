@@ -15,7 +15,7 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.4"
+__version__ = "1.5a"
 
 import argparse
 import datetime
@@ -224,6 +224,10 @@ def download_recording(base_url, recording, destination):
     filename = recording.filename
     transferred = download_file(base_url, filename, destination)
 
+    # downloads the thumbnail file
+    thm_filename = "%s_%s%s.thm" % (recording.base_filename, recording.type, recording.direction)
+    transferred |= download_file(base_url, thm_filename, destination)
+
     # downloads the accelerometer data
     tgf_filename = "%s_%s.3gf" % (recording.base_filename, recording.type)
     transferred |= download_file(base_url, tgf_filename, destination)
@@ -297,6 +301,13 @@ def prepare_destination(destination):
 
                 # removes the video recording
                 os.remove(outdated_filepath)
+
+                # removes the thumbnail file
+                outdated_thm_filename = "%s_%s%s.thm" % (outdated_recording.base_filename, outdated_recording.type,
+                                                         outdated_recording.direction)
+                outdated_thm_filepath = os.path.join(destination, outdated_thm_filename)
+                if os.path.exists(outdated_thm_filepath):
+                    os.remove(outdated_thm_filepath)
 
                 # removes the accelerometer data
                 outdated_tgf_filename = "%s_%s.3gf" % (outdated_recording.base_filename, outdated_recording.type)
