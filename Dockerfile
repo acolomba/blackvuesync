@@ -10,6 +10,7 @@ ENV ADDRESS="" \
     PUID="" \
     PGID="" \
     KEEP="" \
+    PRIORITY="" \
     MAX_USED_DISK="" \
     TIMEOUT="" \
     VERBOSE=0 \

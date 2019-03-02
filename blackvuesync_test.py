@@ -32,3 +32,30 @@ def test_calc_cutoff_date(keep, expected_cutoff_date):
         assert expected_cutoff_date == cutoff_date
     finally:
         blackvuesync.today = datetime.date.today()
+
+
+@pytest.mark.parametrize("priority, filenames, expected_sorted_filenames", [
+    ("date",
+     ["20190219_104220_NF.mp4", "20190219_104220_NR.mp4", "20190219_104619_MF.mp4", "20190219_104619_MR.mp4",
+      "20190219_223201_NF.mp4", "20190219_223201_NR.mp4", "20190219_224918_PF.mp4", "20190219_224918_PR.mp4",
+      "20190224_172246_EF.mp4", "20190224_172246_ER.mp4", "20190224_172341_EF.mp4", "20190224_172341_ER.mp4"],
+     ["20190219_104220_NF.mp4", "20190219_104220_NR.mp4", "20190219_104619_MF.mp4", "20190219_104619_MR.mp4",
+      "20190219_223201_NF.mp4", "20190219_223201_NR.mp4", "20190219_224918_PF.mp4", "20190219_224918_PR.mp4",
+      "20190224_172246_EF.mp4", "20190224_172246_ER.mp4", "20190224_172341_EF.mp4", "20190224_172341_ER.mp4"]),
+    ("type",
+     ["20190219_104220_NF.mp4", "20190219_104220_NR.mp4", "20190219_104619_MF.mp4", "20190219_104619_MR.mp4",
+      "20190219_223201_NF.mp4", "20190219_223201_NR.mp4", "20190219_224918_PF.mp4", "20190219_224918_PR.mp4",
+      "20190224_172246_EF.mp4", "20190224_172246_ER.mp4", "20190224_172341_EF.mp4", "20190224_172341_ER.mp4"],
+     ["20190219_104619_MF.mp4", "20190219_104619_MR.mp4", "20190224_172246_EF.mp4", "20190224_172246_ER.mp4",
+      "20190224_172341_EF.mp4", "20190224_172341_ER.mp4", "20190219_104220_NF.mp4", "20190219_104220_NR.mp4",
+      "20190219_223201_NF.mp4", "20190219_223201_NR.mp4", "20190219_224918_PF.mp4", "20190219_224918_PR.mp4"]),
+])
+def test_sort_recordings(priority, filenames, expected_sorted_filenames):
+    recordings = [blackvuesync.to_recording(f) for f in filenames]
+    expected_sorted_recordings = [blackvuesync.to_recording(f) for f in expected_sorted_filenames]
+
+    # copy
+    sorted_recordings = recordings.copy()
+    blackvuesync.sort_recordings(sorted_recordings, priority)
+
+    assert expected_sorted_recordings == sorted_recordings

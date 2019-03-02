@@ -2,9 +2,9 @@
 
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 
-BlackVue dashcams expose an HTTP server -- sadly no HTTPS, that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting downloads in a local directory to a date range.
+BlackVue dashcams expose an HTTP server that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting downloads in a local directory to a date range.
 
-A typical setup would be a periodic cron job or a docker container running on a local server.
+A typical setup would be a periodic cron job or a Docker container running on a local server.
 
 ## Features
 
@@ -81,6 +81,7 @@ $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
 ```
 
 Other options:
+* ```--priority```: Downloads recordings with different priorities: "time" downloads oldest to newest; "type" downloads manual, event, normal and parking recordings in that order. Defaults to "time".
 * ```--max-used-disk```: Downloads stop once the specified used disk percentage threshold is reached. Defaults to 90%.
 * ```--timeout```: Sets a timeout for establishing a connection to the dashcam, in seconds. This is a float. Defaults to 10.0 seconds.
 * ```--quiet```: Quiets down output messages, except for unexpected errors. Takes precedence over ```--verbose```.
@@ -157,6 +158,7 @@ To operate correctly, the docker image requires at a minimum:
 
 Other parameters:
 
+* ```PRIORITY```: Sets the priority to download recordings. Pick "time" to download from oldest to newest; pick "type" to download manual, event, normal and parking recordings in that order. Defaults to "time".
 * ```KEEP```: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
 * ```MAX_USED_DISK```: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: 90, i.e. 90%.)
 * ```TIMEOUT```: If set to a float value, sets a connection timeout in seconds.  (Default: 10.0 seconds.)

@@ -251,6 +251,29 @@ def download_recording(base_url, recording, destination):
             recording_logger.info("DRY RUN Would download recording : %s", recording.filename)
 
 
+def sort_recordings(recordings, recording_priority):
+    """sorts recordings in place according to the given priority"""
+    def datetime_sort_key(recording):
+        """sorts by datetime, then recording type, then front/rear direction"""
+        return recording.datetime, "FR".find(recording.direction)
+
+    def manual_event_sort_key(recording):
+        """sorts by recording type, then datetime, then front/rear direction"""
+        return "MENP".find(recording.type), recording.datetime, "FR".find(recording.direction)
+
+    if recording_priority == "date":
+        # least recent first
+        sort_key = datetime_sort_key
+    elif recording_priority == "type":
+        # manual, event, normal, parking
+        sort_key = manual_event_sort_key
+    else:
+        # this indicates a coding error
+        raise RuntimeError("unknown recording priority : %s" % recording_priority)
+
+    recordings.sort(key=sort_key)
+
+
 def get_destination_recordings(destination):
     """reads files from the destination directory and returns them as recording records"""
     existing_files = os.listdir(destination)
@@ -328,14 +351,19 @@ def prepare_destination(destination):
                 logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.filename)
 
 
-def sync(address, destination):
+def sync(address, destination, download_priority):
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination)
 
     base_url = "http://%s" % address
     dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [to_recording(x) for x in dashcam_filenames]
+
+    # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
+
+    # sorts the dashcam recordings so we download them according to some priority
+    sort_recordings(current_dashcam_recordings, download_priority)
 
     for recording in current_dashcam_recordings:
         download_recording(base_url, recording, destination)
@@ -401,6 +429,11 @@ def parse_args():
     arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
                             help="""keeps recordings in the given range, removing the rest; defaults to days, but can
                             suffix with d, w for days or weeks respectively""")
+    arg_parser.add_argument("-p", "--priority", metavar="DOWNLOAD_PRIORITY", default="date",
+                            choices=["date", "type"],
+                            help="sets the recording download priority; ""date"": downloads in chronological order "
+                                 "from oldest to newest; ""type"": prioritizes manual, event, normal and then parking"
+                                 "recordings; defaults to ""date""")
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
                             help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to "
@@ -459,7 +492,7 @@ def run():
 
         lf_fd = lock(destination)
 
-        sync(args.address, destination)
+        sync(args.address, destination, args.priority)
 
         # removes temporary files (if we synced successfully, these are temp files from lost recordings)
         clean_destination(destination)
