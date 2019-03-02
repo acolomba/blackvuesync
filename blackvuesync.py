@@ -70,6 +70,9 @@ dry_run = None
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
 cutoff_date = None
 
+# for unit testing
+today = datetime.date.today()
+
 
 def calc_cutoff_date(keep):
     """given a retention period, calculates the date before which files should be deleted"""
@@ -94,7 +97,7 @@ def calc_cutoff_date(keep):
         # this indicates a coding error
         raise RuntimeError("unknown KEEP unit : %s" % keep_unit)
 
-    return datetime.date.today() - keep_range_timedelta
+    return today - keep_range_timedelta
 
 
 # represents a recording: filename and metadata
@@ -249,7 +252,7 @@ def download_recording(base_url, recording, destination):
 
 
 def get_destination_recordings(destination):
-    """reads files from the destination directory and returns them as recording structures"""
+    """reads files from the destination directory and returns them as recording records"""
     existing_files = os.listdir(destination)
 
     return [f for f in [to_recording(f) for f in existing_files] if f is not None]
