@@ -15,7 +15,7 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.5"
+__version__ = "1.6a"
 
 import argparse
 import datetime
@@ -108,7 +108,7 @@ filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPM])
     (?P<direction>[FR])
-    \.(?P<extension>\w+)""", re.VERBOSE)
+    \.(?P<extension>mp4)""", re.VERBOSE)
 
 # temp filename pattern
 temp_filename_re = re.compile(r"\.\d{8}_\d{6}_[NEPM][FR]?\.\w+")
