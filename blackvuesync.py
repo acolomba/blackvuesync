@@ -26,6 +26,7 @@ import re
 import os
 import shutil
 import stat
+import time
 import urllib
 import urllib.parse
 import urllib.request
@@ -175,6 +176,20 @@ def get_dashcam_filenames(base_url):
     return get_filenames(file_lines)
 
 
+# download speed units for conversion to a natural representation
+speed_units = [(1000000, "Mbps"), (1000, "Kbps"), (1, "bps")]
+
+
+def to_natural_speed(speed_bps):
+    """returns a natural representation of a given download speed in bps as an scalar+unit tuple (base 10)"""
+    for speed_unit in speed_units:
+        speed_unit_multiplier, speed_unit_name = speed_unit
+        if speed_bps > speed_unit_multiplier:
+            return int(speed_bps / speed_unit_multiplier), speed_unit_name
+
+    return 0, "bps"
+
+
 def download_file(base_url, filename, destination):
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
     global dry_run
@@ -182,8 +197,8 @@ def download_file(base_url, filename, destination):
     filepath = os.path.join(destination, filename)
 
     if os.path.exists(filepath):
-        logger.debug("Ignoring already downloaded recording : %s", filename)
-        return False
+        logger.debug("Ignoring already downloaded file : %s", filename)
+        return False, None
 
     temp_filepath = os.path.join(destination, ".%s" % filename)
     if os.path.exists(temp_filepath):
@@ -192,22 +207,34 @@ def download_file(base_url, filename, destination):
     if not dry_run:
         try:
             url = urllib.parse.urljoin(base_url, "Record/%s" % filename)
-            urllib.request.urlretrieve(url, temp_filepath)
+
+            start = time.perf_counter()
+            try:
+                _, headers = urllib.request.urlretrieve(url, temp_filepath)
+                size = headers["Content-Length"]
+            finally:
+                end = time.perf_counter()
+                elapsed_s = end - start
+
             os.rename(temp_filepath, filepath)
-            logger.debug("Downloaded file : %s", filename)
+
+            speed_bps = int(10. * float(size) / elapsed_s) if size else None
+            logger.debug("Downloaded file : %s%s", filename,
+                         " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
+
+            return True, speed_bps
         except urllib.error.URLError as e:
             # sometimes the dashcam produces a 500 for a file (corrupted?); logs and returns normally
             if e.code == 500:
                 logger.warning("Could not download recording : %s; status code : %s; ignoring.", filename, e.code)
-                return False
+                return False, None
 
             raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
         except socket.timeout as e:
             raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
     else:
         logger.debug("DRY RUN Would download file : %s", filename)
-
-    return True
+        return True, None
 
 
 def download_recording(base_url, recording, destination):
@@ -223,30 +250,38 @@ def download_recording(base_url, recording, destination):
         raise RuntimeError("Not enough disk space left. Max used disk space percentage allowed : %s%%"
                            % max_disk_used_percent)
 
+    # whether any file of a recording (video, thumbnail, gps, accel.) was downloaded
+    any_downloaded = False
+
     # downloads the video recording
     filename = recording.filename
-    transferred = download_file(base_url, filename, destination)
+    downloaded, speed_bps = download_file(base_url, filename, destination)
+    any_downloaded |= downloaded
 
     # downloads the thumbnail file
     thm_filename = "%s_%s%s.thm" % (recording.base_filename, recording.type, recording.direction)
-    transferred |= download_file(base_url, thm_filename, destination)
+    downloaded, _ = download_file(base_url, thm_filename, destination)
+    any_downloaded |= downloaded
 
     # downloads the accelerometer data
     tgf_filename = "%s_%s.3gf" % (recording.base_filename, recording.type)
-    transferred |= download_file(base_url, tgf_filename, destination)
+    downloaded, _ = download_file(base_url, tgf_filename, destination)
+    any_downloaded |= downloaded
 
     # downloads the gps data for normal, event and manual recordings
     if recording.type in ("N", "E", "M"):
         gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
-        transferred |= download_file(base_url, gps_filename, destination)
+        downloaded, _ == download_file(base_url, gps_filename, destination)
+        any_downloaded |= downloaded
 
-    # logs if data was transferred (or would have been)
-    if transferred:
+    # logs if any part of a recording was downloaded (or would have been)
+    if any_downloaded:
         # recording logger, depends on type of recording
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            recording_logger.info("Downloaded recording : %s", recording.filename)
+            recording_logger.info("Downloaded recording : %s%s", recording.filename,
+                                  " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
         else:
             recording_logger.info("DRY RUN Would download recording : %s", recording.filename)
 
@@ -436,8 +471,7 @@ def parse_args():
                                  "recordings; defaults to ""date""")
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
-                            help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to "
-                                 "90%%")
+                            help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to 90")
     arg_parser.add_argument("-t", "--timeout", metavar="TIMEOUT", default=10.0,
                             type=float,
                             help="sets the connection timeout in seconds (float); defaults to 10.0 seconds")
@@ -492,10 +526,11 @@ def run():
 
         lf_fd = lock(destination)
 
-        sync(args.address, destination, args.priority)
-
-        # removes temporary files (if we synced successfully, these are temp files from lost recordings)
-        clean_destination(destination)
+        try:
+            sync(args.address, destination, args.priority)
+        finally:
+            # removes temporary files (if we synced successfully, these are temp files from lost recordings)
+            clean_destination(destination)
     except UserWarning as e:
         logger.warning(e.args[0])
         return 1
