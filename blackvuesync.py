@@ -111,7 +111,7 @@ filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)
     \.(?P<extension>mp4)""", re.VERBOSE)
 
 # temp filename pattern
-temp_filename_re = re.compile(r"\.\d{8}_\d{6}_[NEPM][FR]?\.\w+")
+temp_filename_re = re.compile(r"\._?\d{8}_\d{6}_[NEPM][FR]?\.\w+")
 
 
 def to_recording(filename):
