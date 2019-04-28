@@ -1,5 +1,6 @@
 # IDE
 .idea
+__pycache__
 venv
 
 # testing

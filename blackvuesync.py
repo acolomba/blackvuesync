@@ -156,7 +156,7 @@ def get_filenames(file_lines):
 
 
 def get_dashcam_filenames(base_url):
-    """gets the recording filenames from the dashcam at the """
+    """gets the recording filenames from the dashcam"""
     try:
         url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
         request = urllib.request.Request(url)

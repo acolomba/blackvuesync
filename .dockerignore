@@ -1,4 +1,4 @@
 *.md
-*_test.py
+__pycache__
+test
 tmp
-

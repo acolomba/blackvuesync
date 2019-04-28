@@ -1,0 +1,2 @@
+v:1.00
+{% for filename in filenames %}n:/Record/{{filename}},s:1000000{{"\r\n"}}{% endfor %}
