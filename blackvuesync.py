@@ -161,19 +161,19 @@ def get_dashcam_filenames(base_url):
         url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
         request = urllib.request.Request(url)
         response = urllib.request.urlopen(request)
+
+        response_status_code = response.getcode()
+        if response_status_code != 200:
+            raise RuntimeError("Error response from : %s ; status code : %s" % (base_url, response_status_code))
+
+        charset = response.info().get_param("charset", "UTF-8")
+        file_lines = [x.decode(charset) for x in response.readlines()]
+
+        return get_filenames(file_lines)
     except urllib.error.URLError as e:
         raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
     except socket.timeout as e:
         raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
-
-    response_status_code = response.getcode()
-    if response_status_code != 200:
-        raise RuntimeError("Error response from : %s ; status code : %s" % (base_url, response_status_code))
-
-    charset = response.info().get_param("charset", "UTF-8")
-    file_lines = [x.decode(charset) for x in response.readlines()]
-
-    return get_filenames(file_lines)
 
 
 # download speed units for conversion to a natural representation
@@ -271,7 +271,7 @@ def download_recording(base_url, recording, destination):
     # downloads the gps data for normal, event and manual recordings
     if recording.type in ("N", "E", "M"):
         gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
-        downloaded, _ == download_file(base_url, gps_filename, destination)
+        downloaded, _ = download_file(base_url, gps_filename, destination)
         any_downloaded |= downloaded
 
     # logs if any part of a recording was downloaded (or would have been)
