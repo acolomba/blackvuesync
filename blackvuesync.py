@@ -226,7 +226,7 @@ def download_file(base_url, filename, destination):
         except urllib.error.URLError as e:
             # sometimes the dashcam produces a 500 for a file (corrupted?); logs and returns normally
             if e.code == 500:
-                logger.warning("Could not download recording : %s; status code : %s; ignoring.", filename, e.code)
+                logger.warning("Could not download file : %s; status code : %s; ignoring.", filename, e.code)
                 return False, None
 
             raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
@@ -280,10 +280,10 @@ def download_recording(base_url, recording, destination):
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            recording_logger.info("Downloaded recording : %s%s", recording.filename,
+            recording_logger.info("Downloaded recording : %s%s", recording.base_filename,
                                   " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
         else:
-            recording_logger.info("DRY RUN Would download recording : %s", recording.filename)
+            recording_logger.info("DRY RUN Would download recording : %s", recording.base_filename)
 
 
 def sort_recordings(recordings, recording_priority):
@@ -358,7 +358,7 @@ def prepare_destination(destination):
         for outdated_recording in outdated_recordings:
             outdated_filepath = os.path.join(destination, outdated_recording.filename)
             if not dry_run:
-                logger.info("Removing outdated recording : %s", outdated_recording.filename)
+                logger.info("Removing outdated recording : %s", outdated_recording.base_filename)
 
                 # removes the video recording
                 os.remove(outdated_filepath)
@@ -383,7 +383,7 @@ def prepare_destination(destination):
                     if os.path.exists(outdated_gps_filepath):
                         os.remove(outdated_gps_filepath)
             else:
-                logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.filename)
+                logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.base_filename)
 
 
 def sync(address, destination, download_priority):
