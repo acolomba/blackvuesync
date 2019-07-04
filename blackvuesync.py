@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2018 Alessandro Colomba (https://github.com/acolomba)
+# Copyright 2018-2019 Alessandro Colomba (https://github.com/acolomba)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -15,7 +15,7 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.6"
+__version__ = "1.7a"
 
 import argparse
 import datetime
