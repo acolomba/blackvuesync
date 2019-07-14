@@ -1,4 +1,4 @@
-FROM alpine:3.9
+FROM alpine:3.10.1
 LABEL maintainer="Alessandro Colomba https://github.com/acolomba"
 
 RUN apk add --update bash python3 shadow tzdata \
