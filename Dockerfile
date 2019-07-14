@@ -1,10 +1,9 @@
 FROM alpine:3.9
 LABEL maintainer="Alessandro Colomba https://github.com/acolomba"
 
-ADD blackvuesync.sh /blackvuesync.sh
-ADD blackvuesync.py /blackvuesync.py
-ADD setuid.sh /setuid.sh
-ADD crontab /var/spool/cron/crontabs/dashcam
+RUN apk add --update bash python3 shadow tzdata \
+    && rm -rf /var/cache/apk/* \
+    && useradd -UMr dashcam
 
 ENV ADDRESS="" \
     PUID="" \
@@ -20,10 +19,12 @@ ENV ADDRESS="" \
     DRY_RUN="" \
     RUN_ONCE=""
 
-RUN apk add --update bash python3 shadow tzdata \
-    && rm -rf /var/cache/apk/* \
-    && useradd -UMr dashcam \
-    && chmod +x /blackvuesync.sh
+COPY --chown=dashcam blackvuesync.sh /blackvuesync.sh
+COPY --chown=dashcam blackvuesync.py /blackvuesync.py
+COPY setuid.sh /setuid.sh
+COPY crontab /var/spool/cron/crontabs/dashcam
+
+RUN chmod +x /blackvuesync.sh
 
 CMD /setuid.sh && su -m dashcam /blackvuesync.sh \
     && test -z "$RUN_ONCE" && crond -f

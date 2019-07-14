@@ -3,6 +3,7 @@
 # keep option set if KEEP set
 keep=${KEEP_RANGE:+--keep $KEEP_RANGE}
 
+# grouping option if GROUPING set
 grouping=${GROUPING:+--grouping $GROUPING}
 
 # download priority option set if PRIORITY set

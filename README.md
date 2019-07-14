@@ -132,6 +132,7 @@ It's a good idea to do a single, interactive dry run first with verbose logging:
 ```
 docker run -it --rm \
     -e ADDRESS=dashcam.example.net \
+    -v $PWD:/recordings \
     -e DRY_RUN=1 \
     -e VERBOSE=1 \
     -e RUN_ONCE=1 \
