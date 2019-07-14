@@ -15,7 +15,7 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.7a"
+__version__ = "1.7"
 
 import argparse
 import datetime
@@ -342,7 +342,7 @@ def sort_recordings(recordings, recording_priority):
     recordings.sort(key=sort_key)
 
 
-# group name regexps, keyed by grouping
+# group name globs, keyed by grouping
 group_name_globs = {
     "none": None,
     "daily": "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]",
