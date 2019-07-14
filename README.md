@@ -81,9 +81,15 @@ $ blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
 ```
 
 Other options:
-* ```--priority```: Downloads recordings with different priorities: "time" downloads oldest to newest; "type" downloads manual, event, normal and parking recordings in that order. Defaults to "time".
-* ```--max-used-disk```: Downloads stop once the specified used disk percentage threshold is reached. Defaults to 90%.
-* ```--timeout```: Sets a timeout for establishing a connection to the dashcam, in seconds. This is a float. Defaults to 10.0 seconds.
+* ```--grouping```: Groups downloaded recordings in directories according to different schemes. This helps manage large amounts of recordings, e.g. helping speed up loading recordings in the BlackVue Viewer app. The supported groupings are:
+    * ```daily```:  By day, e.g. 2018-10-26;
+    * ```weekly```: By week, with the directory indicating the date of that week's monday, e.g. 2018-10-22;
+    * ```monthly```: By month, e.g. 2018-10;
+    * ```yearly```: By year, e.g. 2018;
+    * ```none```: No grouping, the default.    
+* ```--priority```: Downloads recordings with different priorities: ```time``` downloads oldest to newest; ```type``` downloads manual, event, normal and parking recordings in that order. Defaults to ```time```.
+* ```--max-used-disk```: Downloads stop once the specified used disk percentage threshold is reached. Defaults to ```90``` (i.e. 90%.)
+* ```--timeout```: Sets a timeout for establishing a connection to the dashcam, in seconds. This is a float. Defaults to ```10.0``` seconds.
 * ```--quiet```: Quiets down output messages, except for unexpected errors. Takes precedence over ```--verbose```.
 * ```--verbose```: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 
@@ -158,11 +164,12 @@ To operate correctly, the docker image requires at a minimum:
 
 Other parameters:
 
-* ```PRIORITY```: Sets the priority to download recordings. Pick "time" to download from oldest to newest; pick "type" to download manual, event, normal and parking recordings in that order. Defaults to "time".
+* ```GROUPING```: Groups downloaded recordings in directories, ```daily```, ```weekly```, ```monthly```, ```yearly``` and ```none``` are supported. (Default: ```none```.)
 * ```KEEP```: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are ```d``` for days and ```w``` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
-* ```MAX_USED_DISK```: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: 90, i.e. 90%.)
-* ```TIMEOUT```: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: 10.0 seconds.)
-* ```VERBOSE```: If set to a number greater than zero, increases logging verbosity. (Default: 0.)
+* ```PRIORITY```: Sets the priority to download recordings. Pick ```time``` to download from oldest to newest; pick ```type``` to download manual, event, normal and parking recordings in that order. Defaults to ```time```.
+* ```MAX_USED_DISK```: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: ```90```, i.e. 90%.)
+* ```TIMEOUT```: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: ```10.0``` seconds.)
+* ```VERBOSE```: If set to a number greater than zero, increases logging verbosity. (Default: ```0```.)
 * ```QUIET```: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
 * ```CRON```: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to ```""``` to disable.
 * ```DRY_RUN```: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)

@@ -3,6 +3,8 @@
 # keep option set if KEEP set
 keep=${KEEP_RANGE:+--keep $KEEP_RANGE}
 
+grouping=${GROUPING:+--grouping $GROUPING}
+
 # download priority option set if PRIORITY set
 priority=${PRIORITY:+--priority $PRIORITY}
 
@@ -25,5 +27,5 @@ cron="${CRON:+--cron}"
 dry_run="${DRY_RUN:+--dry-run}"
 
 
-/blackvuesync.py ${ADDRESS} --destination /recordings  ${keep} ${priority} ${disk_usage} ${timeout} ${verbose} \
+/blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
     ${quiet} ${cron} ${dry_run}

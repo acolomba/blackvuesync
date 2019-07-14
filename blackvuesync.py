@@ -21,6 +21,7 @@ import argparse
 import datetime
 from collections import namedtuple
 import fcntl
+import glob
 import logging
 import re
 import os
@@ -32,7 +33,6 @@ import urllib.parse
 import urllib.request
 import socket
 
-
 # logging
 logging.basicConfig(format="%(asctime)s: %(levelname)s %(message)s")
 
@@ -43,7 +43,8 @@ logger = logging.getLogger()
 cron_logger = logging.getLogger("cron")
 
 
-def set_verbosity(verbosity, is_cron_mode):
+def set_logging_levels(verbosity, is_cron_mode):
+    """sets up the logging levels according to the desired verbosity and operation mode"""
     if verbosity == -1:
         logger.setLevel(logging.ERROR)
         cron_logger.setLevel(logging.ERROR)
@@ -102,20 +103,17 @@ def calc_cutoff_date(keep):
 
 
 # represents a recording: filename and metadata
-Recording = namedtuple("Recording", "filename base_filename datetime type direction extension")
+Recording = namedtuple("Recording", "filename base_filename group_name datetime type direction extension")
 
-# dashcam recording filename pattern
+# dashcam recording filename regular expression
 filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPM])
     (?P<direction>[FR])
     \.(?P<extension>mp4)""", re.VERBOSE)
 
-# temp filename pattern
-temp_filename_re = re.compile(r"\._?\d{8}_\d{6}_[NEPM][FR]?\.\w+")
 
-
-def to_recording(filename):
+def to_recording(filename, grouping):
     """extracts recording information from a filename"""
     filename_match = re.fullmatch(filename_re, filename)
 
@@ -131,12 +129,13 @@ def to_recording(filename):
     recording_datetime = datetime.datetime(year, month, day, hour, minute, second)
 
     recording_base_filename = filename_match.group("base_filename")
+    recording_group_name = get_group_name(recording_datetime, grouping)
     recording_type = filename_match.group("type")
     recording_direction = filename_match.group("direction")
     recording_extension = filename_match.group("extension")
 
-    return Recording(filename, recording_base_filename, recording_datetime, recording_type, recording_direction,
-                     recording_extension)
+    return Recording(filename, recording_base_filename, recording_group_name, recording_datetime, recording_type,
+                     recording_direction, recording_extension)
 
 
 # pattern of a recording filename as returned in each line from from the dashcam index page
@@ -176,6 +175,26 @@ def get_dashcam_filenames(base_url):
         raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
 
 
+def get_group_name(recording_datetime, grouping):
+    """determines the group name for a given recording according to the indicated grouping"""
+    if grouping == "daily":
+        return recording_datetime.date().isoformat()
+    elif grouping == "weekly":
+        recording_date = recording_datetime.date()
+
+        # day of the week (mon = 0, ..., sun = 6)
+        recording_weekday = recording_date.weekday()
+        recording_weekday_delta = datetime.timedelta(days=recording_weekday)
+        recording_mon_date = recording_date - recording_weekday_delta
+        return recording_mon_date.isoformat()
+    elif grouping == "monthly":
+        return recording_datetime.date().strftime("%Y-%m")
+    elif grouping == "yearly":
+        return recording_datetime.date().strftime("%Y")
+    else:
+        return None
+
+
 # download speed units for conversion to a natural representation
 speed_units = [(1000000, "Mbps"), (1000, "Kbps"), (1, "bps")]
 
@@ -190,11 +209,24 @@ def to_natural_speed(speed_bps):
     return 0, "bps"
 
 
-def download_file(base_url, filename, destination):
+def get_filepath(destination, group_name, filename):
+    """constructs a path for a recording file from the destination, group name and filename"""
+    if group_name:
+        return os.path.join(destination, group_name, filename)
+    else:
+        return os.path.join(destination, filename)
+
+
+def download_file(base_url, filename, destination, group_name):
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
     global dry_run
 
-    filepath = os.path.join(destination, filename)
+    # if we have a group name, we may not have ensured it exists yet
+    if group_name:
+        group_filepath = os.path.join(destination, group_name)
+        ensure_destination(group_filepath)
+
+    filepath = get_filepath(destination, group_name, filename)
 
     if os.path.exists(filepath):
         logger.debug("Ignoring already downloaded file : %s", filename)
@@ -255,23 +287,23 @@ def download_recording(base_url, recording, destination):
 
     # downloads the video recording
     filename = recording.filename
-    downloaded, speed_bps = download_file(base_url, filename, destination)
+    downloaded, speed_bps = download_file(base_url, filename, destination, recording.group_name)
     any_downloaded |= downloaded
 
     # downloads the thumbnail file
     thm_filename = "%s_%s%s.thm" % (recording.base_filename, recording.type, recording.direction)
-    downloaded, _ = download_file(base_url, thm_filename, destination)
+    downloaded, _ = download_file(base_url, thm_filename, destination, recording.group_name)
     any_downloaded |= downloaded
 
     # downloads the accelerometer data
     tgf_filename = "%s_%s.3gf" % (recording.base_filename, recording.type)
-    downloaded, _ = download_file(base_url, tgf_filename, destination)
+    downloaded, _ = download_file(base_url, tgf_filename, destination, recording.group_name)
     any_downloaded |= downloaded
 
     # downloads the gps data for normal, event and manual recordings
     if recording.type in ("N", "E", "M"):
         gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
-        downloaded, _ = download_file(base_url, gps_filename, destination)
+        downloaded, _ = download_file(base_url, gps_filename, destination, recording.group_name)
         any_downloaded |= downloaded
 
     # logs if any part of a recording was downloaded (or would have been)
@@ -288,6 +320,7 @@ def download_recording(base_url, recording, destination):
 
 def sort_recordings(recordings, recording_priority):
     """sorts recordings in place according to the given priority"""
+
     def datetime_sort_key(recording):
         """sorts by datetime, then recording type, then front/rear direction"""
         return recording.datetime, "FR".find(recording.direction)
@@ -309,11 +342,28 @@ def sort_recordings(recordings, recording_priority):
     recordings.sort(key=sort_key)
 
 
-def get_destination_recordings(destination):
-    """reads files from the destination directory and returns them as recording records"""
-    existing_files = os.listdir(destination)
+# group name regexps, keyed by grouping
+group_name_globs = {
+    "none": None,
+    "daily": "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]",
+    "weekly": "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]",
+    "monthly": "[0-9][0-9][0-9][0-9]-[0-9][0-9]",
+    "yearly": "[0-9][0-9][0-9][0-9]",
+}
 
-    return [f for f in [to_recording(f) for f in existing_files] if f is not None]
+# dashcam recording filename glob pattern
+filename_glob = "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPM][FR].mp4"
+
+
+def get_destination_recordings(destination, grouping):
+    """reads files from the destination directory and returns them as recording records"""
+    group_name_glob = group_name_globs[grouping]
+
+    existing_filepath_glob = get_filepath(destination, group_name_glob, filename_glob)
+
+    existing_filepaths = glob.glob(existing_filepath_glob)
+
+    return [r for r in [to_recording(os.path.basename(p), grouping) for p in existing_filepaths] if r is not None]
 
 
 def get_outdated_recordings(recordings):
@@ -329,7 +379,7 @@ def get_current_recordings(recordings):
     return recordings if cutoff_date is None else [x for x in recordings if x.datetime.date() >= cutoff_date]
 
 
-def verify_destination(destination):
+def ensure_destination(destination):
     """ensures the destination directory exists, creates if not, verifies it's writeable"""
     # if no destination, creates it
     if not os.path.exists(destination):
@@ -338,25 +388,25 @@ def verify_destination(destination):
 
     # destination exists, tests if directory
     if not os.path.isdir(destination):
-        raise RuntimeError("destination is not a directory : %s" % destination)
+        raise RuntimeError("download destination is not a directory : %s" % destination)
 
     # destination is a directory, tests if writable
     if not os.access(destination, os.W_OK):
-        raise RuntimeError("destination directory not writable : %s" % destination)
+        raise RuntimeError("download destination directory not writable : %s" % destination)
 
 
-def prepare_destination(destination):
+def prepare_destination(destination, grouping):
     """prepares the destination, ensuring it's valid and removing excess recordings"""
     global dry_run
     global cutoff_date
 
     # optionally removes outdated recordings
     if cutoff_date:
-        existing_recordings = get_destination_recordings(destination)
+        existing_recordings = get_destination_recordings(destination, grouping)
         outdated_recordings = get_outdated_recordings(existing_recordings)
 
         for outdated_recording in outdated_recordings:
-            outdated_filepath = os.path.join(destination, outdated_recording.filename)
+            outdated_filepath = get_filepath(destination, outdated_recording.group_name, outdated_recording.filename)
             if not dry_run:
                 logger.info("Removing outdated recording : %s", outdated_recording.base_filename)
 
@@ -366,33 +416,34 @@ def prepare_destination(destination):
                 # removes the thumbnail file
                 outdated_thm_filename = "%s_%s%s.thm" % (outdated_recording.base_filename, outdated_recording.type,
                                                          outdated_recording.direction)
-                outdated_thm_filepath = os.path.join(destination, outdated_thm_filename)
+                outdated_thm_filepath = get_filepath(destination, outdated_recording.group_name, outdated_thm_filename)
                 if os.path.exists(outdated_thm_filepath):
                     os.remove(outdated_thm_filepath)
 
                 # removes the accelerometer data
                 outdated_tgf_filename = "%s_%s.3gf" % (outdated_recording.base_filename, outdated_recording.type)
-                outdated_tgf_filepath = os.path.join(destination, outdated_tgf_filename)
+                outdated_tgf_filepath = get_filepath(destination, outdated_recording.group_name, outdated_tgf_filename)
                 if os.path.exists(outdated_tgf_filepath):
                     os.remove(outdated_tgf_filepath)
 
                 # removes the gps data for normal, event and manual recordings
                 if outdated_recording.type in ("N", "E", "M"):
                     outdated_gps_filename = "%s_%s.gps" % (outdated_recording.base_filename, outdated_recording.type)
-                    outdated_gps_filepath = os.path.join(destination, outdated_gps_filename)
+                    outdated_gps_filepath = get_filepath(destination, outdated_recording.group_name,
+                                                         outdated_gps_filename)
                     if os.path.exists(outdated_gps_filepath):
                         os.remove(outdated_gps_filepath)
             else:
                 logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.base_filename)
 
 
-def sync(address, destination, download_priority):
+def sync(address, destination, grouping, download_priority):
     """synchronizes the recordings at the dashcam address with the destination directory"""
-    prepare_destination(destination)
+    prepare_destination(destination, grouping)
 
     base_url = "http://%s" % address
     dashcam_filenames = get_dashcam_filenames(base_url)
-    dashcam_recordings = [to_recording(x) for x in dashcam_filenames]
+    dashcam_recordings = [to_recording(x, grouping) for x in dashcam_filenames]
 
     # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
@@ -404,20 +455,44 @@ def sync(address, destination, download_priority):
         download_recording(base_url, recording, destination)
 
 
-def clean_destination(destination):
+def is_empty_directory(dirpath):
+    """tests if a directory is empty, ignoring hidden files"""
+    return all(x.startswith(".") for x in os.listdir(dirpath))
+
+
+# temp filename regular expression
+temp_filename_glob = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPM]*.*"
+
+
+def clean_destination(destination, grouping):
     """removes temporary artifacts from the destination directory"""
     global dry_run
 
     # removes temporary files from interrupted downloads
-    filenames = os.listdir(destination)
-    temp_filenames = [f for f in filenames if temp_filename_re.fullmatch(f)]
-    for temp_filename in temp_filenames:
-        temp_filepath = os.path.join(destination, temp_filename)
+    temp_filepath_glob = os.path.join(destination, temp_filename_glob)
+    temp_filepaths = glob.glob(temp_filepath_glob)
+
+    for temp_filepath in temp_filepaths:
         if not dry_run:
             logger.debug("Removing temporary file : %s" % temp_filepath)
             os.remove(temp_filepath)
         else:
             logger.debug("DRY RUN Would remove temporary file : %s", temp_filepath)
+
+    # removes empty grouping directories; dotfiles such as .DS_Store
+    group_name_glob = group_name_globs[grouping]
+    if group_name_glob:
+        group_filepath_glob = os.path.join(destination, group_name_glob)
+
+        group_filepaths = glob.glob(group_filepath_glob)
+
+        for group_filepath in group_filepaths:
+            if is_empty_directory(group_filepath):
+                if not dry_run:
+                    logger.debug("Removing grouping directory : %s" % group_filepath)
+                    shutil.rmtree(group_filepath)
+                else:
+                    logger.debug("DRY RUN Would remove grouping directory : %s", group_filepath)
 
 
 def lock(destination):
@@ -461,6 +536,11 @@ def parse_args():
                             help="dashcam IP address or name")
     arg_parser.add_argument("-d", "--destination", metavar="DEST",
                             help="sets the destination directory to DEST; defaults to the current directory")
+    arg_parser.add_argument("-g", "--grouping", metavar="GROUPING", default="none",
+                            choices=["none", "daily", "weekly", "monthly", "yearly"],
+                            help="groups recording by day, week, month or year under a directory named after the date; "
+                                 "so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; "
+                                 "defaults to ""none"", indicating no grouping")
     arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
                             help="""keeps recordings in the given range, removing the rest; defaults to days, but can
                             suffix with d, w for days or weeks respectively""")
@@ -490,6 +570,7 @@ def parse_args():
 
 
 def run():
+    """run forrest run"""
     # dry-run is a global setting
     global dry_run
     global max_disk_used_percent
@@ -504,7 +585,7 @@ def run():
 
     max_disk_used_percent = args.max_used_disk
 
-    set_verbosity(-1 if args.quiet else args.verbose, args.cron)
+    set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 
     # sets socket timeout
     socket_timeout = args.timeout
@@ -522,15 +603,18 @@ def run():
 
         # prepares the local file destination
         destination = args.destination or os.getcwd()
-        verify_destination(destination)
+        ensure_destination(destination)
+
+        # grouping
+        grouping = args.grouping
 
         lf_fd = lock(destination)
 
         try:
-            sync(args.address, destination, args.priority)
+            sync(args.address, destination, grouping, args.priority)
         finally:
             # removes temporary files (if we synced successfully, these are temp files from lost recordings)
-            clean_destination(destination)
+            clean_destination(destination, grouping)
     except UserWarning as e:
         logger.warning(e.args[0])
         return 1

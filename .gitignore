@@ -4,6 +4,7 @@ __pycache__
 venv
 
 # testing
+.pytest_cache
 tmp
 
 # mac
