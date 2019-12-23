@@ -456,8 +456,8 @@ def sync(address, destination, grouping, download_priority):
 
 
 def is_empty_directory(dirpath):
-    """tests if a directory is empty, ignoring hidden files"""
-    return all(x.startswith(".") for x in os.listdir(dirpath))
+    """tests if a directory is empty, ignoring anything that's not a video recording"""
+    return all(not x.endswith(".mp4") for x in os.listdir(dirpath))
 
 
 # temp filename regular expression
