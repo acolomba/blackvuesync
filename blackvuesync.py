@@ -170,7 +170,8 @@ def get_dashcam_filenames(base_url):
 
         return get_filenames(file_lines)
     except urllib.error.URLError as e:
-        raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
+        raise RuntimeError("Cannot obtain list of recordings from dashcam at address : %s; error : %s"
+                           % (base_url, e))
     except socket.timeout as e:
         raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
 
@@ -256,12 +257,9 @@ def download_file(base_url, filename, destination, group_name):
 
             return True, speed_bps
         except urllib.error.URLError as e:
-            # sometimes the dashcam produces a 500 for a file (corrupted?); logs and returns normally
-            if e.code == 500:
-                logger.warning("Could not download file : %s; status code : %s; ignoring.", filename, e.code)
-                return False, None
-
-            raise UserWarning("Cannot communicate with dashcam at address : %s; error : %s" % (base_url, e))
+            # data corruption may lead to error status codes; logs a warning (cron) and returns normally
+            cron_logger.warning("Could not download file : %s; error : %s; ignoring.", filename, e)
+            return False, None
         except socket.timeout as e:
             raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
     else:
