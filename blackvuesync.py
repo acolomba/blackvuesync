@@ -22,6 +22,7 @@ import datetime
 from collections import namedtuple
 import fcntl
 import glob
+import http.client
 import logging
 import re
 import os
@@ -174,6 +175,8 @@ def get_dashcam_filenames(base_url):
                            % (base_url, e))
     except socket.timeout as e:
         raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
+    except http.client.RemoteDisconnected as e:
+        raise UserWarning("Dashcam disconnected without a response; address : %s; error : %s" % (base_url, e))
 
 
 def get_group_name(recording_datetime, grouping):
