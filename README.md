@@ -11,11 +11,11 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 * *Portable runtimes:*
     * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
     * A [docker image](#docker) that runs periodically via an internal cron job.
-* *Smart*: Only downloads recordings that haven't been downloaded yet.
+* *Smart*: Only downloads recordings that haven't already been downloaded.
 * *Resilient*: If a download interrupts for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
-* *Hands-off*: Optionally retains recordings for a limited amount of time. Outdated recordings are automatically removed.
+* *Hands-off*: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
-* *Safe*: Stops executing if the disk is almost full.
+* *Safe*: Stops executing if the destination disk is almost full.
 * *Friendly error reporting*: Clearly communicates a range of known error conditions with sensible verbosity.
 
 
@@ -27,17 +27,13 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 ### Compatibility
 
-Tested with: `DR750S`
-
-Untested, but should work with: `DR900S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
-
-Reports of whether models other than those tested work are appreciated.
+Tested with: `DR750S`, and works with [all models that use the same protocol](https://www.blackvue.com/download/blackvue-windows-viewer-cloud/), e.g. `DR900S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
 
 ### Verifying connectivity to the dashcam
 
-For all examples, we will assume that the camera address is ```dashcam.example.net```. A numerical IP address works just as well.
+For illustration purposes, all examples assume that the camera is reachable at the ```dashcam.example.net``` address. A static numerical IP address would just as well.
 
-A quick way to verify that the dashcam is reachable via the local network is by using curl.
+A quick way to verify that the dashcam is online is by using curl.
 
 ```
 $ curl http://dashcam.example.net/blackvue_vod.cgi
@@ -49,7 +45,7 @@ n:/Record/20181026_140953_PF.mp4,s:1000000
 $
 ```
 
-Another way is to browse to: `http://dashcam.example.net/blackvue_vod.cgi`.
+Another way is by browsing to: `http://dashcam.example.net/blackvue_vod.cgi`.
 
 
 ## Usage
@@ -111,9 +107,11 @@ Note that if the dashcam is unreachable for whatever reason, in ```--cron``` mod
 
 #### NAS
 
+Many NAS systems allow running commands periodically at set intervals.
+
 ##### openmediavault
 
-The [openmediavault](http://www.openmediavault.org/) NAS solution allows for [scheduled jobs](https://openmediavault.readthedocs.io/en/latest/administration/general/cron.html) with support for mail notifications.
+The [openmediavault](http://www.openmediavault.org/) NAS solution allows running [scheduled jobs](https://openmediavault.readthedocs.io/en/latest/administration/general/cron.html) with support for mail notifications.
 
 Example:
 
