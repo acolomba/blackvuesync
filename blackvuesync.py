@@ -94,7 +94,7 @@ def calc_cutoff_date(keep):
 
     if keep_unit == "d" or keep_unit is None:
         keep_range_timedelta = datetime.timedelta(days=keep_range)
-    elif keep_unit is "w":
+    elif keep_unit == "w":
         keep_range_timedelta = datetime.timedelta(weeks=keep_range)
     else:
         # this indicates a coding error
