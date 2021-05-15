@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # keep option set if KEEP set
-keep=${KEEP_RANGE:+--keep $KEEP_RANGE}
+keep=${KEEP:+--keep $KEEP}
 
 # grouping option if GROUPING set
 grouping=${GROUPING:+--grouping $GROUPING}
@@ -26,7 +26,6 @@ cron="${CRON:+--cron}"
 
 # dry-run option if DRY_RUN set to anything
 dry_run="${DRY_RUN:+--dry-run}"
-
 
 /blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
     ${quiet} ${cron} ${dry_run}
