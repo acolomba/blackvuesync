@@ -107,10 +107,28 @@ def calc_cutoff_date(keep):
 Recording = namedtuple("Recording", "filename base_filename group_name datetime type direction extension")
 
 # dashcam recording filename regular expression
+# references:
+#   https://www.blackvue.com.sg/uploads/8/4/4/2/8442586/manual_dr750s-2ch_en_web_ver.1.00_12.pdf
+#   https://blackvue.com/major-update-improved-blackvue-app-ui-dark-mode-live-event-upload-and-more/
+# N: Normal
+# E: Event
+# P: Parking motion detection
+# M: Manual
+# I: Parking impact
+# O: Overspeed
+# A: Hard acceleration
+# T: Hard cornering
+# B: Hard braking
+# R: Geofence-enter
+# X: Geofence-exit
+# G: Geofence-pass
+#
+# L or S: upload flag, Substream or Live
 filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPM])
+    _(?P<type>[NEPMIOATBRXG])
     (?P<direction>[FR])
+    (?P<upload>[LS]?)
     \.(?P<extension>mp4)""", re.VERBOSE)
 
 
@@ -323,12 +341,12 @@ def sort_recordings(recordings, recording_priority):
     """sorts recordings in place according to the given priority"""
 
     def datetime_sort_key(recording):
-        """sorts by datetime, then recording type, then front/rear direction"""
+        """sorts by datetime, then front/rear direction, then recording type"""
         return recording.datetime, "FR".find(recording.direction)
 
     def manual_event_sort_key(recording):
-        """sorts by recording type, then datetime, then front/rear direction"""
-        return "MENP".find(recording.type), recording.datetime, "FR".find(recording.direction)
+        """sorts by recording type (manual and events first), then datetime, then front/rear direction"""
+        return "MEIBOATRXGNP".find(recording.type), recording.datetime, "FR".find(recording.direction)
 
     if recording_priority == "date":
         # least recent first

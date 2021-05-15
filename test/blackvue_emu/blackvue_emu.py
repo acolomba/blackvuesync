@@ -13,8 +13,9 @@ Recording = namedtuple("Recording", "filename base_filename datetime type direct
 # dashcam filename pattern
 filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPM])
+    _(?P<type>[NEPMIOATBRXG])
     (?P<direction>[FR]?)
+    (?P<upload>[LS]?)
     \.(?P<extension>(3gf|gps|mp4|thm))""", re.VERBOSE)
 
 
@@ -48,9 +49,17 @@ def generate_recording_filenames(day_range=3):
 
     for date in [today - datetime.timedelta(day) for day in range(0, day_range)]:
         for hour in [9, 18]:
-            for minutes in range(10, 25):
+            for minutes in range(10, 25, 3):
                 for direction in ["F", "R"]:
                     yield "%04d%02d%02d_%02d%02d%02d_N%s.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
+                                                                 direction)
+            for minutes in range(11, 25, 3):
+                for direction in ["F", "R"]:
+                    yield "%04d%02d%02d_%02d%02d%02d_E%s.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
+                                                                 direction)
+            for minutes in range(13, 25, 3):
+                for direction in ["F", "R"]:
+                    yield "%04d%02d%02d_%02d%02d%02d_A%sL.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
                                                                  direction)
 
 
