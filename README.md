@@ -9,29 +9,30 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 ## Features
 
 * *Portable runtimes:*
-  * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
+  * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
   * A [docker image](#docker) that runs periodically via an internal cron job.
 * *Smart*: Only downloads recordings that haven't already been downloaded.
-* *Resilient*: If a download interrupts for whatever reason, at the next run the script resumes where it left off. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
+* *Resilient*: If a download interrupts for whatever reason, the script resumes where it left off the next time it runs. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
 * *Hands-off*: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
 * *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
 * *Safe*: Stops executing if the destination disk is almost full.
-* *Friendly error reporting*: Clearly communicates a range of known error conditions with sensible verbosity.
+* *Friendly error reporting*: Communicates a range of known error conditions with sensible verbosity.
 
 ## Prerequisites
 
 ### Software
 
 * [Python](https://www.python.org/) 3.5+ or [Docker](https://docs.docker.com/).
-* A [BlackVue](https://www.blackvue.com/) dashcam connected via Wi-Fi to the local network with a fixed IP address.
-* Recordings must be downloaded to a destination on a local filesystem.
-* A media player or the [BlackVue Viewer](https://blackvue.com/kr/download/) to view the recordings.
+* Sufficient disk space on a file system local to the script. Plan for about 5GB/hr per camera.
+* [BlackVue Viewer](https://blackvue.com/kr/download/) or a media player to view the recordings.
 
 ### Hardware
 
-The dashcam must be kept powered for some time after the vehicle is turned off. This also allows the dashcam to record events while parked.
+A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected via Wi-Fi to the local network with a _static_ IP address.
 
-BlackVue offers these accessories to draw power from the vehicle for a configurable amount of time.
+The dashcam must be kept powered for some time after the vehicle is turned off. This also lets the dashcam record events while parked.
+
+BlackVue offers these accessories to draw power from the vehicle for a configurable amount of time:
 
 * [Power Magic EZ](https://blackvue.com/?post_type=wc_product_tab&p=121481): Plugs into the OBD port.
 * [Hardwiring Kit](https://blackvue.com/product-category/add-ons/hardwiring-kit/): Plugs into the fuse box.
@@ -41,22 +42,20 @@ The power-on timer should be set to a duration sufficient for recordings to be d
 Example with a DR750S-2CH recording with two cameras at the highest quality setting and a good but conservative download speed:
 
 ```calca
+# dashcam bitrates
 dashcam_bitrate_front = 12Mbps
 dashcam_bitrate_back = 10Mbps
 dashcam_bitrate = dashcam_bitrate_front + dashcam_bitrate_back
 
 download_speed = 20Mbps
 
-ratio = dashcam_bitrate / download_speed => 1.1 # hours on the timer for every hour of recording
+ # hours on the timer for every hour of recording
+ ratio = dashcam_bitrate / download_speed => 1.1
 ```
 
-### Compatibility
+### Verifying Connectivity
 
-Tested with: `DR750S`, and works with [all models that use the same protocol](https://www.blackvue.com/download/blackvue-windows-viewer-cloud/), e.g. `DR900S`, `DR650S`, `DR590/590W`, `DR490/490L` Series.
-
-### Verifying connectivity to the dashcam
-
-For illustration purposes, all examples assume that the camera is reachable at the `dashcam.example.net` address. A static numerical IP address would just as well.
+For illustration purposes, all examples assume that the camera is reachable at the `dashcam.example.net` address. A static numerical IP address would work just as well.
 
 A quick way to verify that the dashcam is online is by using curl.
 
@@ -85,32 +84,32 @@ blackvuesync.py dashcam.example.net --dry-run
 It's also possible to specify a destination directory other than the current directory with `--destination`:
 
 ```sh
-blackvuesync.py dashcam.example.net --destination /mnt/dashcam --dry-run
+blackvuesync.py dashcam.example.net --destination /data/dashcam --dry-run
 ```
 
-A retention period can be indicated with `-keep` -- e.g., two weeks. Recordings prior to the retention period will be removed from the destination directory. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed.
+A retention period can be indicated with the `-keep` option. Recordings prior to the retention period will be removed from the destination directory. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed.
 
 ```sh
-blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w --dry-run
+blackvuesync.py dashcam.example.net --destination /data/dashcam --keep 2w --dry-run
 ```
 
 A typical invocation would be:
 
 ```sh
-blackvuesync.py dashcam.example.net --destination /mnt/dashcam --keep 2w
+blackvuesync.py dashcam.example.net --destination /data/dashcam --keep 2w
 ```
 
 Other options:
 
-* `--grouping`: Groups downloaded recordings in directories according to different schemes. This helps manage large amounts of recordings, e.g. helping speed up loading recordings in the BlackVue Viewer app. The supported groupings are:
+* `--grouping`: Groups downloaded recordings in directories according to different schemes. Grouping speeds up loading recordings in the BlackVue Viewer app. The supported groupings are:
   * `daily`:  By day, e.g. 2018-10-26;
   * `weekly`: By week, with the directory indicating the date of that week's monday, e.g. 2018-10-22;
   * `monthly`: By month, e.g. 2018-10;
   * `yearly`: By year, e.g. 2018;
   * `none`: No grouping, the default.
-* `--priority`: Downloads recordings with different priorities: `time` downloads oldest to newest; `type` downloads manual, event, normal and parking recordings in that order. Defaults to `time`.
+* `--priority`: Downloads recordings with different priorities: `time` downloads oldest to newest; `type` downloads manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `time`.
 * `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
-* `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. This is a float. Defaults to `10.0` seconds.
+* `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
 * `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 
@@ -123,12 +122,14 @@ The script can run periodically by setting up a [cron](https://en.wikipedia.org/
 Simple example with crontab for a hypothetical `media` user:
 
 ```crontab
-*/15 * * * * /home/media/bin/blackvuesync.py dashcam.example.net --keep 2w --destination /mnt/dashcam --cron
+*/15 * * * * /home/media/bin/blackvuesync.py dashcam.example.net --keep 2w --destination /data/dashcam --cron
 ```
 
-The `--cron` option changes the logging level with the assumption that the output will be emailed. When this option is enabled, the script will only log when normal recordings are downloaded and when unexpected error conditions occur. One would typically see an email only after driving or when something goes wrong.
+The `--cron` option changes the logging level with the assumption that the output may be emailed. When this option is enabled, the script only produces logs when it downloads recordings and when it encounters unexpected errors. One would typically see an email only after driving or when something goes wrong.
 
 Note that if the dashcam is unreachable for whatever reason, in `--cron` mode no output is generated, since this is an expected condition whenever the dashcam is away from the local network.
+
+If cron jobs overlap, the script recognizes that another instance is currently running via a lock file on the destination directory. For the lock to work correctly, the destination directory must be on a local filesystem relative to the script.
 
 #### NAS
 
@@ -168,7 +169,7 @@ Once that works, a typical invocation would be similar to:
 ```sh
 docker run -d --restart unless-stopped \
     -e ADDRESS=dashcam.example.net \
-    -v /mnt/dashcam:/recordings \
+    -v /data/dashcam:/recordings \
     -e PUID=$(id -u) \
     -e PGID=$(id -g) \
     -e TZ="America/New_York" \
@@ -179,7 +180,7 @@ acolomba/blackvuesync
 
 ##### Reference
 
-To operate correctly, the docker image requires at a minimum:
+These options are required for the docker image to operate correctly:
 
 * The `ADDRESS` parameter set to the dashcam address.
 * The `/recordings` volume mapped to the desired destination of the downloaded recordings.
@@ -190,7 +191,7 @@ Other parameters:
 
 * `GROUPING`: Groups downloaded recordings in directories, `daily`, `weekly`, `monthly`, `yearly` and `none` are supported. (Default: `none`.)
 * `KEEP`: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
-* `PRIORITY`: Sets the priority to download recordings. Pick `time` to download from oldest to newest; pick `type` to download manual, event, normal and parking recordings in that order. Defaults to `time`.
+* `PRIORITY`: Sets the priority to download recordings. Pick `time` to download from oldest to newest; pick `type` to download manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `time`.
 * `MAX_USED_DISK`: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: `90`, i.e. 90%.)
 * `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
 * `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)

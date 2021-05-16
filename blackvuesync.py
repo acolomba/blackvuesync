@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2018-2019 Alessandro Colomba (https://github.com/acolomba)
+# Copyright 2018-2021 Alessandro Colomba (https://github.com/acolomba)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
