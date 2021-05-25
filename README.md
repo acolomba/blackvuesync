@@ -47,13 +47,13 @@ dashcam_bitrate = dashcam_bitrate_front + dashcam_bitrate_back
 
 download_speed = 20Mbps
 
- # hours on the timer for every hour of recording
- ratio = dashcam_bitrate / download_speed => 1.1
+# hours on the timer for every hour of recording
+ratio = dashcam_bitrate / download_speed => 1.1
 ```
 
 ### Verifying Connectivity
 
-For illustration purposes, all examples assume that the camera is reachable at the `dashcam.example.net` address. A static numerical IP address would work just as well.
+For illustration purposes, all examples assume that the camera is reachable at the `dashcam.example.net` address. A static numeric IP address would work just as well.
 
 A quick way to verify that the dashcam is online is by using curl.
 
@@ -193,7 +193,7 @@ These options are required for the docker image to operate correctly:
 * The `/recordings` volume mapped to the desired destination of the downloaded recordings.
 * The `ADDRESS` parameter set to the dashcam address.
 * The `PUID` and `PGID` parameters set to the desired destination directory's user id and group id.
-* The `TZ` parameter set to the same timezone as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
+* The `TZ` parameter set to the same [timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
 
 Other parameters:
 
@@ -206,7 +206,7 @@ Other parameters:
 * `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
 * `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
 * `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
-* `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty.)
+* `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty. Not supported in Docker Compose.)
 
 ## License
 

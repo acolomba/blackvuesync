@@ -1,4 +1,8 @@
 *.md
-__pycache__
+*.yml
+docs
 test
 tmp
+venv
+__pycache__
+.idea

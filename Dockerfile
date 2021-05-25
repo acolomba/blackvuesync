@@ -1,11 +1,13 @@
-FROM alpine:3.10.1
+FROM alpine:3.13.5
 LABEL maintainer="Alessandro Colomba https://github.com/acolomba"
 
 RUN apk add --update bash python3 shadow tzdata \
     && rm -rf /var/cache/apk/* \
     && useradd -UMr dashcam
 
+COPY COPYING /
 COPY setuid.sh /setuid.sh
+COPY entrypoint.sh /entrypoint.sh
 COPY crontab /var/spool/cron/crontabs/dashcam
 
 ENV ADDRESS="" \
@@ -27,5 +29,4 @@ RUN chmod +x /blackvuesync.sh
 
 COPY --chown=dashcam blackvuesync.py /blackvuesync.py
 
-CMD /setuid.sh && su -m dashcam /blackvuesync.sh \
-    && test -z "$RUN_ONCE" && crond -f
+ENTRYPOINT [ "/entrypoint.sh"]
