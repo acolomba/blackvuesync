@@ -30,9 +30,7 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected via Wi-Fi to the local network with a _static_ IP address.
 
-The dashcam must be kept powered for some time after the vehicle is turned off. This also lets the dashcam record events while parked.
-
-BlackVue offers these accessories to draw power from the vehicle for a configurable amount of time:
+The dashcam must be kept powered for some time after the vehicle is turned off. BlackVue offers these accessories to draw power from the vehicle for a configurable amount of time:
 
 * [Power Magic EZ](https://blackvue.com/?post_type=wc_product_tab&p=121481): Plugs into the OBD port.
 * [Hardwiring Kit](https://blackvue.com/product-category/add-ons/hardwiring-kit/): Plugs into the fuse box.
@@ -168,8 +166,8 @@ Once that works, a typical invocation would be similar to:
 
 ```sh
 docker run -d --restart unless-stopped \
-    -e ADDRESS=dashcam.example.net \
     -v /data/dashcam:/recordings \
+    -e ADDRESS=dashcam.example.net \
     -e PUID=$(id -u) \
     -e PGID=$(id -g) \
     -e TZ="America/New_York" \
@@ -178,12 +176,22 @@ docker run -d --restart unless-stopped \
 acolomba/blackvuesync
 ```
 
+##### Docker Compose
+
+[Docker Compose](https://docs.docker.com/compose/) may offer an easier, more repeatable and extensible option for running a BlackVueSync Docker container.
+
+After downloading the Docker [Compose file](https://raw.githubusercontent.com/acolomba/blackvuesync/main/docker-compose.yml) and editing its values as desired, BlackVueSync can be started with:
+
+```sh
+docker compose up -d
+```
+
 ##### Reference
 
 These options are required for the docker image to operate correctly:
 
-* The `ADDRESS` parameter set to the dashcam address.
 * The `/recordings` volume mapped to the desired destination of the downloaded recordings.
+* The `ADDRESS` parameter set to the dashcam address.
 * The `PUID` and `PGID` parameters set to the desired destination directory's user id and group id.
 * The `TZ` parameter set to the same timezone as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
 

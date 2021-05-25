@@ -1,0 +1,62 @@
+version: '3.0'
+services:
+  blackvuesync:
+    image: acolomba/blackvuesync
+    container_name: blackvuesync
+    restart: unless-stopped
+
+    volumes:
+    # Recording download destination. Change only the part before the colon.
+    - /mnt/dashcam:/recordings:rw
+
+    environment:
+      # Dashcam address
+      # ADDRESS: dashcam.example.net
+      ADDRESS: 192.168.1.3:5000
+
+      # Set these to the desired destination directory's user id and group id.
+      PUID: 1000
+      PGID: 1000
+
+      # Set to the same timezone as the dashcam. Note that BlackVue dashcams do
+      # not respect Daylight Savings Time, so their clock needs to be adjusted
+      # periodically. For the complete list of possible values, see:
+      # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+      TZ: America/New_York
+
+      # Priority to download recordings. Pick "date" to download from oldest to
+      # newest; pick "type" to download manual, event, normal and parking
+      # recordings in that order.
+      PRIORITY: date
+
+      # Groups downloaded recordings in directories: 'daily', 'weekly',
+      # 'monthly', 'yearly' and 'none' are supported.
+      GROUPING: none
+
+      # Retention period of downloaded recordings. Recordings prior to the
+      # retention period will be removed from the destination. Accepted units
+      # are 'd' for days and 'w' for weeks. If no unit is indicated, days are
+      # assumed.
+      KEEP: 2w
+
+      # Stops downloading if the amount of used disk space exceeds the indicated
+      # percentage value.
+      MAX_USED_DISK: 90
+
+      # Sets the timeout in seconds for connecting to the dashcam.
+      TIMEOUT: 10.0
+
+      # Set to a number greater than zero to increase logging verbosity.
+      VERBOSE: 3
+
+      # Set to any value to quiet down logs: only unexpected errors will be
+      # logged.
+      QUIET: ''
+
+      # Makes it so downloads of normal recordings and unexpected error
+      # conditions are logged. Can be set to '' to disable.
+      CRON: 1
+
+      # If set to any value, makes it so that the script communicates what it
+      # would do without actually doing anything.
+      DRY_RUN: ''
