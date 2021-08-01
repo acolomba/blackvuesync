@@ -8,23 +8,23 @@ import blackvuesync
 
 @pytest.mark.parametrize("filename, expected_recording", [
     ("20181029_131513_NF.mp4", blackvuesync.Recording("20181029_131513_NF.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "N", "F", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "N", "F")),
     ("20181029_131513_EF.mp4", blackvuesync.Recording("20181029_131513_EF.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "E", "F", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "E", "F")),
     ("20181029_131513_PF.mp4", blackvuesync.Recording("20181029_131513_PF.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "P", "F", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "P", "F")),
     ("20181029_131513_MF.mp4", blackvuesync.Recording("20181029_131513_MF.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "M", "F", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "M", "F")),
     ("20181029_131513_NR.mp4", blackvuesync.Recording("20181029_131513_NR.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "N", "R", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "N", "R")),
     ("20181029_131513_ER.mp4", blackvuesync.Recording("20181029_131513_ER.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "E", "R", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "E", "R")),
     ("20181029_131513_PR.mp4", blackvuesync.Recording("20181029_131513_PR.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "P", "R", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "P", "R")),
     ("20181029_131513_MR.mp4", blackvuesync.Recording("20181029_131513_MR.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "M", "R", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "M", "R")),
     ("20181029_131513_NF.mp4", blackvuesync.Recording("20181029_131513_NF.mp4", "20181029_131513", None,
-                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "N", "F", "mp4")),
+                                                      datetime.datetime(2018, 10, 29, 13, 15, 13), "N", "F")),
     ("20181029_131513_NX.mp4", None),
     ("20181029_131513_PX.mp4", None),
     ("20181029_131513_PF.mp3", None),
@@ -32,6 +32,26 @@ import blackvuesync
 ])
 def test_to_recording(filename, expected_recording):
     recording = blackvuesync.to_recording(filename, "none")
+
+    assert expected_recording == recording
+
+
+@pytest.mark.parametrize("filename, expected_recording", [
+    ("20181029_131513_NFL.mp4", blackvuesync.DownloadedRecording("20181029_131513", None,
+                                                                datetime.datetime(2018, 10, 29, 13, 15, 13))),
+    ("20181029_131513_EF.thm", blackvuesync.DownloadedRecording("20181029_131513", None,
+                                                                datetime.datetime(2018, 10, 29, 13, 15, 13))),
+    ("20181029_131513_P.3gf", blackvuesync.DownloadedRecording("20181029_131513", None,
+                                                                datetime.datetime(2018, 10, 29, 13, 15, 13))),
+    ("20181029_131513_M.gps", blackvuesync.DownloadedRecording("20181029_131513", None,
+                                                                datetime.datetime(2018, 10, 29, 13, 15, 13))),
+    ("20181029_131513_JUNK.mp4", blackvuesync.DownloadedRecording("20181029_131513", None,
+                                                                datetime.datetime(2018, 10, 29, 13, 15, 13))),
+    ("20181029_131513.mp4", None),
+    ("invalid.gif", None),
+])
+def test_to_downloaded_recording(filename, expected_recording):
+    recording = blackvuesync.to_downloaded_recording(filename, "none")
 
     assert expected_recording == recording
 

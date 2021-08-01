@@ -1,3 +1,4 @@
+"""emulates a the web service exposed by blackvue dashcams"""
 import flask
 
 from collections import namedtuple
@@ -43,9 +44,9 @@ def to_recording(filename):
                      recording_extension)
 
 
-def generate_recording_filenames(day_range=3):
+def generate_recording_filenames(day_range=3, day_offset=0):
     """procedurally generates deterministic recording filenames"""
-    today = datetime.date.today()
+    today = datetime.date.today() - datetime.timedelta(day_offset)
 
     for date in [today - datetime.timedelta(day) for day in range(0, day_range)]:
         for hour in [9, 18]:
@@ -60,7 +61,7 @@ def generate_recording_filenames(day_range=3):
             for minutes in range(13, 25, 3):
                 for direction in ["F", "R"]:
                     yield "%04d%02d%02d_%02d%02d%02d_A%sL.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
-                                                                 direction)
+                                                                  direction)
 
 
 @app.route("/blackvue_vod.cgi", methods=['GET'])
