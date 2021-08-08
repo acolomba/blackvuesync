@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.9 (2021-08-08)
+
+* Properly removes outdated recordings with new event types and upload flags from May 2021 firmware. (#4)
+
 ## 1.8 (2021-05-24)
 
 * Supports new event types produced by the May 2021 [BlackVue firmware update](https://blackvue.com/major-update-improved-blackvue-app-ui-dark-mode-live-event-upload-and-more/). (#3)
