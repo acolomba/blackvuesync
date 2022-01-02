@@ -105,7 +105,7 @@ Other options:
   * `monthly`: By month, e.g. 2018-10;
   * `yearly`: By year, e.g. 2018;
   * `none`: No grouping, the default.
-* `--priority`: Downloads recordings with different priorities: `time` downloads oldest to newest; `type` downloads manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `time`.
+* `--priority`: Downloads recordings with different priorities: `date` downloads oldest to newest; `rdate` downloads newest to oldest; `type` downloads manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `time`.
 * `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
 * `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
@@ -199,7 +199,7 @@ Other parameters:
 
 * `GROUPING`: Groups downloaded recordings in directories, `daily`, `weekly`, `monthly`, `yearly` and `none` are supported. (Default: `none`.)
 * `KEEP`: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
-* `PRIORITY`: Sets the priority to download recordings. Pick `time` to download from oldest to newest; pick `type` to download manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `time`.
+* `PRIORITY`: Sets the priority to download recordings. Pick `date` to download from oldest to newest; pick `rdate` to download from newset to oldest; pick `type` to download manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `time`.
 * `MAX_USED_DISK`: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: `90`, i.e. 90%.)
 * `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
 * `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)

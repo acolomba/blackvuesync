@@ -336,17 +336,31 @@ def download_recording(base_url, recording, destination):
 def sort_recordings(recordings, recording_priority):
     """sorts recordings in place according to the given priority"""
 
+    # preferred orderings (by type and direction)
+    recording_types = "MEIBOATRXGNP"
+    recording_directions = "FR"
+
+    # tomorrow, for reverse datetime sorting
+    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
+
     def datetime_sort_key(recording):
         """sorts by datetime, then front/rear direction, then recording type"""
-        return recording.datetime, "FR".find(recording.direction)
+        return recording.datetime, recording_directions.find(recording.direction)
+
+    def rev_datetime_sort_key(recording):
+        """sorts by newest to oldest datetime, then front/rear direction"""
+        return tomorrow - recording.datetime, recording_directions.find(recording.direction)
 
     def manual_event_sort_key(recording):
         """sorts by recording type (manual and events first), then datetime, then front/rear direction"""
-        return "MEIBOATRXGNP".find(recording.type), recording.datetime, "FR".find(recording.direction)
+        return recording_types.find(recording.type), recording.datetime, recording_directions.find(recording.direction)
 
     if recording_priority == "date":
         # least recent first
         sort_key = datetime_sort_key
+    elif recording_priority == "rdate":
+        # most recent first
+        sort_key = rev_datetime_sort_key
     elif recording_priority == "type":
         # manual, event, normal, parking
         sort_key = manual_event_sort_key
@@ -568,9 +582,10 @@ def parse_args():
                             help="""keeps recordings in the given range, removing the rest; defaults to days, but can
                             suffix with d, w for days or weeks respectively""")
     arg_parser.add_argument("-p", "--priority", metavar="DOWNLOAD_PRIORITY", default="date",
-                            choices=["date", "type"],
+                            choices=["date", "rdate", "type"],
                             help="sets the recording download priority; ""date"": downloads in chronological order "
-                                 "from oldest to newest; ""type"": prioritizes manual, event, normal and then parking"
+                                 "from oldest to newest; ""rdate"": downloads in chronological order "
+                                 "from newest to oldest; ""type"": prioritizes manual, event, normal and then parking"
                                  "recordings; defaults to ""date""")
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),

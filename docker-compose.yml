@@ -25,8 +25,9 @@ services:
       TZ: America/New_York
 
       # Priority to download recordings. Pick "date" to download from oldest to
-      # newest; pick "type" to download manual, event, normal and parking
-      # recordings in that order.
+      # newest; pick "rdate" to download from oldest to newest; pick "type" to
+      # download manual, event (all types), normal and parking recordings in
+      # that order.
       PRIORITY: date
 
       # Groups downloaded recordings in directories: 'daily', 'weekly',
