@@ -327,10 +327,11 @@ def download_recording(base_url, recording, destination):
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            recording_logger.info("Downloaded recording : %s%s", recording.base_filename,
+            recording_logger.info("Downloaded recording : %s (%s)%s", recording.base_filename, recording.direction,
                                   " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
         else:
-            recording_logger.info("DRY RUN Would download recording : %s", recording.base_filename)
+            recording_logger.info("DRY RUN Would download recording : %s (%s)", recording.base_filename,
+                                  recording.direction)
 
 
 def sort_recordings(recordings, recording_priority):
