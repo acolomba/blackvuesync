@@ -441,6 +441,11 @@ def get_current_recordings(recordings):
     return recordings if cutoff_date is None else [x for x in recordings if x.datetime.date() >= cutoff_date]
 
 
+def get_filtered_recordings(recordings, filter_recordings):
+    """returns recordings filtered by filter_recordings """
+    return recordings if filter_recordings is None else [x for x in recordings if f"{x.type}{x.direction}" in filter_recordings]
+
+
 def ensure_destination(destination):
     """ensures the destination directory exists, creates if not, verifies it's writeable"""
     # if no destination, creates it
@@ -479,7 +484,7 @@ def prepare_destination(destination, grouping):
                 os.remove(outdated_filepath)
 
 
-def sync(address, destination, grouping, download_priority):
+def sync(address, destination, grouping, download_priority, filter_recordings):
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
 
@@ -489,6 +494,9 @@ def sync(address, destination, grouping, download_priority):
 
     # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
+
+    # filter recordings according to filter_recordings tuple
+    current_dashcam_recordings = get_filtered_recordings(current_dashcam_recordings, filter_recordings)
 
     # sorts the dashcam recordings so we download them according to some priority
     sort_recordings(current_dashcam_recordings, download_priority)
@@ -588,6 +596,12 @@ def parse_args():
                                  "from oldest to newest; ""rdate"": downloads in chronological order "
                                  "from newest to oldest; ""type"": prioritizes manual, event, normal and then parking"
                                  "recordings; defaults to ""date""")
+
+    arg_parser.add_argument('-f', "--filter", default=None,
+                            help="specify which event you want to download"
+                                 " ie: -f PF PR returns only Parking Front and Parking Rear events",
+                            nargs='*')
+
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
                             help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to 90")
@@ -650,7 +664,7 @@ def run():
         lf_fd = lock(destination)
 
         try:
-            sync(args.address, destination, grouping, args.priority)
+            sync(args.address, destination, grouping, args.priority, args.filter)
         finally:
             # removes temporary files (if we synced successfully, these are temp files from lost recordings)
             clean_destination(destination, grouping)
