@@ -598,9 +598,9 @@ def parse_args():
                                  "from newest to oldest; ""type"": prioritizes manual, event, normal and then parking"
                                  "recordings; defaults to ""date""")
     arg_parser.add_argument("-f", "--filter", default=None,
-                            help="specify which event you want to download"
-                                 " e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
-                            nargs='*')
+                            help="downloads recordings filtered by event type and camera direction"
+                                 "; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
+                            nargs='+')
     arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
                             type=int, choices=range(5, 99),
                             help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to 90")
