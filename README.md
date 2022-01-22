@@ -218,4 +218,4 @@ Other parameters:
 
 This project is licensed under the MIT License - see the [COPYING](COPYING) file for details
 
-Copyright 2018-2021 [Alessandro Colomba](https://github.com/acolomba)
+Copyright 2018-2022 [Alessandro Colomba](https://github.com/acolomba)
