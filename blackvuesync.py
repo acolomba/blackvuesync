@@ -128,7 +128,7 @@ Recording = namedtuple("Recording", "filename base_filename group_name datetime 
 filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPMIOATBRXG])
-    (?P<direction>[FR])
+    (?P<direction>[FRI])
     (?P<upload>[LS]?)
     \.(?P<extension>mp4)""", re.VERBOSE)
 
@@ -339,7 +339,7 @@ def sort_recordings(recordings, recording_priority):
 
     # preferred orderings (by type and direction)
     recording_types = "MEIBOATRXGNP"
-    recording_directions = "FR"
+    recording_directions = "FRI"
 
     # tomorrow, for reverse datetime sorting
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
@@ -349,11 +349,11 @@ def sort_recordings(recordings, recording_priority):
         return recording.datetime, recording_directions.find(recording.direction)
 
     def rev_datetime_sort_key(recording):
-        """sorts by newest to oldest datetime, then front/rear direction"""
+        """sorts by newest to oldest datetime, then front/rear/interior direction"""
         return tomorrow - recording.datetime, recording_directions.find(recording.direction)
 
     def manual_event_sort_key(recording):
-        """sorts by recording type (manual and events first), then datetime, then front/rear direction"""
+        """sorts by recording type (manual and events first), then datetime, then front/rear/interior direction"""
         return recording_types.find(recording.type), recording.datetime, recording_directions.find(recording.direction)
 
     if recording_priority == "date":
