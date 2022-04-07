@@ -104,7 +104,9 @@ def calc_cutoff_date(keep):
 
 
 # represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)
-Recording = namedtuple("Recording", "filename base_filename group_name datetime type direction")
+Recording = namedtuple(
+    "Recording", "filename base_filename group_name datetime type direction"
+)
 
 # dashcam recording filename regular expression
 #
@@ -125,12 +127,15 @@ Recording = namedtuple("Recording", "filename base_filename group_name datetime 
 # G: Geofence-pass
 #
 # L or S: upload flag, Substream or Live
-filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+filename_re = re.compile(
+    r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPMIOATBRXG])
     (?P<direction>[FRI])
     (?P<upload>[LS]?)
-    \.(?P<extension>mp4)""", re.VERBOSE)
+    \.(?P<extension>mp4)""",
+    re.VERBOSE,
+)
 
 
 def to_recording(filename, grouping):
@@ -153,8 +158,14 @@ def to_recording(filename, grouping):
     recording_type = filename_match.group("type")
     recording_direction = filename_match.group("direction")
 
-    return Recording(filename, recording_base_filename, recording_group_name, recording_datetime, recording_type,
-                     recording_direction)
+    return Recording(
+        filename,
+        recording_base_filename,
+        recording_group_name,
+        recording_datetime,
+        recording_type,
+        recording_direction,
+    )
 
 
 # pattern of a recording filename as returned in each line from from the dashcam index page
@@ -182,19 +193,30 @@ def get_dashcam_filenames(base_url):
 
         response_status_code = response.getcode()
         if response_status_code != 200:
-            raise RuntimeError("Error response from : %s ; status code : %s" % (base_url, response_status_code))
+            raise RuntimeError(
+                "Error response from : %s ; status code : %s"
+                % (base_url, response_status_code)
+            )
 
         charset = response.info().get_param("charset", "UTF-8")
         file_lines = [x.decode(charset) for x in response.readlines()]
 
         return get_filenames(file_lines)
     except urllib.error.URLError as e:
-        raise RuntimeError("Cannot obtain list of recordings from dashcam at address : %s; error : %s"
-                           % (base_url, e))
+        raise RuntimeError(
+            "Cannot obtain list of recordings from dashcam at address : %s; error : %s"
+            % (base_url, e)
+        )
     except socket.timeout as e:
-        raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
+        raise UserWarning(
+            "Timeout communicating with dashcam at address : %s; error : %s"
+            % (base_url, e)
+        )
     except http.client.RemoteDisconnected as e:
-        raise UserWarning("Dashcam disconnected without a response; address : %s; error : %s" % (base_url, e))
+        raise UserWarning(
+            "Dashcam disconnected without a response; address : %s; error : %s"
+            % (base_url, e)
+        )
 
 
 def get_group_name(recording_datetime, grouping):
@@ -273,17 +295,25 @@ def download_file(base_url, filename, destination, group_name):
 
         os.rename(temp_filepath, destination_filepath)
 
-        speed_bps = int(10. * float(size) / elapsed_s) if size else None
-        logger.debug("Downloaded file : %s%s", filename,
-                     " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
+        speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
+        logger.debug(
+            "Downloaded file : %s%s",
+            filename,
+            " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "",
+        )
 
         return True, speed_bps
     except urllib.error.URLError as e:
         # data corruption may lead to error status codes; logs a warning (cron) and returns normally
-        cron_logger.warning("Could not download file : %s; error : %s; ignoring.", filename, e)
+        cron_logger.warning(
+            "Could not download file : %s; error : %s; ignoring.", filename, e
+        )
         return False, None
     except socket.timeout as e:
-        raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
+        raise UserWarning(
+            "Timeout communicating with dashcam at address : %s; error : %s"
+            % (base_url, e)
+        )
 
 
 def download_recording(base_url, recording, destination):
@@ -291,34 +321,48 @@ def download_recording(base_url, recording, destination):
     directory"""
     # first checks that we have enough room left
     disk_usage = shutil.disk_usage(destination)
-    disk_used_percent = disk_usage.used / disk_usage.total * 100.
+    disk_used_percent = disk_usage.used / disk_usage.total * 100.0
 
     if disk_used_percent > max_disk_used_percent:
-        raise RuntimeError("Not enough disk space left. Max used disk space percentage allowed : %s%%"
-                           % max_disk_used_percent)
+        raise RuntimeError(
+            "Not enough disk space left. Max used disk space percentage allowed : %s%%"
+            % max_disk_used_percent
+        )
 
     # whether any file of a recording (video, thumbnail, gps, accel.) was downloaded
     any_downloaded = False
 
     # downloads the video recording
     filename = recording.filename
-    downloaded, speed_bps = download_file(base_url, filename, destination, recording.group_name)
+    downloaded, speed_bps = download_file(
+        base_url, filename, destination, recording.group_name
+    )
     any_downloaded |= downloaded
 
     # downloads the thumbnail file
-    thm_filename = "%s_%s%s.thm" % (recording.base_filename, recording.type, recording.direction)
-    downloaded, _ = download_file(base_url, thm_filename, destination, recording.group_name)
+    thm_filename = "%s_%s%s.thm" % (
+        recording.base_filename,
+        recording.type,
+        recording.direction,
+    )
+    downloaded, _ = download_file(
+        base_url, thm_filename, destination, recording.group_name
+    )
     any_downloaded |= downloaded
 
     # downloads the accelerometer data
     tgf_filename = "%s_%s.3gf" % (recording.base_filename, recording.type)
-    downloaded, _ = download_file(base_url, tgf_filename, destination, recording.group_name)
+    downloaded, _ = download_file(
+        base_url, tgf_filename, destination, recording.group_name
+    )
     any_downloaded |= downloaded
 
     # downloads the gps data for normal, event and manual recordings
     if recording.type in ("N", "E", "M"):
         gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
-        downloaded, _ = download_file(base_url, gps_filename, destination, recording.group_name)
+        downloaded, _ = download_file(
+            base_url, gps_filename, destination, recording.group_name
+        )
         any_downloaded |= downloaded
 
     # logs if any part of a recording was downloaded (or would have been)
@@ -327,11 +371,18 @@ def download_recording(base_url, recording, destination):
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            recording_logger.info("Downloaded recording : %s (%s)%s", recording.base_filename, recording.direction,
-                                  " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
+            recording_logger.info(
+                "Downloaded recording : %s (%s)%s",
+                recording.base_filename,
+                recording.direction,
+                " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "",
+            )
         else:
-            recording_logger.info("DRY RUN Would download recording : %s (%s)", recording.base_filename,
-                                  recording.direction)
+            recording_logger.info(
+                "DRY RUN Would download recording : %s (%s)",
+                recording.base_filename,
+                recording.direction,
+            )
 
 
 def sort_recordings(recordings, recording_priority):
@@ -350,11 +401,17 @@ def sort_recordings(recordings, recording_priority):
 
     def rev_datetime_sort_key(recording):
         """sorts by newest to oldest datetime, then front/rear/interior direction"""
-        return tomorrow - recording.datetime, recording_directions.find(recording.direction)
+        return tomorrow - recording.datetime, recording_directions.find(
+            recording.direction
+        )
 
     def manual_event_sort_key(recording):
         """sorts by recording type (manual and events first), then datetime, then front/rear/interior direction"""
-        return recording_types.find(recording.type), recording.datetime, recording_directions.find(recording.direction)
+        return (
+            recording_types.find(recording.type),
+            recording.datetime,
+            recording_directions.find(recording.direction),
+        )
 
     if recording_priority == "date":
         # least recent first
@@ -382,11 +439,16 @@ group_name_globs = {
 }
 
 # represents a recording downloaded to the destination; matches all files (video front/rear, gps, etc.)
-DownloadedRecording = namedtuple("DownloadedRecording", "base_filename group_name datetime")
+DownloadedRecording = namedtuple(
+    "DownloadedRecording", "base_filename group_name datetime"
+)
 
 # downloaded recording filename regular expression
-downloaded_filename_re = re.compile(r"""^(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
-    _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))_""", re.VERBOSE)
+downloaded_filename_re = re.compile(
+    r"""^(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+    _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))_""",
+    re.VERBOSE,
+)
 
 
 def to_downloaded_recording(filename, grouping):
@@ -407,23 +469,37 @@ def to_downloaded_recording(filename, grouping):
     recording_base_filename = filename_match.group("base_filename")
     recording_group_name = get_group_name(recording_datetime, grouping)
 
-    return DownloadedRecording(recording_base_filename, recording_group_name, recording_datetime)
+    return DownloadedRecording(
+        recording_base_filename, recording_group_name, recording_datetime
+    )
 
 
 # downloaded recording filename glob pattern
-downloaded_filename_glob = "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_*.*"
+downloaded_filename_glob = (
+    "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_*.*"
+)
 
 
 def get_downloaded_recordings(destination, grouping):
     """reads files from the destination directory and returns them as recording records"""
     group_name_glob = group_name_globs[grouping]
 
-    downloaded_filepath_glob = get_filepath(destination, group_name_glob, downloaded_filename_glob)
+    downloaded_filepath_glob = get_filepath(
+        destination, group_name_glob, downloaded_filename_glob
+    )
 
     downloaded_filepaths = glob.glob(downloaded_filepath_glob)
 
-    return set([r for r in [to_downloaded_recording(os.path.basename(p), grouping) for p in downloaded_filepaths]
-                if r is not None])
+    return set(
+        [
+            r
+            for r in [
+                to_downloaded_recording(os.path.basename(p), grouping)
+                for p in downloaded_filepaths
+            ]
+            if r is not None
+        ]
+    )
 
 
 def get_outdated_recordings(destination, grouping):
@@ -438,13 +514,22 @@ def get_outdated_recordings(destination, grouping):
 
 def get_current_recordings(recordings):
     """returns the recordings that are after or on the cutoff date"""
-    return recordings if cutoff_date is None else [x for x in recordings if x.datetime.date() >= cutoff_date]
+    return (
+        recordings
+        if cutoff_date is None
+        else [x for x in recordings if x.datetime.date() >= cutoff_date]
+    )
 
 
 def get_filtered_recordings(recordings, recording_filter):
-    """returns recordings filtered by recording_filter """
-    return recordings if recording_filter is None else [x for x in recordings
-                                                         if "%s%s" % (x.type, x.direction) in recording_filter]
+    """returns recordings filtered by recording_filter"""
+    return (
+        recordings
+        if recording_filter is None
+        else [
+            x for x in recordings if "%s%s" % (x.type, x.direction) in recording_filter
+        ]
+    )
 
 
 def ensure_destination(destination):
@@ -460,7 +545,9 @@ def ensure_destination(destination):
 
     # destination is a directory, tests if writable
     if not os.access(destination, os.W_OK):
-        raise RuntimeError("download destination directory not writable : %s" % destination)
+        raise RuntimeError(
+            "download destination directory not writable : %s" % destination
+        )
 
 
 def prepare_destination(destination, grouping):
@@ -471,13 +558,22 @@ def prepare_destination(destination, grouping):
 
         for outdated_recording in outdated_recordings:
             if dry_run:
-                logger.info("DRY RUN Would remove outdated recording : %s", outdated_recording.base_filename)
+                logger.info(
+                    "DRY RUN Would remove outdated recording : %s",
+                    outdated_recording.base_filename,
+                )
                 continue
 
-            logger.info("Removing outdated recording : %s", outdated_recording.base_filename)
+            logger.info(
+                "Removing outdated recording : %s", outdated_recording.base_filename
+            )
 
-            outdated_recording_glob = "%s_[NEPMIOATBRXG]*.*" % outdated_recording.base_filename
-            outdated_filepath_glob = get_filepath(destination, outdated_recording.group_name, outdated_recording_glob)
+            outdated_recording_glob = (
+                "%s_[NEPMIOATBRXG]*.*" % outdated_recording.base_filename
+            )
+            outdated_filepath_glob = get_filepath(
+                destination, outdated_recording.group_name, outdated_recording_glob
+            )
 
             outdated_filepaths = glob.glob(outdated_filepath_glob)
 
@@ -497,7 +593,9 @@ def sync(address, destination, grouping, download_priority, recording_filter):
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
 
     # filter recordings according to recording_filter tuple
-    current_dashcam_recordings = get_filtered_recordings(current_dashcam_recordings, recording_filter)
+    current_dashcam_recordings = get_filtered_recordings(
+        current_dashcam_recordings, recording_filter
+    )
 
     # sorts the dashcam recordings so we download them according to some priority
     sort_recordings(current_dashcam_recordings, download_priority)
@@ -541,7 +639,9 @@ def clean_destination(destination, grouping):
                     logger.debug("Removing grouping directory : %s" % group_filepath)
                     shutil.rmtree(group_filepath)
                 else:
-                    logger.debug("DRY RUN Would remove grouping directory : %s", group_filepath)
+                    logger.debug(
+                        "DRY RUN Would remove grouping directory : %s", group_filepath
+                    )
 
 
 def lock(destination):
@@ -567,7 +667,9 @@ def lock(destination):
 
         return lf_fd
     except IOError:
-        raise UserWarning("Another instance is already running for destination : %s" % destination)
+        raise UserWarning(
+            "Another instance is already running for destination : %s" % destination
+        )
 
 
 def unlock(lf_fd):
@@ -577,46 +679,106 @@ def unlock(lf_fd):
 
 def parse_args():
     """parses the command-line arguments"""
-    arg_parser = argparse.ArgumentParser(description="Synchronizes BlackVue dashcam recordings with a local directory.",
-                                         epilog="Bug reports: https://github.com/acolomba/BlackVueSync")
-    arg_parser.add_argument("address", metavar="ADDRESS",
-                            help="dashcam IP address or name")
-    arg_parser.add_argument("-d", "--destination", metavar="DEST",
-                            help="sets the destination directory to DEST; defaults to the current directory")
-    arg_parser.add_argument("-g", "--grouping", metavar="GROUPING", default="none",
-                            choices=["none", "daily", "weekly", "monthly", "yearly"],
-                            help="groups recording by day, week, month or year under a directory named after the date; "
-                                 "so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; "
-                                 "defaults to ""none"", indicating no grouping")
-    arg_parser.add_argument("-k", "--keep", metavar="KEEP_RANGE",
-                            help="""keeps recordings in the given range, removing the rest; defaults to days, but can
-                            suffix with d, w for days or weeks respectively""")
-    arg_parser.add_argument("-p", "--priority", metavar="DOWNLOAD_PRIORITY", default="date",
-                            choices=["date", "rdate", "type"],
-                            help="sets the recording download priority; ""date"": downloads in chronological order "
-                                 "from oldest to newest; ""rdate"": downloads in chronological order "
-                                 "from newest to oldest; ""type"": prioritizes manual, event, normal and then parking"
-                                 "recordings; defaults to ""date""")
-    arg_parser.add_argument("-f", "--filter", default=None,
-                            help="downloads recordings filtered by event type and camera direction"
-                                 "; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
-                            nargs='+')
-    arg_parser.add_argument("-u", "--max-used-disk", metavar="DISK_USAGE_PERCENT", default=90,
-                            type=int, choices=range(5, 99),
-                            help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to 90")
-    arg_parser.add_argument("-t", "--timeout", metavar="TIMEOUT", default=10.,
-                            type=float,
-                            help="sets the connection timeout in seconds (float); defaults to 10.0 seconds")
-    arg_parser.add_argument("-v", "--verbose", action="count", default=0,
-                            help="increases verbosity")
-    arg_parser.add_argument("-q", "--quiet", action="store_true",
-                            help="quiets down output messages; overrides verbosity options")
-    arg_parser.add_argument("--cron", action="store_true",
-                            help="cron mode, only logs normal recordings at default verbosity")
-    arg_parser.add_argument("--dry-run", action="store_true",
-                            help="shows what the program would do")
-    arg_parser.add_argument("--version", action="version", default=__version__, version="%%(prog)s %s" % __version__,
-                            help="shows the version and exits")
+    arg_parser = argparse.ArgumentParser(
+        description="Synchronizes BlackVue dashcam recordings with a local directory.",
+        epilog="Bug reports: https://github.com/acolomba/BlackVueSync",
+    )
+    arg_parser.add_argument(
+        "address", metavar="ADDRESS", help="dashcam IP address or name"
+    )
+    arg_parser.add_argument(
+        "-d",
+        "--destination",
+        metavar="DEST",
+        help="sets the destination directory to DEST; defaults to the current directory",
+    )
+    arg_parser.add_argument(
+        "-g",
+        "--grouping",
+        metavar="GROUPING",
+        default="none",
+        choices=["none", "daily", "weekly", "monthly", "yearly"],
+        help="groups recording by day, week, month or year under a directory named after the date; "
+        "so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; "
+        "defaults to "
+        "none"
+        ", indicating no grouping",
+    )
+    arg_parser.add_argument(
+        "-k",
+        "--keep",
+        metavar="KEEP_RANGE",
+        help="""keeps recordings in the given range, removing the rest; defaults to days, but can
+                            suffix with d, w for days or weeks respectively""",
+    )
+    arg_parser.add_argument(
+        "-p",
+        "--priority",
+        metavar="DOWNLOAD_PRIORITY",
+        default="date",
+        choices=["date", "rdate", "type"],
+        help="sets the recording download priority; "
+        "date"
+        ": downloads in chronological order "
+        "from oldest to newest; "
+        "rdate"
+        ": downloads in chronological order "
+        "from newest to oldest; "
+        "type"
+        ": prioritizes manual, event, normal and then parking"
+        "recordings; defaults to "
+        "date"
+        "",
+    )
+    arg_parser.add_argument(
+        "-f",
+        "--filter",
+        default=None,
+        help="downloads recordings filtered by event type and camera direction"
+        "; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
+        nargs="+",
+    )
+    arg_parser.add_argument(
+        "-u",
+        "--max-used-disk",
+        metavar="DISK_USAGE_PERCENT",
+        default=90,
+        type=int,
+        choices=range(5, 99),
+        help="stops downloading recordings if disk is over DISK_USAGE_PERCENT used; defaults to 90",
+    )
+    arg_parser.add_argument(
+        "-t",
+        "--timeout",
+        metavar="TIMEOUT",
+        default=10.0,
+        type=float,
+        help="sets the connection timeout in seconds (float); defaults to 10.0 seconds",
+    )
+    arg_parser.add_argument(
+        "-v", "--verbose", action="count", default=0, help="increases verbosity"
+    )
+    arg_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="quiets down output messages; overrides verbosity options",
+    )
+    arg_parser.add_argument(
+        "--cron",
+        action="store_true",
+        help="cron mode, only logs normal recordings at default verbosity",
+    )
+    arg_parser.add_argument(
+        "--dry-run", action="store_true", help="shows what the program would do"
+    )
+    arg_parser.add_argument(
+        "--version",
+        action="version",
+        default=__version__,
+        version="%%(prog)s %s" % __version__,
+        help="shows the version and exits",
+    )
 
     return arg_parser.parse_args()
 
