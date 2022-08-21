@@ -316,10 +316,9 @@ def download_recording(base_url, recording, destination):
     any_downloaded |= downloaded
 
     # downloads the gps data for normal, event and manual recordings
-    if recording.type in ("N", "E", "M"):
-        gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
-        downloaded, _ = download_file(base_url, gps_filename, destination, recording.group_name)
-        any_downloaded |= downloaded
+    gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
+    downloaded, _ = download_file(base_url, gps_filename, destination, recording.group_name)
+    any_downloaded |= downloaded
 
     # logs if any part of a recording was downloaded (or would have been)
     if any_downloaded:
@@ -327,8 +326,8 @@ def download_recording(base_url, recording, destination):
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            recording_logger.info("Downloaded recording : %s (%s)%s", recording.base_filename, recording.direction,
-                                  " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
+            recording_logger.info("Downloaded recording : %s (%s%s)%s", recording.base_filename, recording.type,
+                                  recording.direction, " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "")
         else:
             recording_logger.info("DRY RUN Would download recording : %s (%s)", recording.base_filename,
                                   recording.direction)
@@ -444,7 +443,7 @@ def get_current_recordings(recordings):
 def get_filtered_recordings(recordings, recording_filter):
     """returns recordings filtered by recording_filter """
     return recordings if recording_filter is None else [x for x in recordings
-                                                         if "%s%s" % (x.type, x.direction) in recording_filter]
+                                                        if "%s%s" % (x.type, x.direction) in recording_filter]
 
 
 def ensure_destination(destination):
