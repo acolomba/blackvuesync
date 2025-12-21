@@ -59,7 +59,6 @@ def set_logging_levels(verbosity, is_cron_mode):
         logger.setLevel(logging.DEBUG)
         cron_logger.setLevel(logging.DEBUG)
 
-
 # max disk usage percent
 max_disk_used_percent = None
 
@@ -484,11 +483,38 @@ def prepare_destination(destination, grouping):
                 os.remove(outdated_filepath)
 
 
+def test_dashcam_available(base_url):
+    try:
+        request = urllib.request.Request(base_url)
+        response = urllib.request.urlopen(request)
+
+        response_status_code = response.getcode()
+        if response_status_code != 200:
+            logger.warning("Error Response from %s: code %s" % (base_url, response_status_code))
+            return False;
+        return True;
+    except urllib.error.URLError as e:
+        errorNo = e.args[0].args[0]
+        if errorNo == 51 or errorNo == 113:
+            return False
+        raise RuntimeError("Cannot obtain list of recordings from dashcam at address : %s; error : %s"
+                           % (base_url, e))
+    except socket.timeout as e:
+        logger.error("Timeout is: %s", (e))
+        raise UserWarning("Timeout communicating with dashcam at address : %s; error : %s" % (base_url, e))
+    except http.client.RemoteDisconnected as e:
+        raise UserWarning("Dashcam disconnected without a response; address : %s; error : %s" % (base_url, e))
+
+
 def sync(address, destination, grouping, download_priority, recording_filter):
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
 
     base_url = "http://%s" % address
+    if not test_dashcam_available(base_url):
+        logger.warning("Dashcam unavailable")
+        return
+
     dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [to_recording(x, grouping) for x in dashcam_filenames]
 
