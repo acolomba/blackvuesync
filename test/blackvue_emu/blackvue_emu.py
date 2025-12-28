@@ -2,17 +2,25 @@
 
 import flask
 
-from collections import namedtuple
+from collections.abc import Generator
+from dataclasses import dataclass
 import datetime
 import re
 
 
 app = flask.Flask(__name__)
 
+
 # represents a recording: filename and metadata
-Recording = namedtuple(
-    "Recording", "filename base_filename datetime type direction extension"
-)
+@dataclass
+class Recording:
+    filename: str
+    base_filename: str
+    datetime: datetime.datetime
+    type: str
+    direction: str
+    extension: str
+
 
 # dashcam filename pattern
 filename_re = re.compile(
@@ -26,11 +34,9 @@ filename_re = re.compile(
 )
 
 
-def to_recording(filename):
+def to_recording(filename: str) -> Recording | None:
     """extracts recording information from a filename"""
-    filename_match = re.fullmatch(filename_re, filename)
-
-    if filename_match is None:
+    if (filename_match := re.fullmatch(filename_re, filename)) is None:
         return None
 
     year = int(filename_match.group("year"))
@@ -56,7 +62,9 @@ def to_recording(filename):
     )
 
 
-def generate_recording_filenames(day_range=3, day_offset=0):
+def generate_recording_filenames(
+    day_range: int = 3, day_offset: int = 0
+) -> Generator[str, None, None]:
     """procedurally generates deterministic recording filenames"""
     today = datetime.date.today() - datetime.timedelta(day_offset)
 
@@ -64,53 +72,38 @@ def generate_recording_filenames(day_range=3, day_offset=0):
         for hour in [9, 18]:
             for minutes in range(10, 25, 3):
                 for direction in ["F", "R"]:
-                    yield "%04d%02d%02d_%02d%02d%02d_N%s.mp4" % (
-                        date.year,
-                        date.month,
-                        date.day,
-                        hour,
-                        minutes,
-                        0,
-                        direction,
-                    )
+                    yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_N{direction}.mp4"
             for minutes in range(11, 25, 3):
                 for direction in ["F", "R"]:
-                    yield "%04d%02d%02d_%02d%02d%02d_E%s.mp4" % (
-                        date.year,
-                        date.month,
-                        date.day,
-                        hour,
-                        minutes,
-                        0,
-                        direction,
-                    )
+                    yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_E{direction}.mp4"
             for minutes in range(13, 25, 3):
                 for direction in ["F", "R"]:
-                    yield "%04d%02d%02d_%02d%02d%02d_A%sL.mp4" % (
-                        date.year,
-                        date.month,
-                        date.day,
-                        hour,
-                        minutes,
-                        0,
-                        direction,
-                    )
+                    yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_A{direction}L.mp4"
 
 
 @app.route("/blackvue_vod.cgi", methods=["GET"])
-def vod():
+def vod() -> str:
     """returns the index of recordings"""
     filenames = [filename for filename in generate_recording_filenames()]
     return flask.render_template("vod.txt", filenames=filenames)
 
 
 @app.route("/Record/<filename>", methods=["GET"])
-def record(filename):
+def record(filename: str) -> flask.Response:
     """serves any file associated to recordings, as long as the name is valid"""
-    recording = to_recording(filename)
-
-    if recording:
-        filepath = "files/mock.%s" % recording.extension
+    if recording := to_recording(filename):
+        filepath = f"files/mock.{recording.extension}"
         return flask.send_file(filepath)
     else:
         return flask.abort(404)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="BlackVue dashcam emulator")
+    parser.add_argument(
+        "--port", type=int, default=5000, help="Port to run on (default: 5000)"
+    )
+    args = parser.parse_args()
+    app.run(host="0.0.0.0", port=args.port)
