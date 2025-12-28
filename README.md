@@ -22,7 +22,7 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 ### Software
 
-* [Python](https://www.python.org/) 3.5+ or [Docker](https://docs.docker.com/).
+* [Python](https://www.python.org/) 3.9+ or [Docker](https://docs.docker.com/).
 * Sufficient disk space on a file system local to the script. Plan for about 5GB/hr per camera.
 * [BlackVue Viewer](https://blackvue.com/kr/download/) or a media player to view the recordings.
 

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.0a
+
+* Modernize for Python 3.9, now that it's available in Debian Bullseye oldoldstable, the earliest LTS-supported Debian release. Now uses type hints, f-strings; walrus operator.
+* Logging uses lazy evaluation.
+* Add initial Claude Code settings and AI contribution policy.
+
 ## 1.10 (2025-12-28)
 
 * Add `--filter` option to filter which events are downloaded. (#6)

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 # Copyright 2018-2025 Alessandro Colomba (https://github.com/acolomba)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -15,11 +17,11 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.11a"
+__version__ = "2.0a"
 
 import argparse
 import datetime
-from collections import namedtuple
+from dataclasses import dataclass
 import errno
 import fcntl
 import glob
@@ -93,12 +95,10 @@ dashcam_unavailable_errno_codes = (
 today = datetime.date.today()
 
 
-def calc_cutoff_date(keep):
+def calc_cutoff_date(keep: str) -> datetime.date:
     """given a retention period, calculates the date before which files should be deleted"""
 
-    keep_match = re.fullmatch(keep_re, keep)
-
-    if keep_match is None:
+    if (keep_match := re.fullmatch(keep_re, keep)) is None:
         raise RuntimeError("KEEP must be in the format <number>[dw]")
 
     keep_range = int(keep_match.group("range"))
@@ -114,15 +114,21 @@ def calc_cutoff_date(keep):
         keep_range_timedelta = datetime.timedelta(weeks=keep_range)
     else:
         # this indicates a coding error
-        raise RuntimeError("unknown KEEP unit : %s" % keep_unit)
+        raise RuntimeError(f"unknown KEEP unit : {keep_unit}")
 
     return today - keep_range_timedelta
 
 
 # represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)
-Recording = namedtuple(
-    "Recording", "filename base_filename group_name datetime type direction"
-)
+@dataclass(frozen=True)
+class Recording:
+    filename: str
+    base_filename: str
+    group_name: str | None
+    datetime: datetime.datetime
+    type: str
+    direction: str
+
 
 # dashcam recording filename regular expression
 #
@@ -154,11 +160,9 @@ filename_re = re.compile(
 )
 
 
-def to_recording(filename, grouping):
+def to_recording(filename: str, grouping: str) -> Recording | None:
     """extracts recording information from a filename"""
-    filename_match = re.fullmatch(filename_re, filename)
-
-    if filename_match is None:
+    if (filename_match := re.fullmatch(filename_re, filename)) is None:
         return None
 
     year = int(filename_match.group("year"))
@@ -188,19 +192,18 @@ def to_recording(filename, grouping):
 file_line_re = re.compile(r"n:/Record/(?P<filename>.*\.mp4),s:1000000\r\n")
 
 
-def get_filenames(file_lines):
+def get_filenames(file_lines: list[str]) -> list[str]:
     """extracts the recording filenames from the lines returned by the dashcam index page"""
     filenames = []
     for file_line in file_lines:
-        file_line_match = re.fullmatch(file_line_re, file_line)
         # the first line is "v:1.00", which won't match, so we skip it
-        if file_line_match:
+        if file_line_match := re.fullmatch(file_line_re, file_line):
             filenames.append(file_line_match.group("filename"))
 
     return filenames
 
 
-def get_dashcam_filenames(base_url):
+def get_dashcam_filenames(base_url: str) -> list[str]:
     """gets the recording filenames from the dashcam"""
     try:
         url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
@@ -210,8 +213,7 @@ def get_dashcam_filenames(base_url):
         response_status_code = response.getcode()
         if response_status_code != 200:
             raise RuntimeError(
-                "Error response from : %s ; status code : %s"
-                % (base_url, response_status_code)
+                f"Error response from : {base_url} ; status code : {response_status_code}"
             )
 
         charset = response.info().get_param("charset", "UTF-8")
@@ -223,24 +225,23 @@ def get_dashcam_filenames(base_url):
             isinstance(e.reason, TimeoutError)
             or e.reason.errno in dashcam_unavailable_errno_codes
         ):
-            raise UserWarning("Dashcam unavailable : %s" % e)
+            raise UserWarning(f"Dashcam unavailable : {e}")
         raise RuntimeError(
-            "Cannot obtain list of recordings from dashcam at address : %s; error : %s"
-            % (base_url, e)
+            f"Cannot obtain list of recordings from dashcam at address : {base_url}; error : {e}"
         )
     except socket.timeout as e:
         raise UserWarning(
-            "Timeout communicating with dashcam at address : %s; error : %s"
-            % (base_url, e)
+            f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
         )
     except http.client.RemoteDisconnected as e:
         raise UserWarning(
-            "Dashcam disconnected without a response; address : %s; error : %s"
-            % (base_url, e)
+            f"Dashcam disconnected without a response; address : {base_url}; error : {e}"
         )
 
 
-def get_group_name(recording_datetime, grouping):
+def get_group_name(
+    recording_datetime: datetime.datetime, grouping: str
+) -> str | None:
     """determines the group name for a given recording according to the indicated grouping"""
     if grouping == "daily":
         return recording_datetime.date().isoformat()
@@ -264,7 +265,7 @@ def get_group_name(recording_datetime, grouping):
 speed_units = [(1000000, "Mbps"), (1000, "Kbps"), (1, "bps")]
 
 
-def to_natural_speed(speed_bps):
+def to_natural_speed(speed_bps: int) -> tuple[int, str]:
     """returns a natural representation of a given download speed in bps as an scalar+unit tuple (base 10)"""
     for speed_unit in speed_units:
         speed_unit_multiplier, speed_unit_name = speed_unit
@@ -274,7 +275,7 @@ def to_natural_speed(speed_bps):
     return 0, "bps"
 
 
-def get_filepath(destination, group_name, filename):
+def get_filepath(destination: str, group_name: str | None, filename: str) -> str:
     """constructs a path for a recording file from the destination, group name and filename (or glob pattern)"""
     if group_name:
         return os.path.join(destination, group_name, filename)
@@ -282,7 +283,9 @@ def get_filepath(destination, group_name, filename):
         return os.path.join(destination, filename)
 
 
-def download_file(base_url, filename, destination, group_name):
+def download_file(
+    base_url: str, filename: str, destination: str, group_name: str | None
+) -> tuple[bool, int | None]:
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
@@ -295,7 +298,7 @@ def download_file(base_url, filename, destination, group_name):
         logger.debug("Ignoring already downloaded file : %s", filename)
         return False, None
 
-    temp_filepath = os.path.join(destination, ".%s" % filename)
+    temp_filepath = os.path.join(destination, f".{filename}")
     if os.path.exists(temp_filepath):
         logger.debug("Found incomplete download : %s", temp_filepath)
 
@@ -304,7 +307,7 @@ def download_file(base_url, filename, destination, group_name):
         return True, None
 
     try:
-        url = urllib.parse.urljoin(base_url, "Record/%s" % filename)
+        url = urllib.parse.urljoin(base_url, f"Record/{filename}")
 
         start = time.perf_counter()
         try:
@@ -317,11 +320,8 @@ def download_file(base_url, filename, destination, group_name):
         os.rename(temp_filepath, destination_filepath)
 
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
-        logger.debug(
-            "Downloaded file : %s%s",
-            filename,
-            " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "",
-        )
+        speed_str = " (%d%s)" % to_natural_speed(speed_bps) if speed_bps else ""
+        logger.debug("Downloaded file : %s%s", filename, speed_str)
 
         return True, speed_bps
     except urllib.error.URLError as e:
@@ -332,12 +332,11 @@ def download_file(base_url, filename, destination, group_name):
         return False, None
     except socket.timeout as e:
         raise UserWarning(
-            "Timeout communicating with dashcam at address : %s; error : %s"
-            % (base_url, e)
+            f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
         )
 
 
-def download_recording(base_url, recording, destination):
+def download_recording(base_url: str, recording: Recording, destination: str) -> None:
     """downloads the set of recordings, including gps data, for the given filename from the dashcam to the destination
     directory"""
     # first checks that we have enough room left
@@ -346,8 +345,7 @@ def download_recording(base_url, recording, destination):
 
     if disk_used_percent > max_disk_used_percent:
         raise RuntimeError(
-            "Not enough disk space left. Max used disk space percentage allowed : %s%%"
-            % max_disk_used_percent
+            f"Not enough disk space left. Max used disk space percentage allowed : {max_disk_used_percent}%"
         )
 
     # whether any file of a recording (video, thumbnail, gps, accel.) was downloaded
@@ -361,10 +359,8 @@ def download_recording(base_url, recording, destination):
     any_downloaded |= downloaded
 
     # downloads the thumbnail file
-    thm_filename = "%s_%s%s.thm" % (
-        recording.base_filename,
-        recording.type,
-        recording.direction,
+    thm_filename = (
+        f"{recording.base_filename}_{recording.type}{recording.direction}.thm"
     )
     downloaded, _ = download_file(
         base_url, thm_filename, destination, recording.group_name
@@ -372,14 +368,14 @@ def download_recording(base_url, recording, destination):
     any_downloaded |= downloaded
 
     # downloads the accelerometer data
-    tgf_filename = "%s_%s.3gf" % (recording.base_filename, recording.type)
+    tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
     downloaded, _ = download_file(
         base_url, tgf_filename, destination, recording.group_name
     )
     any_downloaded |= downloaded
 
     # downloads the gps data for normal, event and manual recordings
-    gps_filename = "%s_%s.gps" % (recording.base_filename, recording.type)
+    gps_filename = f"{recording.base_filename}_{recording.type}.gps"
     downloaded, _ = download_file(
         base_url, gps_filename, destination, recording.group_name
     )
@@ -391,17 +387,19 @@ def download_recording(base_url, recording, destination):
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
+            speed_str = " (%d%s)" % to_natural_speed(speed_bps) if speed_bps else ""
             recording_logger.info(
                 "Downloaded recording : %s (%s%s)%s",
                 recording.base_filename,
                 recording.type,
                 recording.direction,
-                " (%s%s)" % to_natural_speed(speed_bps) if speed_bps else "",
+                speed_str,
             )
         else:
             recording_logger.info(
-                "DRY RUN Would download recording : %s (%s)",
+                "DRY RUN Would download recording : %s (%s%s)",
                 recording.base_filename,
+                recording.type,
                 recording.direction,
             )
 
@@ -445,7 +443,7 @@ def sort_recordings(recordings, recording_priority):
         sort_key = manual_event_sort_key
     else:
         # this indicates a coding error
-        raise RuntimeError("unknown recording priority : %s" % recording_priority)
+        raise RuntimeError(f"unknown recording priority : {recording_priority}")
 
     recordings.sort(key=sort_key)
 
@@ -459,10 +457,14 @@ group_name_globs = {
     "yearly": "[0-9][0-9][0-9][0-9]",
 }
 
+
 # represents a recording downloaded to the destination; matches all files (video front/rear, gps, etc.)
-DownloadedRecording = namedtuple(
-    "DownloadedRecording", "base_filename group_name datetime"
-)
+@dataclass(frozen=True)
+class DownloadedRecording:
+    base_filename: str
+    group_name: str | None
+    datetime: datetime.datetime
+
 
 # downloaded recording filename regular expression
 downloaded_filename_re = re.compile(
@@ -472,11 +474,11 @@ downloaded_filename_re = re.compile(
 )
 
 
-def to_downloaded_recording(filename, grouping):
+def to_downloaded_recording(
+    filename: str, grouping: str
+) -> DownloadedRecording | None:
     """extracts destination recording information from a filename"""
-    filename_match = re.match(downloaded_filename_re, filename)
-
-    if filename_match is None:
+    if (filename_match := re.match(downloaded_filename_re, filename)) is None:
         return None
 
     year = int(filename_match.group("year"))
@@ -501,7 +503,9 @@ downloaded_filename_glob = (
 )
 
 
-def get_downloaded_recordings(destination, grouping):
+def get_downloaded_recordings(
+    destination: str, grouping: str
+) -> set[DownloadedRecording]:
     """reads files from the destination directory and returns them as recording records"""
     group_name_glob = group_name_globs[grouping]
 
@@ -523,7 +527,9 @@ def get_downloaded_recordings(destination, grouping):
     )
 
 
-def get_outdated_recordings(destination, grouping):
+def get_outdated_recordings(
+    destination: str, grouping: str
+) -> list[DownloadedRecording]:
     """returns the recordings prior to the cutoff date"""
     if cutoff_date is None:
         return []
@@ -547,9 +553,7 @@ def get_filtered_recordings(recordings, recording_filter):
     return (
         recordings
         if recording_filter is None
-        else [
-            x for x in recordings if "%s%s" % (x.type, x.direction) in recording_filter
-        ]
+        else [x for x in recordings if f"{x.type}{x.direction}" in recording_filter]
     )
 
 
@@ -562,16 +566,16 @@ def ensure_destination(destination):
 
     # destination exists, tests if directory
     if not os.path.isdir(destination):
-        raise RuntimeError("download destination is not a directory : %s" % destination)
+        raise RuntimeError(f"download destination is not a directory : {destination}")
 
     # destination is a directory, tests if writable
     if not os.access(destination, os.W_OK):
         raise RuntimeError(
-            "download destination directory not writable : %s" % destination
+            f"download destination directory not writable : {destination}"
         )
 
 
-def prepare_destination(destination, grouping):
+def prepare_destination(destination: str, grouping: str) -> None:
     """prepares the destination, ensuring it's valid and removing excess recordings"""
     # optionally removes outdated recordings
     if cutoff_date:
@@ -590,7 +594,7 @@ def prepare_destination(destination, grouping):
             )
 
             outdated_recording_glob = (
-                "%s_[NEPMIOATBRXG]*.*" % outdated_recording.base_filename
+                f"{outdated_recording.base_filename}_[NEPMIOATBRXG]*.*"
             )
             outdated_filepath_glob = get_filepath(
                 destination, outdated_recording.group_name, outdated_recording_glob
@@ -602,11 +606,17 @@ def prepare_destination(destination, grouping):
                 os.remove(outdated_filepath)
 
 
-def sync(address, destination, grouping, download_priority, recording_filter):
+def sync(
+    address: str,
+    destination: str,
+    grouping: str,
+    download_priority: str,
+    recording_filter: tuple[str, ...] | None,
+) -> None:
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
 
-    base_url = "http://%s" % address
+    base_url = f"http://{address}"
     dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [to_recording(x, grouping) for x in dashcam_filenames]
 
@@ -625,7 +635,7 @@ def sync(address, destination, grouping, download_priority, recording_filter):
         download_recording(base_url, recording, destination)
 
 
-def is_empty_directory(dirpath):
+def is_empty_directory(dirpath: str) -> bool:
     """tests if a directory is empty, ignoring anything that's not a video recording"""
     return all(not x.endswith(".mp4") for x in os.listdir(dirpath))
 
@@ -634,7 +644,7 @@ def is_empty_directory(dirpath):
 temp_filename_glob = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXG]*.*"
 
 
-def clean_destination(destination, grouping):
+def clean_destination(destination: str, grouping: str) -> None:
     """removes temporary artifacts from the destination directory"""
     # removes temporary files from interrupted downloads
     temp_filepath_glob = os.path.join(destination, temp_filename_glob)
@@ -642,7 +652,7 @@ def clean_destination(destination, grouping):
 
     for temp_filepath in temp_filepaths:
         if not dry_run:
-            logger.debug("Removing temporary file : %s" % temp_filepath)
+            logger.debug("Removing temporary file : %s", temp_filepath)
             os.remove(temp_filepath)
         else:
             logger.debug("DRY RUN Would remove temporary file : %s", temp_filepath)
@@ -657,7 +667,7 @@ def clean_destination(destination, grouping):
         for group_filepath in group_filepaths:
             if is_empty_directory(group_filepath):
                 if not dry_run:
-                    logger.debug("Removing grouping directory : %s" % group_filepath)
+                    logger.debug("Removing grouping directory : %s", group_filepath)
                     shutil.rmtree(group_filepath)
                 else:
                     logger.debug(
@@ -689,7 +699,7 @@ def lock(destination):
         return lf_fd
     except IOError:
         raise UserWarning(
-            "Another instance is already running for destination : %s" % destination
+            f"Another instance is already running for destination : {destination}"
         )
 
 
@@ -719,18 +729,13 @@ def parse_args():
         metavar="GROUPING",
         default="none",
         choices=["none", "daily", "weekly", "monthly", "yearly"],
-        help="groups recording by day, week, month or year under a directory named after the date; "
-        "so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; "
-        "defaults to "
-        "none"
-        ", indicating no grouping",
+        help="groups recording by day, week, month or year under a directory named after the date; so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; defaults to none, indicating no grouping",
     )
     arg_parser.add_argument(
         "-k",
         "--keep",
         metavar="KEEP_RANGE",
-        help="""keeps recordings in the given range, removing the rest; defaults to days, but can
-                            suffix with d, w for days or weeks respectively""",
+        help="""keeps recordings in the given range, removing the rest; defaults to days, but can suffix with d, w for days or weeks respectively""",
     )
     arg_parser.add_argument(
         "-p",
@@ -738,25 +743,13 @@ def parse_args():
         metavar="DOWNLOAD_PRIORITY",
         default="date",
         choices=["date", "rdate", "type"],
-        help="sets the recording download priority; "
-        "date"
-        ": downloads in chronological order "
-        "from oldest to newest; "
-        "rdate"
-        ": downloads in chronological order "
-        "from newest to oldest; "
-        "type"
-        ": prioritizes manual, event, normal and then parking"
-        "recordings; defaults to "
-        "date"
-        "",
+        help="sets the recording download priority; date: downloads in chronological order from oldest to newest; rdate: downloads in chronological order from newest to oldest; type: prioritizes manual, event, normal and then parkingrecordings; defaults to date",
     )
     arg_parser.add_argument(
         "-f",
         "--filter",
         default=None,
-        help="downloads recordings filtered by event type and camera direction"
-        "; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
+        help="downloads recordings filtered by event type and camera direction; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
         nargs="+",
     )
     arg_parser.add_argument(
@@ -797,7 +790,7 @@ def parse_args():
         "--version",
         action="version",
         default=__version__,
-        version="%%(prog)s %s" % __version__,
+        version=f"%(prog)s {__version__}",
         help="shows the version and exits",
     )
 
