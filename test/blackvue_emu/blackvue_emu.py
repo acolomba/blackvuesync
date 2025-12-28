@@ -1,4 +1,5 @@
 """emulates a the web service exposed by blackvue dashcams"""
+
 import flask
 
 from collections import namedtuple
@@ -9,15 +10,20 @@ import re
 app = flask.Flask(__name__)
 
 # represents a recording: filename and metadata
-Recording = namedtuple("Recording", "filename base_filename datetime type direction extension")
+Recording = namedtuple(
+    "Recording", "filename base_filename datetime type direction extension"
+)
 
 # dashcam filename pattern
-filename_re = re.compile(r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+filename_re = re.compile(
+    r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPMIOATBRXG])
     (?P<direction>[FR]?)
     (?P<upload>[LS]?)
-    \.(?P<extension>(3gf|gps|mp4|thm))""", re.VERBOSE)
+    \.(?P<extension>(3gf|gps|mp4|thm))""",
+    re.VERBOSE,
+)
 
 
 def to_recording(filename):
@@ -40,8 +46,14 @@ def to_recording(filename):
     recording_direction = filename_match.group("direction")
     recording_extension = filename_match.group("extension")
 
-    return Recording(filename, recording_base_filename, recording_datetime, recording_type, recording_direction,
-                     recording_extension)
+    return Recording(
+        filename,
+        recording_base_filename,
+        recording_datetime,
+        recording_type,
+        recording_direction,
+        recording_extension,
+    )
 
 
 def generate_recording_filenames(day_range=3, day_offset=0):
@@ -52,26 +64,47 @@ def generate_recording_filenames(day_range=3, day_offset=0):
         for hour in [9, 18]:
             for minutes in range(10, 25, 3):
                 for direction in ["F", "R"]:
-                    yield "%04d%02d%02d_%02d%02d%02d_N%s.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
-                                                                 direction)
+                    yield "%04d%02d%02d_%02d%02d%02d_N%s.mp4" % (
+                        date.year,
+                        date.month,
+                        date.day,
+                        hour,
+                        minutes,
+                        0,
+                        direction,
+                    )
             for minutes in range(11, 25, 3):
                 for direction in ["F", "R"]:
-                    yield "%04d%02d%02d_%02d%02d%02d_E%s.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
-                                                                 direction)
+                    yield "%04d%02d%02d_%02d%02d%02d_E%s.mp4" % (
+                        date.year,
+                        date.month,
+                        date.day,
+                        hour,
+                        minutes,
+                        0,
+                        direction,
+                    )
             for minutes in range(13, 25, 3):
                 for direction in ["F", "R"]:
-                    yield "%04d%02d%02d_%02d%02d%02d_A%sL.mp4" % (date.year, date.month, date.day, hour, minutes, 0,
-                                                                  direction)
+                    yield "%04d%02d%02d_%02d%02d%02d_A%sL.mp4" % (
+                        date.year,
+                        date.month,
+                        date.day,
+                        hour,
+                        minutes,
+                        0,
+                        direction,
+                    )
 
 
-@app.route("/blackvue_vod.cgi", methods=['GET'])
+@app.route("/blackvue_vod.cgi", methods=["GET"])
 def vod():
     """returns the index of recordings"""
     filenames = [filename for filename in generate_recording_filenames()]
     return flask.render_template("vod.txt", filenames=filenames)
 
 
-@app.route("/Record/<filename>", methods=['GET'])
+@app.route("/Record/<filename>", methods=["GET"])
 def record(filename):
     """serves any file associated to recordings, as long as the name is valid"""
     recording = to_recording(filename)
