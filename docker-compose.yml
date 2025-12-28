@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
 
     volumes:
-    # Recording download destination. Change only the part before the colon.
+    # Recording download destination. Change only the part before the first colon.
     - /mnt/dashcam:/recordings:rw
 
     environment:
