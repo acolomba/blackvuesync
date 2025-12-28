@@ -20,6 +20,7 @@ __version__ = "1.9a"
 import argparse
 import datetime
 from collections import namedtuple
+import errno
 import fcntl
 import glob
 import http.client
@@ -72,6 +73,14 @@ dry_run = None
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
 cutoff_date = None
+
+# errno codes for unavailable dashcam
+dashcam_unavailable_errno_codes = (
+    errno.EHOSTDOWN, # host is down
+    errno.EHOSTUNREACH,  # host is unreachable
+    errno.ENETUNREACH,  # network is unreachable
+    errno.ETIMEDOUT,  # connection timed out
+)
 
 # for unit testing
 today = datetime.date.today()
@@ -189,6 +198,9 @@ def get_dashcam_filenames(base_url):
 
         return get_filenames(file_lines)
     except urllib.error.URLError as e:
+        if (isinstance(e.reason, OSError) and (
+                isinstance(e.reason, TimeoutError) or e.reason.errno in dashcam_unavailable_errno_codes)):
+            raise UserWarning("Dashcam unavailable : %s" % e)
         raise RuntimeError("Cannot obtain list of recordings from dashcam at address : %s; error : %s"
                            % (base_url, e))
     except socket.timeout as e:
