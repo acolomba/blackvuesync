@@ -1,11 +1,15 @@
 # CHANGELOG
 
-## 1.10a
+## 1.10 (2025-12-28)
 
+* Add `--filter` option to filter which events are downloaded. (#6)
+* Add support for the interior camera found on the DR750X-3CH. (#7)
+* Download GPS data for all recording types. (#9)
+* Flush logs on exit. (#20)
 * Silence host/network down/unreachable and timeout in cron mode (inspired by #23).
 * Propagate exit status code to calling process. In cron mode, expected errors produce a success exit status.
-* Flush logs on exit. (#20)
-* Upgrade alpine image.
+* Add "rdate" priority, to download from newest to oldest.
+* Upgrade alpine image to 3.23.2.
 
 ## 1.9 (2021-08-08)
 
