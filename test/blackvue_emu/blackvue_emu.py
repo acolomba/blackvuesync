@@ -12,7 +12,7 @@ app = flask.Flask(__name__)
 
 
 # represents a recording: filename and metadata
-@dataclass
+@dataclass(frozen=True)
 class Recording:
     filename: str
     base_filename: str

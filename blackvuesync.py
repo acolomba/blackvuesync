@@ -120,7 +120,7 @@ def calc_cutoff_date(keep: str) -> datetime.date:
 
 
 # represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)
-@dataclass
+@dataclass(frozen=True)
 class Recording:
     filename: str
     base_filename: str
@@ -459,7 +459,7 @@ group_name_globs = {
 
 
 # represents a recording downloaded to the destination; matches all files (video front/rear, gps, etc.)
-@dataclass
+@dataclass(frozen=True)
 class DownloadedRecording:
     base_filename: str
     group_name: str | None
