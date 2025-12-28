@@ -2,8 +2,9 @@
 
 ## 2.0a
 
-* Modernized for Python 3.9, now that it's available in Debian Bullseye oldoldstable, the earliest LTS-supported Debian release. Now uses type hints, f-strings; walrus operator.
+* Modernize for Python 3.9, now that it's available in Debian Bullseye oldoldstable, the earliest LTS-supported Debian release. Now uses type hints, f-strings; walrus operator.
 * Logging uses lazy evaluation.
+* Add initial Claude Code settings and AI contirbution policy.
 
 ## 1.10 (2025-12-28)
 
