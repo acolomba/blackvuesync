@@ -1,0 +1,31 @@
+[project]
+name = "blackvuesync"
+version = "1.0.0"
+description = "Synchronize recordings from BlackVue dashcams to a local directory"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+keywords = ["blackvue", "dashcam", "sync", "backup"]
+
+dependencies = []
+
+[project.optional-dependencies]
+# development dependencies
+dev = [
+    "black~=24.0",
+    "Flask~=3.1",
+    "pytest~=8.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/acolomba/blackvuesync"
+Repository = "https://github.com/acolomba/blackvuesync"
+Issues = "https://github.com/acolomba/blackvuesync/issues"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]

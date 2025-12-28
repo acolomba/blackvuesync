@@ -1,11 +1,16 @@
-# IDE
-.idea
-__pycache__
-venv
+# python
+/*.egg-info/
+/dist/
+/build/
 
 # testing
-.pytest_cache
-tmp
+/.pytest_cache
+/tmp
+
+# ide
+/.idea
+__pycache__
+/venv
 
 # mac
 .DS_Store

@@ -13,6 +13,25 @@ This project is on GitHub: <https://github.com/acolomba/blackvuesync>
 
 ## Development Setup
 
+The project uses `pyproject.toml` for dependency management. Development dependencies (pytest, Flask, black) are defined as optional dependencies.
+
+### Setup
+
+Create a virtual environment and install development dependencies:
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate it
+source venv/bin/activate
+
+# Install package in editable mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+The `-e` flag installs in editable mode, so changes to `blackvuesync.py` take effect immediately without reinstalling.
+
 ### Code Formatting
 
 ```bash
