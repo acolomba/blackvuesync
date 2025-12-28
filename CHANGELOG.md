@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.10a
+
+* Silence host/network down/unreachable and timeout in cron mode (inspired by #23).
+* Propagate exit status code to calling process. In cron mode, expected errors produce a success exit status.
+* Flush logs on exit. (#20)
+
 ## 1.9 (2021-08-08)
 
 * Properly removes outdated recordings with new event types and upload flags from May 2021 firmware. (#4)

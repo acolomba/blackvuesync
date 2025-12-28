@@ -15,7 +15,7 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "1.9a"
+__version__ = "1.10a"
 
 import argparse
 import datetime
@@ -29,6 +29,7 @@ import re
 import os
 import shutil
 import stat
+import sys
 import time
 import urllib
 import urllib.parse
@@ -59,6 +60,12 @@ def set_logging_levels(verbosity, is_cron_mode):
     else:
         logger.setLevel(logging.DEBUG)
         cron_logger.setLevel(logging.DEBUG)
+
+
+def flush_logs():
+    """flushes all logging handlers"""
+    for handler in logger.handlers:
+        handler.flush()
 
 
 # max disk usage percent
@@ -680,7 +687,7 @@ def run():
             clean_destination(destination, grouping)
     except UserWarning as e:
         logger.warning(e.args[0])
-        return 1
+        return 0 if args.cron else 1
     except RuntimeError as e:
         logger.error(e.args[0])
         return 2
@@ -690,7 +697,8 @@ def run():
     finally:
         if lf_fd:
             unlock(lf_fd)
+        flush_logs()
 
 
 if __name__ == "__main__":
-    run()
+    sys.exit(run())
