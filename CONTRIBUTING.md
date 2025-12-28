@@ -11,4 +11,4 @@ The use of generative AI is welcome, provided these conditions are met:
 - **Human ownership:** You as a human are responsible for the contents of your contribution.
 - **Human oversight and expertise:** Please review, validate and revise issues and pull requests with your own expertise so that they reflect your personal understanding and voice.
 
-This AI contributino policy is loosely based on the one in the [Microsoft Open Source CoC](https://opensource.microsoft.com/codeofconduct/).
+This AI contribution policy is loosely based on the one in the [Microsoft Open Source CoC](https://opensource.microsoft.com/codeofconduct/).

@@ -160,7 +160,7 @@ filename_re = re.compile(
 )
 
 
-def to_recording(filename: str, grouping: str | None) -> Recording | None:
+def to_recording(filename: str, grouping: str) -> Recording | None:
     """extracts recording information from a filename"""
     if (filename_match := re.fullmatch(filename_re, filename)) is None:
         return None
@@ -240,7 +240,7 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
 
 
 def get_group_name(
-    recording_datetime: datetime.datetime, grouping: str | None
+    recording_datetime: datetime.datetime, grouping: str
 ) -> str | None:
     """determines the group name for a given recording according to the indicated grouping"""
     if grouping == "daily":
@@ -475,7 +475,7 @@ downloaded_filename_re = re.compile(
 
 
 def to_downloaded_recording(
-    filename: str, grouping: str | None
+    filename: str, grouping: str
 ) -> DownloadedRecording | None:
     """extracts destination recording information from a filename"""
     if (filename_match := re.match(downloaded_filename_re, filename)) is None:
@@ -503,7 +503,9 @@ downloaded_filename_glob = (
 )
 
 
-def get_downloaded_recordings(destination, grouping):
+def get_downloaded_recordings(
+    destination: str, grouping: str
+) -> set[DownloadedRecording]:
     """reads files from the destination directory and returns them as recording records"""
     group_name_glob = group_name_globs[grouping]
 
@@ -525,7 +527,9 @@ def get_downloaded_recordings(destination, grouping):
     )
 
 
-def get_outdated_recordings(destination, grouping):
+def get_outdated_recordings(
+    destination: str, grouping: str
+) -> list[DownloadedRecording]:
     """returns the recordings prior to the cutoff date"""
     if cutoff_date is None:
         return []
@@ -571,7 +575,7 @@ def ensure_destination(destination):
         )
 
 
-def prepare_destination(destination: str, grouping: str | None) -> None:
+def prepare_destination(destination: str, grouping: str) -> None:
     """prepares the destination, ensuring it's valid and removing excess recordings"""
     # optionally removes outdated recordings
     if cutoff_date:
@@ -605,7 +609,7 @@ def prepare_destination(destination: str, grouping: str | None) -> None:
 def sync(
     address: str,
     destination: str,
-    grouping: str | None,
+    grouping: str,
     download_priority: str,
     recording_filter: tuple[str, ...] | None,
 ) -> None:
@@ -631,7 +635,7 @@ def sync(
         download_recording(base_url, recording, destination)
 
 
-def is_empty_directory(dirpath):
+def is_empty_directory(dirpath: str) -> bool:
     """tests if a directory is empty, ignoring anything that's not a video recording"""
     return all(not x.endswith(".mp4") for x in os.listdir(dirpath))
 
@@ -640,7 +644,7 @@ def is_empty_directory(dirpath):
 temp_filename_glob = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXG]*.*"
 
 
-def clean_destination(destination: str, grouping: str | None) -> None:
+def clean_destination(destination: str, grouping: str) -> None:
     """removes temporary artifacts from the destination directory"""
     # removes temporary files from interrupted downloads
     temp_filepath_glob = os.path.join(destination, temp_filename_glob)
@@ -725,18 +729,13 @@ def parse_args():
         metavar="GROUPING",
         default="none",
         choices=["none", "daily", "weekly", "monthly", "yearly"],
-        help="groups recording by day, week, month or year under a directory named after the date; "
-        "so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; "
-        "defaults to "
-        "none"
-        ", indicating no grouping",
+        help="groups recording by day, week, month or year under a directory named after the date; so respectively 2019-06-15, 2019-06-09 (Mon), 2019-07 or 2019; defaults to none, indicating no grouping",
     )
     arg_parser.add_argument(
         "-k",
         "--keep",
         metavar="KEEP_RANGE",
-        help="""keeps recordings in the given range, removing the rest; defaults to days, but can
-                            suffix with d, w for days or weeks respectively""",
+        help="""keeps recordings in the given range, removing the rest; defaults to days, but can suffix with d, w for days or weeks respectively""",
     )
     arg_parser.add_argument(
         "-p",
@@ -744,25 +743,13 @@ def parse_args():
         metavar="DOWNLOAD_PRIORITY",
         default="date",
         choices=["date", "rdate", "type"],
-        help="sets the recording download priority; "
-        "date"
-        ": downloads in chronological order "
-        "from oldest to newest; "
-        "rdate"
-        ": downloads in chronological order "
-        "from newest to oldest; "
-        "type"
-        ": prioritizes manual, event, normal and then parking"
-        "recordings; defaults to "
-        "date"
-        "",
+        help="sets the recording download priority; date: downloads in chronological order from oldest to newest; rdate: downloads in chronological order from newest to oldest; type: prioritizes manual, event, normal and then parkingrecordings; defaults to date",
     )
     arg_parser.add_argument(
         "-f",
         "--filter",
         default=None,
-        help="downloads recordings filtered by event type and camera direction"
-        "; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
+        help="downloads recordings filtered by event type and camera direction; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
         nargs="+",
     )
     arg_parser.add_argument(
