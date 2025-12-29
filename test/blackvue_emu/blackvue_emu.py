@@ -95,8 +95,7 @@ def record(filename: str) -> flask.Response:
     if recording := to_recording(filename):
         filepath = f"files/mock.{recording.extension}"
         return flask.send_file(filepath)
-    else:
-        return flask.abort(404)
+    return flask.abort(404)
 
 
 if __name__ == "__main__":
