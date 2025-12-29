@@ -19,7 +19,7 @@ repos:
       # security
       - id: detect-private-key
       - id: check-added-large-files
-        args: ['--maxkb=4']
+        args: ['--maxkb=8']
 
       # syntax checkers
       - id: check-json
@@ -51,6 +51,18 @@ repos:
     rev: 25.11.0
     hooks:
       - id: black
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
 
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1
