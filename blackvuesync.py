@@ -144,9 +144,9 @@ class Recording:
 # A: Hard acceleration
 # T: Hard cornering
 # B: Hard braking
-# R: Geofence-enter
-# X: Geofence-exit
-# G: Geofence-pass
+# R: Geofence-enter (Fleet)
+# X: Geofence-exit (Fleet)
+# G: Geofence-pass (Fleet)
 # D: Drowsiness (DMS)
 # L: Distraction (DMS)
 # Y: Seatbelt not detected (DMS)
