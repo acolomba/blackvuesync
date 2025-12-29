@@ -5,6 +5,7 @@
 * Modernize for Python 3.9, now that it's available in Debian Bullseye oldoldstable, the earliest LTS-supported Debian release. Now uses type hints, f-strings; walrus operator.
 * Logging uses lazy evaluation.
 * Add initial Claude Code settings and AI contribution policy.
+* Build Docker images for amd64, arm64, and armv7 architectures. (#12)
 
 ## 1.10 (2025-12-28)
 
