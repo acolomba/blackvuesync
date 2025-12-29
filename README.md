@@ -10,7 +10,7 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 * *Portable runtimes:*
   * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
-  * A [docker image](#docker) that runs periodically via an internal cron job.
+  * A [docker image](#docker) that runs periodically via an internal cron job. Supports amd64 (Intel), arm64 (Apple Silicon, Raspberry Pi 4+) and armv7 (Raspberry Pi 2/3).
 * *Smart*: Only downloads recordings that haven't already been downloaded.
 * *Resilient*: If a download interrupts for whatever reason, the script resumes where it left off the next time it runs. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
 * *Hands-off*: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
@@ -30,12 +30,9 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected via Wi-Fi to the local network with a _static_ IP address.
 
-The dashcam must be kept powered for some time after the vehicle is turned off. BlackVue offers these accessories to draw power from the vehicle for a configurable amount of time:
+The dashcam must be kept powered for some time after the vehicle is turned off. BlackVue offers [hardwiring kits](https://blackvue.com/product-tag/battery/) and [batteries](https://blackvue.com/product-tag/battery/).
 
-* [Power Magic EZ](https://blackvue.com/?post_type=wc_product_tab&p=121481): Plugs into the OBD port.
-* [Hardwiring Kit](https://blackvue.com/product-category/add-ons/hardwiring-kit/): Plugs into the fuse box.
-
-The power-on timer should be set to a duration sufficient for recordings to be downloaded. Consult the dashcam manual for the bit rate for your chosen image quality, and compare it with the download speed reported by BlackVue Sync.
+The camera should stay active for a period long enough sufficient for recordings to be downloaded. Consult the dashcam manual for the bit rate for your chosen image quality, and compare it with the download speed reported by BlackVue Sync.
 
 Example with a DR750S-2CH recording with two cameras at the highest quality setting and a good but conservative download speed:
 
