@@ -96,7 +96,6 @@ Two logger hierarchies:
 
 - `test/blackvuesync_test.py`: Pytest-based unit tests for parsing, grouping, filtering
 - `test/blackvue_emu/`: HTTP server emulator that mimics BlackVue dashcam responses
-- `test/run_integration_tests.sh`: Orchestrates full integration test suite
 
 ## Important Constraints
 

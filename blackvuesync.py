@@ -265,12 +265,20 @@ speed_units = [(1000000, "Mbps"), (1000, "Kbps"), (1, "bps")]
 
 def to_natural_speed(speed_bps: int) -> tuple[int, str]:
     """returns a natural representation of a given download speed in bps as an scalar+unit tuple (base 10)"""
-    for speed_unit in speed_units:
-        speed_unit_multiplier, speed_unit_name = speed_unit
+    for speed_unit_multiplier, speed_unit_name in speed_units:
         if speed_bps > speed_unit_multiplier:
             return int(speed_bps / speed_unit_multiplier), speed_unit_name
 
     return 0, "bps"
+
+
+def format_natural_speed(speed_bps: int | None) -> str:
+    """formats download speed in bps as a human-readable string like ' (123Mbps)', or empty string if None"""
+    if not speed_bps:
+        return ""
+
+    speed_value, speed_unit = to_natural_speed(speed_bps)
+    return f" ({speed_value}{speed_unit})"
 
 
 def get_filepath(destination: str, group_name: str | None, filename: str) -> str:
@@ -318,11 +326,7 @@ def download_file(
         os.rename(temp_filepath, destination_filepath)
 
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
-        if speed_bps:
-            speed_value, speed_unit = to_natural_speed(speed_bps)
-            speed_str = f" ({speed_value}{speed_unit})"
-        else:
-            speed_str = ""
+        speed_str = format_natural_speed(speed_bps)
         logger.debug("Downloaded file : %s%s", filename, speed_str)
 
         return True, speed_bps
@@ -389,11 +393,7 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            if speed_bps:
-                speed_value, speed_unit = to_natural_speed(speed_bps)
-                speed_str = f" ({speed_value}{speed_unit})"
-            else:
-                speed_str = ""
+            speed_str = format_natural_speed(speed_bps)
             recording_logger.info(
                 "Downloaded recording : %s (%s%s)%s",
                 recording.base_filename,
