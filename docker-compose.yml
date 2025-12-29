@@ -4,11 +4,9 @@ services:
     image: acolomba/blackvuesync
     container_name: blackvuesync
     restart: unless-stopped
-
     volumes:
-    # Recording download destination. Change only the part before the first colon.
-    - /mnt/dashcam:/recordings:rw
-
+      # Recording download destination. Change only the part before the first colon.
+      - /mnt/dashcam:/recordings:rw
     environment:
       # Dashcam address
       # ADDRESS: dashcam.example.net

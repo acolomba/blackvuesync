@@ -14,6 +14,7 @@ dependencies = []
 dev = [
     "black~=25.11",
     "Flask~=3.1",
+    "pre-commit~=4.5",
     "pytest~=9.0",
 ]
 
