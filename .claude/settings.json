@@ -20,5 +20,18 @@
     "excludedCommands": [
       "docker"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'source venv/bin/activate' >> \"$CLAUDE_ENV_FILE\""
+          }
+        ]
+      }
+    ]
   }
 }
