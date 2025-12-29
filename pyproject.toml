@@ -14,7 +14,7 @@ dependencies = []
 dev = [
     "black~=25.11",
     "Flask~=3.1",
-    "pytest~=9.0",
+    "pytest~=8.4",
 ]
 
 [project.urls]
