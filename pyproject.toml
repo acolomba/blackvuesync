@@ -42,15 +42,17 @@ line-length = 88
 
 [tool.ruff.lint]
 select = [
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "RET", # flake8-return
+    "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
+    "I",   # isort
+    "N",   # pep8-naming
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
     "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
     "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "SIM", # flake8-simplify
 ]
 ignore = [
     "E501",  # line too long (handled by black/ruff-format)

@@ -244,7 +244,8 @@ def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str 
     """determines the group name for a given recording according to the indicated grouping"""
     if grouping == "daily":
         return recording_datetime.date().isoformat()
-    elif grouping == "weekly":
+
+    if grouping == "weekly":
         recording_date = recording_datetime.date()
 
         # day of the week (mon = 0, ..., sun = 6)
@@ -252,12 +253,14 @@ def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str 
         recording_weekday_delta = datetime.timedelta(days=recording_weekday)
         recording_mon_date = recording_date - recording_weekday_delta
         return recording_mon_date.isoformat()
-    elif grouping == "monthly":
+
+    if grouping == "monthly":
         return recording_datetime.date().strftime("%Y-%m")
-    elif grouping == "yearly":
+
+    if grouping == "yearly":
         return recording_datetime.date().strftime("%Y")
-    else:
-        return None
+
+    return None
 
 
 # download speed units for conversion to a natural representation
@@ -286,8 +289,7 @@ def get_filepath(destination: str, group_name: str | None, filename: str) -> str
     """constructs a path for a recording file from the destination, group name and filename (or glob pattern)"""
     if group_name:
         return os.path.join(destination, group_name, filename)
-    else:
-        return os.path.join(destination, filename)
+    return os.path.join(destination, filename)
 
 
 def download_file(
