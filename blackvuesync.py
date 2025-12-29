@@ -149,12 +149,17 @@ class Recording:
 # X: Geofence-exit
 # G: Geofence-pass
 #
+# F: Front camera
+# R: Rear camera
+# I: Interior camera
+# O: Optional camera
+#
 # L or S: upload flag, Substream or Live
 filename_re = re.compile(
     r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
     _(?P<type>[NEPMIOATBRXG])
-    (?P<direction>[FRI])
+    (?P<direction>[FRIO])
     (?P<upload>[LS]?)
     \.(?P<extension>mp4)""",
     re.VERBOSE,
@@ -418,7 +423,7 @@ def sort_recordings(recordings: list[Recording], recording_priority: str) -> Non
 
     # preferred orderings (by type and direction)
     recording_types = "MEIBOATRXGNP"
-    recording_directions = "FRI"
+    recording_directions = "FRIO"
 
     # tomorrow, for reverse datetime sorting
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)

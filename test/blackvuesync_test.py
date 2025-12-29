@@ -109,6 +109,28 @@ import blackvuesync
                 "F",
             ),
         ),
+        (
+            "20181029_131513_NO.mp4",
+            blackvuesync.Recording(
+                "20181029_131513_NO.mp4",
+                "20181029_131513",
+                None,
+                datetime.datetime(2018, 10, 29, 13, 15, 13),
+                "N",
+                "O",
+            ),
+        ),
+        (
+            "20181029_131513_EO.mp4",
+            blackvuesync.Recording(
+                "20181029_131513_EO.mp4",
+                "20181029_131513",
+                None,
+                datetime.datetime(2018, 10, 29, 13, 15, 13),
+                "E",
+                "O",
+            ),
+        ),
         ("20181029_131513_NX.mp4", None),
         ("20181029_131513_PX.mp4", None),
         ("20181029_131513_PF.mp3", None),
