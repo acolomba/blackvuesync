@@ -36,6 +36,7 @@ import time
 import urllib
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 
 # logging
@@ -440,18 +441,21 @@ def sort_recordings(recordings: list[Recording], recording_priority: str) -> Non
             recording_directions.find(recording.direction),
         )
 
+    sort_key: Callable[[Recording], tuple[object, ...]]
     if recording_priority == "date":
         # least recent first
-        recordings.sort(key=datetime_sort_key)
+        sort_key = datetime_sort_key
     elif recording_priority == "rdate":
         # most recent first
-        recordings.sort(key=rev_datetime_sort_key)
+        sort_key = rev_datetime_sort_key
     elif recording_priority == "type":
         # manual, event, normal, parking
-        recordings.sort(key=manual_event_sort_key)
+        sort_key = manual_event_sort_key
     else:
         # this indicates a coding error
         raise RuntimeError(f"unknown recording priority : {recording_priority}")
+
+    recordings.sort(key=sort_key)
 
 
 # group name globs, keyed by grouping
