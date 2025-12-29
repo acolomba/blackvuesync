@@ -1,11 +1,17 @@
 """emulates a the web service exposed by blackvue dashcams"""
 
-import flask
+from __future__ import annotations
 
-from collections.abc import Generator
-from dataclasses import dataclass
 import datetime
 import re
+from collections.abc import Generator
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import flask
+
+if TYPE_CHECKING:
+    from typing import Optional
 
 
 app = flask.Flask(__name__)
@@ -34,7 +40,7 @@ filename_re = re.compile(
 )
 
 
-def to_recording(filename: str) -> Recording | None:
+def to_recording(filename: str) -> Optional[Recording]:
     """extracts recording information from a filename"""
     if (filename_match := re.fullmatch(filename_re, filename)) is None:
         return None
@@ -84,8 +90,8 @@ def generate_recording_filenames(
 @app.route("/blackvue_vod.cgi", methods=["GET"])
 def vod() -> str:
     """returns the index of recordings"""
-    filenames = [filename for filename in generate_recording_filenames()]
-    return flask.render_template("vod.txt", filenames=filenames)
+    filenames = list(generate_recording_filenames())
+    return flask.render_template("vod.txt", filenames=filenames)  # type: ignore[no-any-return]  # noqa: PGH003
 
 
 @app.route("/Record/<filename>", methods=["GET"])
