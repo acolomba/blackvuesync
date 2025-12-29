@@ -239,9 +239,7 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
         )
 
 
-def get_group_name(
-    recording_datetime: datetime.datetime, grouping: str
-) -> str | None:
+def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str | None:
     """determines the group name for a given recording according to the indicated grouping"""
     if grouping == "daily":
         return recording_datetime.date().isoformat()
@@ -474,9 +472,7 @@ downloaded_filename_re = re.compile(
 )
 
 
-def to_downloaded_recording(
-    filename: str, grouping: str
-) -> DownloadedRecording | None:
+def to_downloaded_recording(filename: str, grouping: str) -> DownloadedRecording | None:
     """extracts destination recording information from a filename"""
     if (filename_match := re.match(downloaded_filename_re, filename)) is None:
         return None
