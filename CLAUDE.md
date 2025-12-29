@@ -68,7 +68,7 @@ The entire application is contained in `blackvuesync.py` - a self-contained scri
 
 The filename regex (`filename_re`) parses BlackVue recording filenames to extract:
 - **Timestamp**: `YYYYMMDD_HHMMSS`
-- **Type**: N=Normal, E=Event, P=Parking, M=Manual, I=Impact, O=Overspeed, A=Acceleration, T=Cornering, B=Braking, R/X/G=Geofence
+- **Type**: N=Normal, E=Event, P=Parking, M=Manual, I=Impact, O=Overspeed, A=Acceleration, T=Cornering, B=Braking, R/X/G=Geofence, D/L/Y/F=DMS
 - **Direction**: F=Front, R=Rear, I=Interior, O=Optional
 - **Upload flag**: L=Live, S=Substream (optional)
 
