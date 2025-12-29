@@ -1,7 +1,8 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+
+import datetime
 
 import pytest
-import datetime
 
 import blackvuesync
 
@@ -114,7 +115,9 @@ import blackvuesync
         ("invalid.gif", None),
     ],
 )
-def test_to_recording(filename, expected_recording):
+def test_to_recording(
+    filename: str, expected_recording: blackvuesync.Recording | None
+) -> None:
     recording = blackvuesync.to_recording(filename, "none")
 
     assert expected_recording == recording
@@ -157,7 +160,9 @@ def test_to_recording(filename, expected_recording):
         ("invalid.gif", None),
     ],
 )
-def test_to_downloaded_recording(filename, expected_recording):
+def test_to_downloaded_recording(
+    filename: str, expected_recording: blackvuesync.DownloadedRecording | None
+) -> None:
     recording = blackvuesync.to_downloaded_recording(filename, "none")
 
     assert expected_recording == recording
@@ -177,12 +182,12 @@ def test_to_downloaded_recording(filename, expected_recording):
     ],
 )
 def test_get_group_name(
-    recording_datetime,
-    expected_daily_group_name,
-    expected_weekly_group_name,
-    expected_monthly_group_name,
-    expected_yearly_group_name,
-):
+    recording_datetime: datetime.datetime,
+    expected_daily_group_name: str,
+    expected_weekly_group_name: str,
+    expected_monthly_group_name: str,
+    expected_yearly_group_name: str,
+) -> None:
     assert expected_daily_group_name == blackvuesync.get_group_name(
         recording_datetime, "daily"
     )
@@ -206,7 +211,7 @@ def test_get_group_name(
         ("2w", datetime.datetime(2018, 10, 16)),
     ],
 )
-def test_calc_cutoff_date(keep, expected_cutoff_date):
+def test_calc_cutoff_date(keep: str, expected_cutoff_date: datetime.datetime) -> None:
     try:
         blackvuesync.today = datetime.datetime(2018, 10, 30)
 
@@ -315,10 +320,20 @@ def test_calc_cutoff_date(keep, expected_cutoff_date):
         ),
     ],
 )
-def test_sort_recordings(priority, filenames, expected_sorted_filenames):
-    recordings = [blackvuesync.to_recording(f, "none") for f in filenames]
+def test_sort_recordings(
+    priority: str, filenames: list[str], expected_sorted_filenames: list[str]
+) -> None:
+    recordings = [
+        r
+        for r in [blackvuesync.to_recording(f, "none") for f in filenames]
+        if r is not None
+    ]
     expected_sorted_recordings = [
-        blackvuesync.to_recording(f, "none") for f in expected_sorted_filenames
+        r
+        for r in [
+            blackvuesync.to_recording(f, "none") for f in expected_sorted_filenames
+        ]
+        if r is not None
     ]
 
     # copy

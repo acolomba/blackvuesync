@@ -2,7 +2,7 @@
 
 docker run -it --rm \
     -e ADDRESS=dashcam-porsche.peanuts.ink \
-    -v $(pwd)/tmp:/recordings \
+    -v "$(pwd)"/tmp:/recordings \
     -e DRY_RUN=1 \
     -e CRON=0 \
     -e RUN_ONCE=1 \

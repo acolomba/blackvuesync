@@ -21,22 +21,23 @@ __version__ = "2.0a"
 
 import argparse
 import datetime
-from dataclasses import dataclass
 import errno
 import fcntl
 import glob
 import http.client
 import logging
-import re
 import os
+import re
 import shutil
+import socket
 import stat
 import sys
 import time
 import urllib
 import urllib.parse
 import urllib.request
-import socket
+from collections.abc import Callable
+from dataclasses import dataclass
 
 # logging
 logging.basicConfig(format="%(asctime)s: %(levelname)s %(message)s")
@@ -48,7 +49,7 @@ logger = logging.getLogger()
 cron_logger = logging.getLogger("cron")
 
 
-def set_logging_levels(verbosity, is_cron_mode):
+def set_logging_levels(verbosity: int, is_cron_mode: bool) -> None:
     """sets up the logging levels according to the desired verbosity and operation mode"""
     if verbosity == -1:
         logger.setLevel(logging.ERROR)
@@ -64,7 +65,7 @@ def set_logging_levels(verbosity, is_cron_mode):
         cron_logger.setLevel(logging.DEBUG)
 
 
-def flush_logs():
+def flush_logs() -> None:
     """flushes all logging handlers"""
     for handler in logger.handlers:
         handler.flush()
@@ -81,7 +82,7 @@ dry_run = None
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
-cutoff_date = None
+cutoff_date: datetime.date | None = None
 
 # errno codes for unavailable dashcam
 dashcam_unavailable_errno_codes = (
@@ -225,25 +226,26 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
             isinstance(e.reason, TimeoutError)
             or e.reason.errno in dashcam_unavailable_errno_codes
         ):
-            raise UserWarning(f"Dashcam unavailable : {e}")
+            raise UserWarning(f"Dashcam unavailable : {e}") from e
         raise RuntimeError(
             f"Cannot obtain list of recordings from dashcam at address : {base_url}; error : {e}"
-        )
+        ) from e
     except socket.timeout as e:
         raise UserWarning(
             f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
-        )
+        ) from e
     except http.client.RemoteDisconnected as e:
         raise UserWarning(
             f"Dashcam disconnected without a response; address : {base_url}; error : {e}"
-        )
+        ) from e
 
 
 def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str | None:
     """determines the group name for a given recording according to the indicated grouping"""
     if grouping == "daily":
         return recording_datetime.date().isoformat()
-    elif grouping == "weekly":
+
+    if grouping == "weekly":
         recording_date = recording_datetime.date()
 
         # day of the week (mon = 0, ..., sun = 6)
@@ -251,12 +253,14 @@ def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str 
         recording_weekday_delta = datetime.timedelta(days=recording_weekday)
         recording_mon_date = recording_date - recording_weekday_delta
         return recording_mon_date.isoformat()
-    elif grouping == "monthly":
+
+    if grouping == "monthly":
         return recording_datetime.date().strftime("%Y-%m")
-    elif grouping == "yearly":
+
+    if grouping == "yearly":
         return recording_datetime.date().strftime("%Y")
-    else:
-        return None
+
+    return None
 
 
 # download speed units for conversion to a natural representation
@@ -265,20 +269,27 @@ speed_units = [(1000000, "Mbps"), (1000, "Kbps"), (1, "bps")]
 
 def to_natural_speed(speed_bps: int) -> tuple[int, str]:
     """returns a natural representation of a given download speed in bps as an scalar+unit tuple (base 10)"""
-    for speed_unit in speed_units:
-        speed_unit_multiplier, speed_unit_name = speed_unit
+    for speed_unit_multiplier, speed_unit_name in speed_units:
         if speed_bps > speed_unit_multiplier:
             return int(speed_bps / speed_unit_multiplier), speed_unit_name
 
     return 0, "bps"
 
 
+def format_natural_speed(speed_bps: int | None) -> str:
+    """formats download speed in bps as a human-readable string like ' (123Mbps)', or empty string if None"""
+    if not speed_bps:
+        return ""
+
+    speed_value, speed_unit = to_natural_speed(speed_bps)
+    return f" ({speed_value}{speed_unit})"
+
+
 def get_filepath(destination: str, group_name: str | None, filename: str) -> str:
     """constructs a path for a recording file from the destination, group name and filename (or glob pattern)"""
     if group_name:
         return os.path.join(destination, group_name, filename)
-    else:
-        return os.path.join(destination, filename)
+    return os.path.join(destination, filename)
 
 
 def download_file(
@@ -318,7 +329,7 @@ def download_file(
         os.rename(temp_filepath, destination_filepath)
 
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
-        speed_str = " (%d%s)" % to_natural_speed(speed_bps) if speed_bps else ""
+        speed_str = format_natural_speed(speed_bps)
         logger.debug("Downloaded file : %s%s", filename, speed_str)
 
         return True, speed_bps
@@ -331,7 +342,7 @@ def download_file(
     except socket.timeout as e:
         raise UserWarning(
             f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
-        )
+        ) from e
 
 
 def download_recording(base_url: str, recording: Recording, destination: str) -> None:
@@ -341,7 +352,7 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
     disk_usage = shutil.disk_usage(destination)
     disk_used_percent = disk_usage.used / disk_usage.total * 100.0
 
-    if disk_used_percent > max_disk_used_percent:
+    if max_disk_used_percent is not None and disk_used_percent > max_disk_used_percent:
         raise RuntimeError(
             f"Not enough disk space left. Max used disk space percentage allowed : {max_disk_used_percent}%"
         )
@@ -385,7 +396,7 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
         recording_logger = cron_logger if recording.type in ("N", "M") else logger
 
         if not dry_run:
-            speed_str = " (%d%s)" % to_natural_speed(speed_bps) if speed_bps else ""
+            speed_str = format_natural_speed(speed_bps)
             recording_logger.info(
                 "Downloaded recording : %s (%s%s)%s",
                 recording.base_filename,
@@ -402,7 +413,7 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
             )
 
 
-def sort_recordings(recordings, recording_priority):
+def sort_recordings(recordings: list[Recording], recording_priority: str) -> None:
     """sorts recordings in place according to the given priority"""
 
     # preferred orderings (by type and direction)
@@ -412,17 +423,19 @@ def sort_recordings(recordings, recording_priority):
     # tomorrow, for reverse datetime sorting
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
 
-    def datetime_sort_key(recording):
+    def datetime_sort_key(recording: Recording) -> tuple[datetime.datetime, int]:
         """sorts by datetime, then front/rear direction, then recording type"""
         return recording.datetime, recording_directions.find(recording.direction)
 
-    def rev_datetime_sort_key(recording):
+    def rev_datetime_sort_key(recording: Recording) -> tuple[datetime.timedelta, int]:
         """sorts by newest to oldest datetime, then front/rear/interior direction"""
         return tomorrow - recording.datetime, recording_directions.find(
             recording.direction
         )
 
-    def manual_event_sort_key(recording):
+    def manual_event_sort_key(
+        recording: Recording,
+    ) -> tuple[int, datetime.datetime, int]:
         """sorts by recording type (manual and events first), then datetime, then front/rear/interior direction"""
         return (
             recording_types.find(recording.type),
@@ -430,6 +443,7 @@ def sort_recordings(recordings, recording_priority):
             recording_directions.find(recording.direction),
         )
 
+    sort_key: Callable[[Recording], tuple[object, ...]]
     if recording_priority == "date":
         # least recent first
         sort_key = datetime_sort_key
@@ -511,16 +525,11 @@ def get_downloaded_recordings(
 
     downloaded_filepaths = glob.glob(downloaded_filepath_glob)
 
-    return set(
-        [
-            r
-            for r in [
-                to_downloaded_recording(os.path.basename(p), grouping)
-                for p in downloaded_filepaths
-            ]
-            if r is not None
-        ]
-    )
+    return {
+        r
+        for p in downloaded_filepaths
+        if (r := to_downloaded_recording(os.path.basename(p), grouping)) is not None
+    }
 
 
 def get_outdated_recordings(
@@ -535,7 +544,7 @@ def get_outdated_recordings(
     return [x for x in downloaded_recordings if x.datetime.date() < cutoff_date]
 
 
-def get_current_recordings(recordings):
+def get_current_recordings(recordings: list[Recording]) -> list[Recording]:
     """returns the recordings that are after or on the cutoff date"""
     return (
         recordings
@@ -544,7 +553,9 @@ def get_current_recordings(recordings):
     )
 
 
-def get_filtered_recordings(recordings, recording_filter):
+def get_filtered_recordings(
+    recordings: list[Recording], recording_filter: tuple[str, ...] | None
+) -> list[Recording]:
     """returns recordings filtered by recording_filter"""
     return (
         recordings
@@ -553,7 +564,7 @@ def get_filtered_recordings(recordings, recording_filter):
     )
 
 
-def ensure_destination(destination):
+def ensure_destination(destination: str) -> None:
     """ensures the destination directory exists, creates if not, verifies it's writeable"""
     # if no destination, creates it
     if not os.path.exists(destination):
@@ -614,7 +625,9 @@ def sync(
 
     base_url = f"http://{address}"
     dashcam_filenames = get_dashcam_filenames(base_url)
-    dashcam_recordings = [to_recording(x, grouping) for x in dashcam_filenames]
+    dashcam_recordings = [
+        r for x in dashcam_filenames if (r := to_recording(x, grouping)) is not None
+    ]
 
     # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
@@ -671,7 +684,7 @@ def clean_destination(destination: str, grouping: str) -> None:
                     )
 
 
-def lock(destination):
+def lock(destination: str) -> int:
     """creates a lock to ensure only one instance is running on a given destination; adapted from:
     https://stackoverflow.com/questions/220525/ensure-a-single-instance-of-an-application-in-linux
     """
@@ -693,18 +706,18 @@ def lock(destination):
         fcntl.lockf(lf_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         return lf_fd
-    except IOError:
+    except OSError as e:
         raise UserWarning(
             f"Another instance is already running for destination : {destination}"
-        )
+        ) from e
 
 
-def unlock(lf_fd):
+def unlock(lf_fd: int) -> None:
     """unlocks the lock file; does not remove because another process may lock it in the meantime"""
     fcntl.lockf(lf_fd, fcntl.LOCK_UN)
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """parses the command-line arguments"""
     arg_parser = argparse.ArgumentParser(
         description="Synchronizes BlackVue dashcam recordings with a local directory.",
@@ -793,7 +806,7 @@ def parse_args():
     return arg_parser.parse_args()
 
 
-def run():
+def run() -> int:
     """run forrest run"""
     # dry-run is a global setting
     global dry_run
@@ -852,6 +865,8 @@ def run():
         if lf_fd:
             unlock(lf_fd)
         flush_logs()
+
+    return 0
 
 
 if __name__ == "__main__":

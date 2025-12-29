@@ -1,0 +1,4 @@
+[general]
+# B5: body-min-length
+# B6: body-is-missing
+ignore=B5,B6

@@ -13,7 +13,7 @@ This project is on GitHub: <https://github.com/acolomba/blackvuesync>
 
 ## Development Setup
 
-The project uses `pyproject.toml` for dependency management. Development dependencies (pytest, Flask, black) are defined as optional dependencies.
+The project uses `pyproject.toml` for dependency management. Development dependencies (black, Flask, pre-commit, pytest) are defined as optional dependencies.
 
 ### Setup
 
@@ -28,11 +28,21 @@ source venv/bin/activate
 
 # Install package in editable mode with dev dependencies
 pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+
+# Install commit-msg hook for gitlint
+pre-commit install --hook-type commit-msg
 ```
 
 The `-e` flag installs in editable mode, so changes to `blackvuesync.py` take effect immediately without reinstalling.
 
+Pre-commit hooks will automatically run on `git commit` to check code quality, format code, and scan for secrets. The hooks include Black, shellcheck, yamllint, trufflehog, and others.
+
 ### Code Formatting
+
+Code formatting is handled automatically by pre-commit hooks (Black for Python, yamlfmt for YAML). To manually format:
 
 ```bash
 # Format code with Black
@@ -86,7 +96,6 @@ Two logger hierarchies:
 
 - `test/blackvuesync_test.py`: Pytest-based unit tests for parsing, grouping, filtering
 - `test/blackvue_emu/`: HTTP server emulator that mimics BlackVue dashcam responses
-- `test/run_integration_tests.sh`: Orchestrates full integration test suite
 
 ## Important Constraints
 

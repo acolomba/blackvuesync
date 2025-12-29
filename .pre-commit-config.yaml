@@ -1,0 +1,101 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # file quality & formatting
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+        files: '(\.sh|blackvuesync\.py|crontab)$'
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+      # security
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ['--maxkb=8']
+
+      # syntax checkers
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: check-ast
+
+      # python-specific
+      - id: debug-statements
+      - id: check-builtin-literals
+      - id: name-tests-test
+
+      # file organization
+      - id: file-contents-sorter
+      - id: pretty-format-json
+        args: ['--indent=4']
+        exclude: '^\.claude/'
+      - id: requirements-txt-fixer
+      - id: sort-simple-yaml
+
+      # repository structure
+      - id: check-vcs-permalinks
+      - id: forbid-submodules
+      - id: forbid-new-submodules
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--pattern', 'features/.*', '--pattern', 'releases/.*']
+
+  - repo: https://github.com/psf/black
+    rev: 25.11.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+
+  - repo: https://github.com/sirosen/texthooks
+    rev: 0.7.1
+    hooks:
+      - id: fix-smartquotes
+      - id: alphabetize-codeowners
+      - id: fix-spaces
+      - id: fix-unicode-dashes
+      - id: fix-ligatures
+      - id: forbid-bidi-controls
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.92.4
+    hooks:
+      - id: trufflehog
+
+  - repo: https://github.com/jorisroovers/gitlint
+    rev: v0.19.1
+    hooks:
+      - id: gitlint
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.37.1
+    hooks:
+      - id: yamllint
+        args: ['-d', '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}']
+
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.20.0
+    hooks:
+      - id: yamlfmt
