@@ -81,7 +81,7 @@ dry_run = None
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
-cutoff_date = None
+cutoff_date: datetime.date | None = None
 
 # errno codes for unavailable dashcam
 dashcam_unavailable_errno_codes = (
@@ -521,11 +521,8 @@ def get_downloaded_recordings(
 
     return {
         r
-        for r in [
-            to_downloaded_recording(os.path.basename(p), grouping)
-            for p in downloaded_filepaths
-        ]
-        if r is not None
+        for p in downloaded_filepaths
+        if (r := to_downloaded_recording(os.path.basename(p), grouping)) is not None
     }
 
 
@@ -543,9 +540,11 @@ def get_outdated_recordings(
 
 def get_current_recordings(recordings: list[Recording]) -> list[Recording]:
     """returns the recordings that are after or on the cutoff date"""
-    if cutoff_date is None:
-        return recordings
-    return [x for x in recordings if x.datetime.date() >= cutoff_date]
+    return (
+        recordings
+        if cutoff_date is None
+        else [x for x in recordings if x.datetime.date() >= cutoff_date]
+    )
 
 
 def get_filtered_recordings(
@@ -621,9 +620,7 @@ def sync(
     base_url = f"http://{address}"
     dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [
-        r
-        for r in [to_recording(x, grouping) for x in dashcam_filenames]
-        if r is not None
+        r for x in dashcam_filenames if (r := to_recording(x, grouping)) is not None
     ]
 
     # figures out which recordings are current and should be downloaded
