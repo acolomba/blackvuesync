@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Docker base image updates
+  # docker
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -9,7 +9,7 @@ updates:
       - "dependencies"
       - "docker"
 
-  # Python dependencies (pyproject.toml)
+  # python
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -18,7 +18,7 @@ updates:
       - "dependencies"
       - "python"
 
-  # GitHub Actions updates
+  # github actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
