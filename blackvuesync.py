@@ -120,9 +120,10 @@ def calc_cutoff_date(keep: str) -> datetime.date:
     return today - keep_range_timedelta
 
 
-# represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)
 @dataclass(frozen=True)
 class Recording:
+    """represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)"""
+
     filename: str
     base_filename: str
     group_name: str | None
@@ -136,9 +137,9 @@ class Recording:
 # references:
 # - https://support.blackvue.com.au/hc/en-us/articles/13301776266895-Video-File-Naming
 # N: Normal
+# E: Event
 # P: Parking motion detection
 # M: Manual
-# E: Event
 # I: Parking impact
 # O: Overspeed
 # A: Hard acceleration

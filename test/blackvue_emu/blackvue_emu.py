@@ -27,8 +27,8 @@ class Recording:
 filename_re = re.compile(
     r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPMIOATBRXG])
-    (?P<direction>[FR]?)
+    _(?P<type>[NEPMIOATBRXGDLYF])
+    (?P<direction>[FRIO]?)
     (?P<upload>[LS]?)
     \.(?P<extension>(3gf|gps|mp4|thm))""",
     re.VERBOSE,
@@ -71,15 +71,22 @@ def generate_recording_filenames(
 
     for date in [today - datetime.timedelta(day) for day in range(0, day_range)]:
         for hour in [9, 18]:
+            # Normal recordings - Front, Rear, Interior, Optional
             for minutes in range(10, 25, 3):
-                for direction in ["F", "R"]:
+                for direction in ["F", "R", "I", "O"]:
                     yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_N{direction}.mp4"
+            # Event recordings - Front, Rear
             for minutes in range(11, 25, 3):
                 for direction in ["F", "R"]:
                     yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_E{direction}.mp4"
+            # Acceleration events with Live flag - Front, Rear
             for minutes in range(13, 25, 3):
                 for direction in ["F", "R"]:
                     yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_A{direction}L.mp4"
+            # DMS recordings - Interior (typical for DMS cameras)
+            for minutes in range(15, 25, 3):
+                for dms_type in ["D", "L", "Y", "F"]:
+                    yield f"{date.year:04d}{date.month:02d}{date.day:02d}_{hour:02d}{minutes:02d}00_{dms_type}I.mp4"
 
 
 @app.route("/blackvue_vod.cgi", methods=["GET"])
