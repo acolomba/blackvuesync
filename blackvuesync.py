@@ -120,9 +120,10 @@ def calc_cutoff_date(keep: str) -> datetime.date:
     return today - keep_range_timedelta
 
 
-# represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)
 @dataclass(frozen=True)
 class Recording:
+    """represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)"""
+
     filename: str
     base_filename: str
     group_name: str | None
@@ -134,8 +135,7 @@ class Recording:
 # dashcam recording filename regular expression
 #
 # references:
-#   https://www.blackvue.com.sg/uploads/8/4/4/2/8442586/manual_dr750s-2ch_en_web_ver.1.00_12.pdf
-#   https://blackvue.com/major-update-improved-blackvue-app-ui-dark-mode-live-event-upload-and-more/
+# - https://support.blackvue.com.au/hc/en-us/articles/13301776266895-Video-File-Naming
 # N: Normal
 # E: Event
 # P: Parking motion detection
@@ -145,16 +145,25 @@ class Recording:
 # A: Hard acceleration
 # T: Hard cornering
 # B: Hard braking
-# R: Geofence-enter
-# X: Geofence-exit
-# G: Geofence-pass
+# R: Geofence-enter (Fleet)
+# X: Geofence-exit (Fleet)
+# G: Geofence-pass (Fleet)
+# D: Drowsiness (DMS)
+# L: Distraction (DMS)
+# Y: Seatbelt not detected (DMS)
+# F: Driver undetected (DMS)
+#
+# F: Front camera
+# R: Rear camera
+# I: Interior camera
+# O: Optional camera
 #
 # L or S: upload flag, Substream or Live
 filename_re = re.compile(
     r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPMIOATBRXG])
-    (?P<direction>[FRI])
+    _(?P<type>[NEPMIOATBRXGDLYF])
+    (?P<direction>[FRIO])
     (?P<upload>[LS]?)
     \.(?P<extension>mp4)""",
     re.VERBOSE,
@@ -418,7 +427,7 @@ def sort_recordings(recordings: list[Recording], recording_priority: str) -> Non
 
     # preferred orderings (by type and direction)
     recording_types = "MEIBOATRXGNP"
-    recording_directions = "FRI"
+    recording_directions = "FRIO"
 
     # tomorrow, for reverse datetime sorting
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
@@ -601,7 +610,7 @@ def prepare_destination(destination: str, grouping: str) -> None:
             )
 
             outdated_recording_glob = (
-                f"{outdated_recording.base_filename}_[NEPMIOATBRXG]*.*"
+                f"{outdated_recording.base_filename}_[NEPMIOATBRXGDLYF]*.*"
             )
             outdated_filepath_glob = get_filepath(
                 destination, outdated_recording.group_name, outdated_recording_glob
@@ -650,7 +659,7 @@ def is_empty_directory(dirpath: str) -> bool:
 
 
 # temp filename regular expression
-temp_filename_glob = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXG]*.*"
+temp_filename_glob = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXGDLYF]*.*"
 
 
 def clean_destination(destination: str, grouping: str) -> None:
