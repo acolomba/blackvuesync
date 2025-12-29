@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import datetime
-from typing import Optional
 
 import pytest
 
@@ -115,7 +116,7 @@ import blackvuesync
     ],
 )
 def test_to_recording(
-    filename: str, expected_recording: Optional[blackvuesync.Recording]
+    filename: str, expected_recording: blackvuesync.Recording | None
 ) -> None:
     recording = blackvuesync.to_recording(filename, "none")
 
@@ -160,7 +161,7 @@ def test_to_recording(
     ],
 )
 def test_to_downloaded_recording(
-    filename: str, expected_recording: Optional[blackvuesync.DownloadedRecording]
+    filename: str, expected_recording: blackvuesync.DownloadedRecording | None
 ) -> None:
     recording = blackvuesync.to_downloaded_recording(filename, "none")
 
