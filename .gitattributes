@@ -4,3 +4,9 @@
 *.sh text eol=lf
 blackvuesync.py text eol=lf
 crontab text eol=lf
+
+# binary recording files
+*.3gf binary
+*.jpg binary
+*.mp4 binary
+*.thm binary

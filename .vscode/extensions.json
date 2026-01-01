@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "alexkrechik.cucumberautocomplete",
+        "github.vscode-github-actions",
+        "ms-azuretools.vscode-docker",
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "timonwong.shellcheck",
+        "yzhang.markdown-all-in-one"
+    ]
+}

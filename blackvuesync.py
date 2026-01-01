@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
+"""
+Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
+https://github.com/acolomba/blackvuesync
+"""
 
 from __future__ import annotations
 
-# Copyright 2018-2025 Alessandro Colomba (https://github.com/acolomba)
+# Copyright 2018-2026 Alessandro Colomba (https://github.com/acolomba)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
@@ -67,7 +71,7 @@ def set_logging_levels(verbosity: int, is_cron_mode: bool) -> None:
 
 def flush_logs() -> None:
     """flushes all logging handlers"""
-    for handler in logger.handlers:
+    for handler in logging.root.handlers:
         handler.flush()
 
 
@@ -79,6 +83,9 @@ socket_timeout = None
 
 # indicator that we're doing a dry run
 dry_run = None
+
+# session key reserved for test isolation
+session_key: str | None = None
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
@@ -218,6 +225,8 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
     try:
         url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
         request = urllib.request.Request(url)
+        if session_key:
+            request.add_header("X-Session-Key", session_key)
         response = urllib.request.urlopen(request)
 
         response_status_code = response.getcode()
@@ -329,8 +338,19 @@ def download_file(
 
         start = time.perf_counter()
         try:
-            _, headers = urllib.request.urlretrieve(url, temp_filepath)
-            size = headers["Content-Length"]
+            # request
+            request = urllib.request.Request(url)
+            if session_key:
+                request.add_header("X-Session-Key", session_key)
+
+            # downloads file
+            with urllib.request.urlopen(request) as response:
+                headers = response.info()
+                size = headers.get("Content-Length")
+
+                # writes response to temp file
+                with open(temp_filepath, "wb") as f:
+                    f.write(response.read())
         finally:
             end = time.perf_counter()
             elapsed_s = end - start
@@ -392,7 +412,7 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
     )
     any_downloaded |= downloaded
 
-    # downloads the gps data for normal, event and manual recordings
+    # downloads the gps data
     gps_filename = f"{recording.base_filename}_{recording.type}.gps"
     downloaded, _ = download_file(
         base_url, gps_filename, destination, recording.group_name
@@ -641,7 +661,7 @@ def sync(
     # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
 
-    # filter recordings according to recording_filter tuple
+    # filters recordings according to recording_filter tuple
     current_dashcam_recordings = get_filtered_recordings(
         current_dashcam_recordings, recording_filter
     )
@@ -805,6 +825,11 @@ def parse_args() -> argparse.Namespace:
         "--dry-run", action="store_true", help="shows what the program would do"
     )
     arg_parser.add_argument(
+        "--session-key",
+        metavar="SESSION_KEY",
+        help="session key; reserved for test isolation",
+    )
+    arg_parser.add_argument(
         "--version",
         action="version",
         default=__version__,
@@ -822,10 +847,12 @@ def run() -> int:
     global max_disk_used_percent
     global cutoff_date
     global socket_timeout
+    global session_key
 
     args = parse_args()
 
     dry_run = args.dry_run
+    session_key = args.session_key
     if dry_run:
         logger.info("DRY RUN No action will be taken.")
 

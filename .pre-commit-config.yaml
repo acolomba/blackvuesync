@@ -19,7 +19,8 @@ repos:
       # security
       - id: detect-private-key
       - id: check-added-large-files
-        args: ['--maxkb=8']
+        args: ['--maxkb=16']
+        exclude: '^features/mock_dashcam/files/|\.md$'
 
       # syntax checkers
       - id: check-json
@@ -35,8 +36,11 @@ repos:
       # file organization
       - id: file-contents-sorter
       - id: pretty-format-json
-        args: ['--indent=4']
+        args: ['--autofix', '--indent=4']
         exclude: '^\.claude/'
+      - id: pretty-format-json
+        args: ['--autofix', '--indent=2']
+        files: '^\.claude/settings(\.local)?\.json$'
       - id: requirements-txt-fixer
       - id: sort-simple-yaml
 
@@ -99,3 +103,8 @@ repos:
     rev: v0.20.0
     hooks:
       - id: yamlfmt
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.20.0
+    hooks:
+      - id: markdownlint-cli2

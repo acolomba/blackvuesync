@@ -28,7 +28,7 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 ### Hardware
 
-A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected via Wi-Fi to the local network with a _static_ IP address.
+A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected via Wi-Fi to the local network with a *static* IP address.
 
 The dashcam must be kept powered for some time after the vehicle is turned off. BlackVue offers [hardwiring kits](https://blackvue.com/product-tag/battery/) and [batteries](https://blackvue.com/product-tag/battery/).
 
@@ -215,4 +215,4 @@ Other parameters:
 
 This project is licensed under the MIT License - see the [COPYING](COPYING) file for details
 
-Copyright 2018-2025 [Alessandro Colomba](https://github.com/acolomba)
+Copyright 2018-2026 [Alessandro Colomba](https://github.com/acolomba)
