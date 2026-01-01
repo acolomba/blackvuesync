@@ -1,0 +1,11 @@
+{
+    "cucumber.features": [
+        "features/**/*.feature"
+    ],
+    "cucumberautocomplete.smartSnippets": true,
+    "cucumberautocomplete.steps": [
+        "features/steps/*.py"
+    ],
+    "cucumberautocomplete.strictGherkinCompletion": true,
+    "cucumberautocomplete.strictGherkinValidation": true
+}

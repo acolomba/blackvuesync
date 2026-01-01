@@ -1,37 +1,46 @@
 {
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:githubstatus.com)",
-      "WebFetch(domain:github.com)"
-    ]
-  },
   "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true
-  },
-  "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true,
-    "network": {
-      "allowUnixSockets": [
-        "/var/run/docker.sock"
-      ],
-      "allowLocalBinding": true
-    },
-    "excludedCommands": [
-      "docker"
-    ]
   },
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "*",
         "hooks": [
           {
-            "type": "command",
-            "command": "echo 'source venv/bin/activate' >> \"$CLAUDE_ENV_FILE\""
+            "command": "echo 'source venv/bin/activate' >> \"$CLAUDE_ENV_FILE\"",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "*"
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:files.pythonhosted.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:githubstatus.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:registry-1.docker.io)",
+      "WebFetch(domain:results-receiver.actions.githubusercontent.com)"
+    ]
+  },
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true,
+    "excludedCommands": [
+      "docker",
+      "git",
+      "pre-commit"
+    ],
+    "network": {
+      "allowLocalBinding": true,
+      "allowUnixSockets": [
+        "/var/run/docker.sock"
+      ]
+    }
   }
 }

@@ -1,0 +1,9 @@
+# markdownlint-cli2 configuration
+# see https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+config:
+  # no line length limit
+  MD013: false
+  # allows duplicate headings under different parents
+  MD024:
+    siblings_only: true

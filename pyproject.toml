@@ -12,11 +12,15 @@ dependencies = []
 [project.optional-dependencies]
 # development dependencies
 dev = [
+    "behave~=1.2",
     "black~=25.11",
     "Flask~=3.1",
     "mypy~=1.14",
     "pre-commit~=4.5",
+    "PyHamcrest~=2.1",
     "pytest~=9.0",
+    "python-lsp-server~=1.14",
+    "requests~=2.32",
     "ruff~=0.9",
 ]
 
@@ -76,5 +80,21 @@ module = "_pytest.*"
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = "blackvue_emu"
+module = "features.steps.*"
 disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = "features.mock_dashcam.*"
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = "requests"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "hamcrest"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "features.mock_dashcam.server"
+warn_return_any = false
