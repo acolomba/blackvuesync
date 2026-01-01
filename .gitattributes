@@ -9,4 +9,5 @@ crontab text eol=lf
 *.3gf binary
 *.jpg binary
 *.mp4 binary
+*.png binary
 *.thm binary
