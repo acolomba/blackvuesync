@@ -1,14 +1,12 @@
 name: Claude Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
 
 jobs:
   claude-review:
@@ -24,8 +22,25 @@ jobs:
       pull-requests: read
       issues: read
       id-token: write
+      statuses: write
 
     steps:
+      - name: Get PR details
+        id: pr
+        run: |
+          echo "sha=$(gh pr view ${{ inputs.pr_number }} --json headSha -q .headSha)" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Update status - In Progress
+        run: |
+          gh api repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.sha }} \
+            -f state=pending \
+            -f context="Claude Code Review" \
+            -f description="Review in progress..."
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -38,7 +53,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ inputs.pr_number }}
 
             Please review this pull request and provide feedback on:
             - Code quality and best practices
@@ -54,3 +69,23 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
           claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
+
+      - name: Update status - Success
+        if: success()
+        run: |
+          gh api repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.sha }} \
+            -f state=success \
+            -f context="Claude Code Review" \
+            -f description="Review completed successfully"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Update status - Failure
+        if: failure()
+        run: |
+          gh api repos/${{ github.repository }}/statuses/${{ steps.pr.outputs.sha }} \
+            -f state=failure \
+            -f context="Claude Code Review" \
+            -f description="Review failed or encountered an error"
+        env:
+          GH_TOKEN: ${{ github.token }}
