@@ -59,15 +59,11 @@ jobs:
         run: |
           behave --no-capture --format progress
 
-  publish:
-    # only publish on main branch after tests pass
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  build:
+    # builds package on all events (PRs and main) to catch build errors early
     needs: [unit-tests, integration-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: pypi
-      url: https://pypi.org/project/blackvuesync/
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -80,6 +76,28 @@ jobs:
       - name: Build package
         run: |
           uv build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    # only publish on main branch after tests and build pass
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/blackvuesync/
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
