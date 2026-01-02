@@ -28,13 +28,18 @@ def downloaded_recordings(
 ) -> None:
     """pre-populates destination with recordings matching the specified criteria."""
     # creates recording files directly in destination from mock files
-    create_recording_files(
+    filenames = create_recording_files(
         context.dest_dir,
         period,
         recording_types,
         recording_directions,
         recording_others,
     )
+
+    # tracks downloaded recordings in context for verification
+    if not hasattr(context, "downloaded_recordings"):
+        context.downloaded_recordings = set()
+    context.downloaded_recordings.update(filenames)
 
 
 @given(
@@ -46,6 +51,52 @@ def downloaded_recordings_no_other(
 ) -> None:
     """pre-populates destination with recordings matching the specified criteria."""
     downloaded_recordings(context, period, recording_types, recording_directions, "")
+
+
+@given(
+    'downloaded recordings between "{from_period}" and "{to_period}" ago of types "{recording_types}",'
+    ' directions "{recording_directions}", other "{recording_others}"'
+)
+def downloaded_recordings_between(
+    context: Context,
+    from_period: str,
+    to_period: str,
+    recording_types: str,
+    recording_directions: str,
+    recording_others: str,
+) -> None:
+    """pre-populates destination with recordings between specified time periods."""
+    filenames = create_recording_files(
+        context.dest_dir,
+        "",  # period_past not used in range mode
+        recording_types,
+        recording_directions,
+        recording_others,
+        from_period,
+        to_period,
+    )
+
+    # tracks downloaded recordings in context for verification
+    if not hasattr(context, "downloaded_recordings"):
+        context.downloaded_recordings = set()
+    context.downloaded_recordings.update(filenames)
+
+
+@given(
+    'downloaded recordings between "{from_period}" and "{to_period}" ago of types "{recording_types}",'
+    ' directions "{recording_directions}"'
+)
+def downloaded_recordings_between_no_other(
+    context: Context,
+    from_period: str,
+    to_period: str,
+    recording_types: str,
+    recording_directions: str,
+) -> None:
+    """pre-populates destination with recordings between specified time periods."""
+    downloaded_recordings_between(
+        context, from_period, to_period, recording_types, recording_directions, ""
+    )
 
 
 @then("all the recordings are downloaded")
@@ -86,3 +137,52 @@ def assert_destination_empty(context: Context) -> None:
         empty(),
         f"Expected no recordings, but found: {downloaded_recording_files}",
     )
+
+
+@then("downloaded recordings exist")
+def assert_downloaded_recordings_exist(context: Context) -> None:
+    """verifies that all previously downloaded recordings still exist."""
+    if not hasattr(context, "downloaded_recordings"):
+        raise RuntimeError(
+            "Cannot verify downloaded recordings: no recordings were set up. "
+            "Expected scenario to have 'Given downloaded recordings...' step."
+        )
+
+    # gets all recording files in destination
+    actual_files = {
+        f.name
+        for f in context.dest_dir.rglob("*")
+        if f.is_file() and recording_filename_re.match(f.name)
+    }
+
+    # verifies all downloaded recordings still exist
+    assert_that(actual_files, has_items(*context.downloaded_recordings))
+
+
+@then("both camera and downloaded recordings exist")
+def assert_both_recordings_exist(context: Context) -> None:
+    """verifies that recordings from both camera and downloaded sets exist."""
+    if not hasattr(context, "expected_recordings"):
+        raise RuntimeError(
+            "Cannot verify camera recordings: test scenario is missing 'Given recordings...' step. "
+            "Expected recordings were never configured."
+        )
+
+    if not hasattr(context, "downloaded_recordings"):
+        raise RuntimeError(
+            "Cannot verify downloaded recordings: no recordings were set up. "
+            "Expected scenario to have 'Given downloaded recordings...' step."
+        )
+
+    # gets all recording files in destination
+    actual_files = {
+        f.name
+        for f in context.dest_dir.rglob("*")
+        if f.is_file() and recording_filename_re.match(f.name)
+    }
+
+    # combines both sets
+    expected_all = set(context.expected_recordings) | context.downloaded_recordings
+
+    # verifies all expected recordings exist
+    assert_that(actual_files, has_items(*expected_all))

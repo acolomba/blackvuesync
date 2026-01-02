@@ -24,3 +24,17 @@ Feature: Basic sync operations
     When blackvuesync runs
     Then blackvuesync exits with code 0
     Then all the recordings are downloaded
+
+  Scenario: Sync preserves downloaded recordings when syncing new ones
+    Given downloaded recordings between "2w" and "1d" ago of types "N", directions "FR"
+    Given recordings for the past "1d" of types "NE", directions "FR"
+    When blackvuesync runs
+    Then blackvuesync exits with code 0
+    Then both camera and downloaded recordings exist
+
+  Scenario: Sync when camera has subset of downloaded recordings
+    Given downloaded recordings for the past "2d" of types "N", directions "FR"
+    Given recordings from downloaded recordings
+    When blackvuesync runs
+    Then blackvuesync exits with code 0
+    Then downloaded recordings exist

@@ -197,6 +197,24 @@ class MockDashcam:
             logger.debug("Response body: {'status': 'cleared'}")
             return {"status": "cleared"}, 200
 
+        @self.app.route("/mock/recordings/set", methods=["POST"])
+        def set_recordings() -> tuple[dict[str, Any], int]:
+            """sets recordings directly from a provided list"""
+            data = flask.request.get_json() or {}
+            logger.debug("POST /mock/recordings/set")
+            logger.debug("Request body: %s", data)
+            session_key = self._get_session_key()
+
+            recordings = data.get("recordings", [])
+
+            # stores in session-specific server state
+            self._set_recordings(session_key, recordings)
+
+            response = {"recordings": recordings, "count": len(recordings)}
+            logger.debug("Response body: %s", response)
+
+            return response, 201
+
     def start(self) -> None:
         """starts the flask server in a background thread"""
         if self.server_thread is not None:

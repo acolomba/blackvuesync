@@ -41,3 +41,25 @@ def dashcam_recordings_no_other(
 ) -> None:
     """configures mock dashcam with recordings matching the specified criteria."""
     dashcam_recordings(context, period, recording_types, recording_directions, "")
+
+
+@given("recordings from downloaded recordings")
+def dashcam_recordings_from_downloaded(context: Context) -> None:
+    """configures mock dashcam with recordings that match the downloaded recordings."""
+    if not hasattr(context, "downloaded_recordings"):
+        raise RuntimeError(
+            "Cannot set up camera recordings from downloaded: no recordings were downloaded. "
+            "Expected scenario to have 'Given downloaded recordings...' step first."
+        )
+
+    # sends downloaded recordings list to mock dashcam
+    url = f"{context.mock_dashcam_url}/mock/recordings/set"
+    headers = {"X-Session-Key": context.scenario_token}
+    data = {"recordings": list(context.downloaded_recordings)}
+
+    response = requests.post(url, json=data, headers=headers)
+    response.raise_for_status()
+
+    # stores in context for later verification
+    # note: expected_recordings is the camera's set, which is now the same as downloaded
+    context.expected_recordings = list(context.downloaded_recordings)
