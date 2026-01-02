@@ -1,6 +1,5 @@
 import logging
 import shutil
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -65,15 +64,15 @@ def after_all(context: Context) -> None:
 
 
 def _combine_coverage(test_run_dir: Path) -> None:
-    """combines all coverage files from scenario directories into a single file."""
+    """copies all coverage files from scenario directories to project root."""
     # finds all .coverage files in scenario directories
     coverage_files = list(test_run_dir.glob("*/coverage/.coverage*"))
 
     if not coverage_files:
-        logger.warning("no coverage files found to combine")
+        logger.warning("no coverage files found to copy")
         return
 
-    logger.info("found %d coverage file(s) to combine", len(coverage_files))
+    logger.info("found %d coverage file(s) to copy", len(coverage_files))
 
     # copies all coverage files to project root for combining
     project_root = Path(__file__).parent.parent
@@ -82,26 +81,7 @@ def _combine_coverage(test_run_dir: Path) -> None:
         shutil.copy2(coverage_file, dest)
         logger.info("copied %s to %s", coverage_file, dest)
 
-    # combines coverage files
-    try:
-        result = subprocess.run(
-            ["coverage", "combine", "--keep"],
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            logger.info("coverage files combined successfully")
-            logger.info("stdout: %s", result.stdout)
-        else:
-            logger.error("coverage combine failed with code %d", result.returncode)
-            logger.error("stdout: %s", result.stdout)
-            logger.error("stderr: %s", result.stderr)
-    except subprocess.TimeoutExpired:
-        logger.error("coverage combine timed out")
-    except Exception as e:
-        logger.error("error combining coverage: %s", e)
+    logger.info("coverage files ready for combining")
 
 
 def before_scenario(context: Context, scenario: Scenario) -> None:

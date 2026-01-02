@@ -840,7 +840,7 @@ def parse_args() -> argparse.Namespace:
     return arg_parser.parse_args()
 
 
-def run() -> int:
+def main() -> int:
     """run forrest run"""
     # dry-run is a global setting
     global dry_run
@@ -906,4 +906,4 @@ def run() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run())
+    sys.exit(main())

@@ -4,10 +4,28 @@ version = "2.0a"
 description = "Synchronize recordings from BlackVue dashcams to a local directory"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = "MIT"
 keywords = ["blackvue", "dashcam", "sync", "backup"]
+authors = [
+    {name = "Alessandro Colomba", email = "angelo@colomba.org"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
 
 dependencies = []
+
+[project.scripts]
+blackvuesync = "blackvuesync:main"
 
 [project.optional-dependencies]
 # development dependencies
@@ -104,6 +122,11 @@ warn_return_any = false
 # uses parallel mode to create separate coverage files that can be combined
 parallel = true
 source = ["."]
+# excludes test and mock code from coverage collection
+omit = [
+    "test/*",
+    "features/*",
+]
 
 [tool.coverage.report]
 # excludes test and mock code from coverage reports
