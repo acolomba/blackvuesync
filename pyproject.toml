@@ -19,6 +19,7 @@ dev = [
     "pre-commit~=4.3",
     "PyHamcrest~=2.1",
     "pytest~=8.3",
+    "pytest-cov~=7.0",
     "python-lsp-server~=1.14",
     "requests~=2.32",
     "ruff~=0.9",
