@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 
@@ -33,16 +34,33 @@ def execute_blackvuesync(
     project_root = Path(__file__).parent.parent.parent
     blackvuesync_script = project_root / "blackvuesync.py"
 
+    # checks if coverage collection is enabled
+    collect_coverage = context.config.userdata.getbool("collect_coverage", False)
+
     # builds command
-    cmd = [
-        "python3",
-        str(blackvuesync_script),
-        address,
-        "-d",
-        destination,
-        "--session-key",
-        session_key,
-    ]
+    if collect_coverage:
+        cmd = [
+            "coverage",
+            "run",
+            "--parallel-mode",
+            "--source=.",
+            str(blackvuesync_script),
+            address,
+            "-d",
+            destination,
+            "--session-key",
+            session_key,
+        ]
+    else:
+        cmd = [
+            "python3",
+            str(blackvuesync_script),
+            address,
+            "-d",
+            destination,
+            "--session-key",
+            session_key,
+        ]
 
     if grouping:
         cmd.extend(["-g", grouping])
@@ -77,6 +95,15 @@ def execute_blackvuesync(
 
     logger.info("Running: %s", cmd)
 
+    # prepares environment for coverage collection
+    env = os.environ.copy()
+    if collect_coverage:
+        # stores coverage data in scenario directory
+        coverage_dir = context.scenario_dir / "coverage"
+        coverage_dir.mkdir(parents=True, exist_ok=True)
+        env["COVERAGE_FILE"] = str(coverage_dir / ".coverage")
+        logger.info("Coverage data will be saved to: %s", env["COVERAGE_FILE"])
+
     # runs blackvuesync with timeout
     try:
         result = subprocess.run(
@@ -84,6 +111,7 @@ def execute_blackvuesync(
             capture_output=True,
             text=True,
             timeout=120,  # 2 minute timeout
+            env=env,
         )
     except subprocess.TimeoutExpired as e:
         logger.error("blackvuesync timed out after 120 seconds")

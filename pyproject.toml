@@ -99,3 +99,18 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "features.mock_dashcam.server"
 warn_return_any = false
+
+[tool.coverage.run]
+# uses parallel mode to create separate coverage files that can be combined
+parallel = true
+source = ["."]
+
+[tool.coverage.report]
+# excludes test and mock code from coverage reports
+omit = [
+    "test/*",
+    "features/*",
+]
+
+[tool.coverage.html]
+directory = "coverage_report"

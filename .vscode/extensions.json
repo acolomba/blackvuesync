@@ -5,6 +5,7 @@
         "ms-azuretools.vscode-docker",
         "ms-python.python",
         "redhat.vscode-yaml",
+        "sonarsource.sonarlint-vscode",
         "timonwong.shellcheck",
         "yzhang.markdown-all-in-one"
     ]

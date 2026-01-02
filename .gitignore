@@ -7,6 +7,12 @@
 /.pytest_cache
 /tmp
 
+# coverage
+.coverage
+.coverage.*
+coverage.xml
+coverage_report/
+
 # ide
 /.idea
 __pycache__
