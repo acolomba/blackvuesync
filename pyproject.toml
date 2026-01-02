@@ -124,6 +124,11 @@ warn_return_any = false
 # uses parallel mode to create separate coverage files that can be combined
 parallel = true
 source = ["."]
+# excludes test and mock code from coverage collection
+omit = [
+    "test/*",
+    "features/*",
+]
 
 [tool.coverage.report]
 # excludes test and mock code from coverage reports
