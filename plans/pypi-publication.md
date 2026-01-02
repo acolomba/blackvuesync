@@ -103,16 +103,17 @@ enable users to run blackvuesync directly with `uvx` after publishing to PyPI, w
 - `uvx blackvuesync` works without any setup
 - users can run the tool with just `uv` installed
 
-## Step 7: Update Documentation
+## Step 7: Update Documentation (Post-Publication)
 
 ### Tasks
 
-- update README.md with PyPI installation instructions
+- update README.md with PyPI installation instructions after first successful publication
 - add `uvx` as recommended installation method
 - document traditional `pip install` method as alternative
 - update Docker documentation to mention PyPI package option
 - add note about zero dependencies and single-file design benefits
 - document the automated publishing process for maintainers
+- consider creating a release (e.g., v2.0.0) with updated documentation
 
 ### Success Criteria
 
@@ -120,6 +121,11 @@ enable users to run blackvuesync directly with `uvx` after publishing to PyPI, w
 - all installation methods are documented
 - users understand the benefits of the uv approach
 - maintainers know that publishing is automatic on main branch
+
+### Notes
+
+- deferred until after first PyPI publication to verify package name and installation work correctly
+- may be done as part of a release workflow
 
 ## Dependencies
 
