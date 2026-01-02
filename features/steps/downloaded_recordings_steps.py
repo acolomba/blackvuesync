@@ -157,32 +157,3 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
 
     # verifies all downloaded recordings still exist
     assert_that(actual_files, has_items(*context.downloaded_recordings))
-
-
-@then("both camera and downloaded recordings exist")
-def assert_both_recordings_exist(context: Context) -> None:
-    """verifies that recordings from both camera and downloaded sets exist."""
-    if not hasattr(context, "expected_recordings"):
-        raise RuntimeError(
-            "Cannot verify camera recordings: test scenario is missing 'Given recordings...' step. "
-            "Expected recordings were never configured."
-        )
-
-    if not hasattr(context, "downloaded_recordings"):
-        raise RuntimeError(
-            "Cannot verify downloaded recordings: no recordings were set up. "
-            "Expected scenario to have 'Given downloaded recordings...' step."
-        )
-
-    # gets all recording files in destination
-    actual_files = {
-        f.name
-        for f in context.dest_dir.rglob("*")
-        if f.is_file() and recording_filename_re.match(f.name)
-    }
-
-    # combines both sets
-    expected_all = set(context.expected_recordings) | context.downloaded_recordings
-
-    # verifies all expected recordings exist
-    assert_that(actual_files, has_items(*expected_all))

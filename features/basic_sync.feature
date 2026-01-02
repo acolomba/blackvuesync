@@ -30,7 +30,8 @@ Feature: Basic sync operations
     Given recordings for the past "1d" of types "NE", directions "FR"
     When blackvuesync runs
     Then blackvuesync exits with code 0
-    Then both camera and downloaded recordings exist
+    Then downloaded recordings exist
+    Then all the recordings are downloaded
 
   Scenario: Sync when camera has subset of downloaded recordings
     Given downloaded recordings for the past "2d" of types "N", directions "FR"
