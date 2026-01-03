@@ -1,5 +1,13 @@
 # BlackVue Sync
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 
 BlackVue dashcams expose an HTTP server that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting downloads in a local directory to a date range.
