@@ -171,43 +171,21 @@ class MockDashcam:
             logger.debug("Request body: %s", data)
             session_key = self._get_session_key()
 
-            period_start = data.get("period_start")
-            period_end = data.get("period_end")
-            period_past = data.get("period_past")
+            period_start = data.get("period_start", "0d")
+            period_end = data.get("period_end", "0d")
             recording_types = data.get("recording_types", "")
             recording_directions = data.get("recording_directions", "")
             recording_others = data.get("recording_others", "")
 
-            # supports two modes: period range or period_past
-            if period_start is not None and period_end is not None:
-                # range mode
-                filenames = list(
-                    generate_recording_filenames(
-                        "",  # period_past not used
-                        recording_types,
-                        recording_directions,
-                        recording_others,
-                        from_period=period_start,
-                        to_period=period_end,
-                    )
+            filenames = list(
+                generate_recording_filenames(
+                    recording_types,
+                    recording_directions,
+                    recording_others,
+                    from_period=period_start,
+                    to_period=period_end,
                 )
-            elif period_past is not None:
-                # period_past mode (legacy support)
-                filenames = list(
-                    generate_recording_filenames(
-                        period_past,
-                        recording_types,
-                        recording_directions,
-                        recording_others,
-                    )
-                )
-            else:
-                # default to 0d if nothing specified
-                filenames = list(
-                    generate_recording_filenames(
-                        "0d", recording_types, recording_directions, recording_others
-                    )
-                )
+            )
 
             # stores in session-specific server state
             self._set_recordings(session_key, filenames)
@@ -226,11 +204,11 @@ class MockDashcam:
             logger.debug("Response body: {'status': 'cleared'}")
             return {"status": "cleared"}, 200
 
-        @self.app.route("/mock/recordings/set", methods=["POST"])
+        @self.app.route("/mock/recordings/filenames", methods=["POST"])
         def set_recordings() -> tuple[dict[str, Any], int]:
             """sets recordings directly from a provided list"""
             data = flask.request.get_json() or {}
-            logger.debug("POST /mock/recordings/set")
+            logger.debug("POST /mock/recordings/filenames")
             logger.debug("Request body: %s", data)
             session_key = self._get_session_key()
 

@@ -96,7 +96,7 @@ def dashcam_recordings_same_as_downloaded(
         list(context.downloaded_recordings), period_start, period_end
     )
 
-    url = f"{context.mock_dashcam_url}/mock/recordings/set"
+    url = f"{context.mock_dashcam_url}/mock/recordings/filenames"
     headers = {"X-Session-Key": context.scenario_token}
     data = {"recordings": filtered_recordings}
 

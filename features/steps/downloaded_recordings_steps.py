@@ -29,7 +29,6 @@ def downloaded_recordings(
     """pre-populates destination with recordings between specified time periods."""
     filenames = create_recording_files(
         context.dest_dir,
-        "",  # period_past not used in range mode
         recording_types,
         recording_directions,
         recording_others,
@@ -127,7 +126,7 @@ def assert_destination_empty(context: Context) -> None:
     )
 
 
-@then("downloaded recordings exist")
+@then("all the downloaded recordings exist")
 def assert_downloaded_recordings_exist(context: Context) -> None:
     """verifies that all previously downloaded recordings still exist."""
     if not hasattr(context, "downloaded_recordings"):

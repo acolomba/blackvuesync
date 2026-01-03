@@ -38,21 +38,17 @@ def parse_period(period: str) -> datetime.timedelta:
 
 
 def generate_recording_filenames(
-    period_past: str,
     recording_types_str: str,
     recording_directions_str: str,
     recording_others_str: str,
-    from_period: str | None = None,
-    to_period: str | None = None,
+    from_period: str,
+    to_period: str,
 ) -> Generator[str, None, None]:
     """procedurally generates deterministic recording filenames based on criteria
 
-    supports two modes:
-    1. period_past: generates recordings from (today - period_past) to today
-    2. from_period + to_period: generates recordings between (today - from_period) and (today - to_period)
+    generates recordings between (today - from_period) and (today - to_period)
 
     args:
-        period_past: period from past to today (e.g., "1d", "2w")
         recording_types_str: recording types (e.g., "NE")
         recording_directions_str: recording directions (e.g., "FR")
         recording_others_str: other flags (e.g., "LS")
@@ -61,24 +57,13 @@ def generate_recording_filenames(
     """
     today = datetime.date.today()
 
-    # determines date range based on mode
-    if from_period is not None and to_period is not None:
-        # range mode: from_period to to_period
-        start_date = today - parse_period(from_period)
-        end_date = today - parse_period(to_period)
+    # determines date range
+    start_date = today - parse_period(from_period)
+    end_date = today - parse_period(to_period)
 
-        if start_date > end_date:
-            raise ValueError(
-                f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
-            )
-    elif from_period is None and to_period is None:
-        # period_past mode: period_past to today
-        period_range_timedelta = parse_period(period_past)
-        start_date = today - period_range_timedelta
-        end_date = today
-    else:
+    if start_date > end_date:
         raise ValueError(
-            "must specify either period_past alone, or both from_period and to_period"
+            f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
         )
 
     # calculates number of days to generate
@@ -217,12 +202,11 @@ def get_mock_file_for_extension(mock_dir: Path, extension: str) -> Path:
 
 def create_recording_files(
     dest_dir: Path,
-    period_past: str,
     recording_types: str,
     recording_directions: str,
     recording_other: str,
-    from_period: str | None = None,
-    to_period: str | None = None,
+    from_period: str,
+    to_period: str,
 ) -> list[str]:
     """creates recording files in the destination directory.
 
@@ -234,7 +218,6 @@ def create_recording_files(
     # generate filenames using the same logic as mock dashcam
     filenames = list(
         generate_recording_filenames(
-            period_past,
             recording_types,
             recording_directions,
             recording_other,
