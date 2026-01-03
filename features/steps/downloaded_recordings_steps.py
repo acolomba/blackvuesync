@@ -16,51 +16,12 @@ recording_filename_re = re.compile(
 
 
 @given(
-    'downloaded recordings for the past "{period}" of types "{recording_types}",'
-    ' directions "{recording_directions}", other "{recording_others}"'
+    'downloaded recordings between "{period_start}" and "{period_end}" ago of types "{recording_types}", directions "{recording_directions}", other "{recording_others}"'
 )
 def downloaded_recordings(
     context: Context,
-    period: str,
-    recording_types: str,
-    recording_directions: str,
-    recording_others: str,
-) -> None:
-    """pre-populates destination with recordings matching the specified criteria."""
-    # creates recording files directly in destination from mock files
-    filenames = create_recording_files(
-        context.dest_dir,
-        period,
-        recording_types,
-        recording_directions,
-        recording_others,
-    )
-
-    # tracks downloaded recordings in context for verification
-    if not hasattr(context, "downloaded_recordings"):
-        context.downloaded_recordings = set()
-    context.downloaded_recordings.update(filenames)
-
-
-@given(
-    'downloaded recordings for the past "{period}" of types "{recording_types}",'
-    ' directions "{recording_directions}"'
-)
-def downloaded_recordings_no_other(
-    context: Context, period: str, recording_types: str, recording_directions: str
-) -> None:
-    """pre-populates destination with recordings matching the specified criteria."""
-    downloaded_recordings(context, period, recording_types, recording_directions, "")
-
-
-@given(
-    'downloaded recordings between "{from_period}" and "{to_period}" ago of types "{recording_types}",'
-    ' directions "{recording_directions}", other "{recording_others}"'
-)
-def downloaded_recordings_between(
-    context: Context,
-    from_period: str,
-    to_period: str,
+    period_start: str,
+    period_end: str,
     recording_types: str,
     recording_directions: str,
     recording_others: str,
@@ -72,30 +33,58 @@ def downloaded_recordings_between(
         recording_types,
         recording_directions,
         recording_others,
-        from_period,
-        to_period,
+        from_period=period_start,
+        to_period=period_end,
     )
 
     # tracks downloaded recordings in context for verification
     if not hasattr(context, "downloaded_recordings"):
         context.downloaded_recordings = set()
+
     context.downloaded_recordings.update(filenames)
 
 
 @given(
-    'downloaded recordings between "{from_period}" and "{to_period}" ago of types "{recording_types}",'
-    ' directions "{recording_directions}"'
+    'downloaded recordings between "{period_start}" and "{period_end}" ago of types "{recording_types}", directions "{recording_directions}"'
 )
-def downloaded_recordings_between_no_other(
+def downloaded_recordings_no_other(
     context: Context,
-    from_period: str,
-    to_period: str,
+    period_start: str,
+    period_end: str,
     recording_types: str,
     recording_directions: str,
 ) -> None:
     """pre-populates destination with recordings between specified time periods."""
-    downloaded_recordings_between(
-        context, from_period, to_period, recording_types, recording_directions, ""
+    downloaded_recordings(
+        context, period_start, period_end, recording_types, recording_directions, ""
+    )
+
+
+@given(
+    'downloaded recordings for the past "{period}" of types "{recording_types}", directions "{recording_directions}", other "{recording_others}"'
+)
+def downloaded_recordings_past(
+    context: Context,
+    period: str,
+    recording_types: str,
+    recording_directions: str,
+    recording_others: str,
+) -> None:
+    """pre-populates destination with recordings for the past period (shortcut for 'between' with 0d end)."""
+    downloaded_recordings(
+        context, period, "0d", recording_types, recording_directions, recording_others
+    )
+
+
+@given(
+    'downloaded recordings for the past "{period}" of types "{recording_types}", directions "{recording_directions}"'
+)
+def downloaded_recordings_past_no_other(
+    context: Context, period: str, recording_types: str, recording_directions: str
+) -> None:
+    """pre-populates destination with recordings for the past period."""
+    downloaded_recordings_past(
+        context, period, recording_types, recording_directions, ""
     )
 
 
@@ -105,8 +94,7 @@ def assert_all_recordings_downloaded(context: Context) -> None:
     # validates prerequisites
     if not hasattr(context, "expected_recordings"):
         raise RuntimeError(
-            "Cannot verify recordings: test scenario is missing 'Given recordings...' step. "
-            "Expected recordings were never configured."
+            "Cannot verify recordings: test scenario is missing 'Given recordings...' step. Expected recordings were never configured."
         )
 
     # gets all recording files in destination
@@ -144,8 +132,7 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
     """verifies that all previously downloaded recordings still exist."""
     if not hasattr(context, "downloaded_recordings"):
         raise RuntimeError(
-            "Cannot verify downloaded recordings: no recordings were set up. "
-            "Expected scenario to have 'Given downloaded recordings...' step."
+            "Cannot verify downloaded recordings: no recordings were set up. Expected scenario to have 'Given downloaded recordings...' step."
         )
 
     # gets all recording files in destination

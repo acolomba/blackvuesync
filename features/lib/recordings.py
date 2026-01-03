@@ -10,7 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 
-def _parse_period(period: str) -> datetime.timedelta:
+def parse_period(period: str) -> datetime.timedelta:
     """parses a period string (e.g., "1d", "2w") into a timedelta"""
     period_match = re.fullmatch(r"(?P<range>\d+)(?P<unit>[dw]?)", period)
     if not period_match:
@@ -29,8 +29,10 @@ def _parse_period(period: str) -> datetime.timedelta:
 
     if period_unit == "d":
         return datetime.timedelta(days=period_range)
+
     if period_unit == "w":
         return datetime.timedelta(weeks=period_range)
+
     # this indicates a coding error since the regex only allows [dw]
     raise ValueError(f"unexpected period unit: '{period_unit}' in '{period}'")
 
@@ -62,15 +64,16 @@ def generate_recording_filenames(
     # determines date range based on mode
     if from_period is not None and to_period is not None:
         # range mode: from_period to to_period
-        start_date = today - _parse_period(from_period)
-        end_date = today - _parse_period(to_period)
+        start_date = today - parse_period(from_period)
+        end_date = today - parse_period(to_period)
+
         if start_date > end_date:
             raise ValueError(
                 f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
             )
     elif from_period is None and to_period is None:
         # period_past mode: period_past to today
-        period_range_timedelta = _parse_period(period_past)
+        period_range_timedelta = parse_period(period_past)
         start_date = today - period_range_timedelta
         end_date = today
     else:
@@ -138,6 +141,65 @@ def generate_recording_filenames(
                 for recording_other in recording_others or [""]:
                     yield f"{base_filename}_{recording_type}{recording_other}.3gf"
                     yield f"{base_filename}_{recording_type}{recording_other}.gps"
+
+
+def extract_date_from_recording_filename(filename: str) -> datetime.date:
+    """extracts the date from a recording filename.
+
+    args:
+        filename: recording filename (e.g., "20190219_104220_NF.mp4")
+
+    returns:
+        date extracted from filename
+
+    raises:
+        ValueError: if filename doesn't match expected pattern
+    """
+    pattern = re.compile(r"^(\d{4})(\d{2})(\d{2})_\d{6}_")
+    if not (match := pattern.match(filename)):
+        raise ValueError(
+            f"invalid recording filename format: '{filename}'. "
+            f"expected format: YYYYMMDD_HHMMSS_<type><direction>.<ext>"
+        )
+
+    year = int(match.group(1))
+    month = int(match.group(2))
+    day = int(match.group(3))
+    return datetime.date(year, month, day)
+
+
+def filter_recording_filenames_by_period(
+    filenames: list[str],
+    from_period: str,
+    to_period: str,
+) -> list[str]:
+    """filters recording filenames to those within the specified time period.
+
+    args:
+        filenames: list of recording filenames to filter
+        from_period: start of time range, furthest in the past (e.g., "2w")
+        to_period: end of time range, closest to today (e.g., "1d")
+
+    returns:
+        filtered list of filenames within the period
+
+    raises:
+        ValueError: if any filename doesn't match expected pattern
+    """
+    today = datetime.date.today()
+    start_date = today - parse_period(from_period)
+    end_date = today - parse_period(to_period)
+
+    if start_date > end_date:
+        raise ValueError(
+            f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
+        )
+
+    return [
+        filename
+        for filename in filenames
+        if start_date <= extract_date_from_recording_filename(filename) <= end_date
+    ]
 
 
 def get_mock_file_for_extension(mock_dir: Path, extension: str) -> Path:

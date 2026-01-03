@@ -113,9 +113,6 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     # if scenario failed, preserve the directory for debugging
     if scenario.status == "failed":
         logger.info("scenario failed. artifacts preserved at: %s", context.scenario_dir)
-    # otherwise, optionally clean up (for now, we'll keep everything for debugging)
-    # else:
-    #     shutil.rmtree(context.scenario_dir)
 
 
 def before_step(context: Context, step: Step) -> None:

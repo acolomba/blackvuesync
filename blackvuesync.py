@@ -227,6 +227,7 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
         request = urllib.request.Request(url)
         if session_key:
             request.add_header("X-Session-Key", session_key)
+
         response = urllib.request.urlopen(request)
 
         response_status_code = response.getcode()
@@ -245,6 +246,7 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
             or e.reason.errno in dashcam_unavailable_errno_codes
         ):
             raise UserWarning(f"Dashcam unavailable : {e}") from e
+
         raise RuntimeError(
             f"Cannot obtain list of recordings from dashcam at address : {base_url}; error : {e}"
         ) from e
@@ -900,6 +902,7 @@ def main() -> int:
     finally:
         if lf_fd:
             unlock(lf_fd)
+
         flush_logs()
 
     return 0

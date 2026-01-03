@@ -93,8 +93,10 @@ class MockDashcam:
     def _get_session_key(self) -> str:
         """extracts session key from request header, raises 400 if missing"""
         session_key = flask.request.headers.get("X-Session-Key")
+
         if not session_key:
             flask.abort(400, description="X-Session-Key header is required")
+
         return session_key
 
     def _get_recordings(self, session_key: str) -> list[str]:
@@ -149,6 +151,7 @@ class MockDashcam:
                 # uses the mock file with the same extension
                 files_dir = Path(__file__).parent / "files"
                 filepath = files_dir / f"mock.{recording.extension}"
+
                 if filepath.exists():
                     logger.debug(
                         "Response: %s (%s bytes)",
@@ -168,17 +171,43 @@ class MockDashcam:
             logger.debug("Request body: %s", data)
             session_key = self._get_session_key()
 
-            period_past = data.get("period_past", "0d")
+            period_start = data.get("period_start")
+            period_end = data.get("period_end")
+            period_past = data.get("period_past")
             recording_types = data.get("recording_types", "")
             recording_directions = data.get("recording_directions", "")
             recording_others = data.get("recording_others", "")
 
-            # generates recordings
-            filenames = list(
-                generate_recording_filenames(
-                    period_past, recording_types, recording_directions, recording_others
+            # supports two modes: period range or period_past
+            if period_start is not None and period_end is not None:
+                # range mode
+                filenames = list(
+                    generate_recording_filenames(
+                        "",  # period_past not used
+                        recording_types,
+                        recording_directions,
+                        recording_others,
+                        from_period=period_start,
+                        to_period=period_end,
+                    )
                 )
-            )
+            elif period_past is not None:
+                # period_past mode (legacy support)
+                filenames = list(
+                    generate_recording_filenames(
+                        period_past,
+                        recording_types,
+                        recording_directions,
+                        recording_others,
+                    )
+                )
+            else:
+                # default to 0d if nothing specified
+                filenames = list(
+                    generate_recording_filenames(
+                        "0d", recording_types, recording_directions, recording_others
+                    )
+                )
 
             # stores in session-specific server state
             self._set_recordings(session_key, filenames)

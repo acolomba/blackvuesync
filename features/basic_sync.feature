@@ -35,7 +35,7 @@ Feature: Basic sync operations
 
   Scenario: Sync when camera has subset of downloaded recordings
     Given downloaded recordings for the past "2d" of types "N", directions "FR"
-    Given recordings from downloaded recordings
+    Given recordings same as the downloaded recordings between "2d" and "0d" ago
     When blackvuesync runs
     Then blackvuesync exits with code 0
     Then downloaded recordings exist
