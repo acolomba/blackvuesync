@@ -1,5 +1,15 @@
 # BlackVue Sync
 
+[![CI](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml)
+[![Build Docker image](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 
 BlackVue dashcams expose an HTTP server that can be used to download all recordings. This project downloads only recordings that are not already downloaded, optionally limiting downloads in a local directory to a date range.
@@ -8,15 +18,15 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 ## Features
 
-* *Portable runtimes:*
+* **Portable runtimes:**
   * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
   * A [docker image](#docker) that runs periodically via an internal cron job. Supports amd64 (Intel), arm64 (Apple Silicon, Raspberry Pi 4+) and armv7 (Raspberry Pi 2/3).
-* *Smart*: Only downloads recordings that haven't already been downloaded.
-* *Resilient*: If a download interrupts for whatever reason, the script resumes where it left off the next time it runs. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
-* *Hands-off*: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
-* *Cron-friendly*: Only one process is allowed to run at any given time for a specific download destination.
-* *Safe*: Stops executing if the destination disk is almost full.
-* *Friendly error reporting*: Communicates a range of known error conditions with sensible verbosity.
+* **Smart**: Only downloads recordings that haven't already been downloaded.
+* **Resilient**: If a download interrupts for whatever reason, the script resumes where it left off the next time it runs. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
+* **Hands-off**: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
+* **Cron-friendly**: Only one process is allowed to run at any given time for a specific download destination.
+* **Safe**: Stops executing if the destination disk is almost full.
+* **Friendly error reporting**: Communicates a range of known error conditions with sensible verbosity.
 
 ## Prerequisites
 
@@ -32,7 +42,7 @@ A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected 
 
 The dashcam must be kept powered for some time after the vehicle is turned off. BlackVue offers [hardwiring kits](https://blackvue.com/product-tag/battery/) and [batteries](https://blackvue.com/product-tag/battery/).
 
-The camera should stay active for a period long enough sufficient for recordings to be downloaded. Consult the dashcam manual for the bit rate for your chosen image quality, and compare it with the download speed reported by BlackVue Sync.
+The camera should stay active for a period sufficiently long for recordings to be downloaded. Consult the dashcam manual for the bit rate for your chosen image quality, and compare it with the download speed reported by BlackVue Sync.
 
 Example with a DR750S-2CH recording with two cameras at the highest quality setting and a good but conservative download speed:
 
@@ -68,30 +78,40 @@ Another way is by browsing to: `http://dashcam.example.net/blackvue_vod.cgi`.
 
 ## Usage
 
+### Installation
+
+BlackVue Sync is a single script, and can be obtained in a number of ways:
+
+* **[uv](https://docs.astral.sh/uv/)**: Run with `uvx blackvuesync <args>`, or install with `uv tool install blackvuesync` and run with `blackvuesync <args>`.
+* **[Pip](https://pypi.org/project/pip/):** Install with `pip install blackvuesync` and run with `blackvuesync <args>`.
+* **Direct:** [Download from GitHub](https://raw.githubusercontent.com/acolomba/blackvuesync/refs/heads/main/blackvuesync.py), save to the desired location, and either run it with `python3 blackvuesync.py <args>`, or mark it executable and run it with `blackvuesync.py <args>`.
+
+The interactive instructions assume a uv or Pip installation.
+
 ### Manual Usage
 
 The dashcam address is the only required parameter. The `--dry-run` option makes it so that the script communicates what it would do without actually doing anything. Example:
 
 ```sh
-blackvuesync.py dashcam.example.net --dry-run
+blackvuesync dashcam.example.net --dry-run
 ```
 
 It's also possible to specify a destination directory other than the current directory with `--destination`:
 
 ```sh
-blackvuesync.py dashcam.example.net --destination /data/dashcam --dry-run
+blackvuesync dashcam.example.net --destination /data/dashcam --dry-run
 ```
 
-A retention period can be indicated with the `-keep` option. Recordings prior to the retention period will be removed from the destination directory. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed.
+A retention period can be indicated with the `--keep` option. Recordings prior to the retention period will be removed from the destination directory. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed.
 
 ```sh
-blackvuesync.py dashcam.example.net --destination /data/dashcam --keep 2w --dry-run
+blackvuesync dashcam.example.net --destination /data/dashcam --keep 2w --dry-run
 ```
 
 A typical invocation would be:
 
 ```sh
-blackvuesync.py dashcam.example.net --destination /data/dashcam --keep 2w
+blackvuesync dashcam.example.net --destination /data/dashcam --keep 2w
 ```
 
 Other options:

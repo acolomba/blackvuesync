@@ -115,13 +115,14 @@ def execute_blackvuesync(
         )
     except subprocess.TimeoutExpired as e:
         logger.error("blackvuesync timed out after 120 seconds")
+
         if e.stdout:
             logger.error("stdout: %r", e.stdout)
+
         if e.stderr:
             logger.error("stderr: %r", e.stderr)
         raise RuntimeError(
-            "blackvuesync did not complete within 120 seconds. "
-            "The process may be hanging or encountering an infinite loop."
+            "blackvuesync did not complete within 120 seconds. The process may be hanging or encountering an infinite loop."
         ) from e
 
     # stores results in context

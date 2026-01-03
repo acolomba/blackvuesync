@@ -235,8 +235,7 @@ def test_to_downloaded_recording(
 
 
 @pytest.mark.parametrize(
-    "recording_datetime, expected_daily_group_name, expected_weekly_group_name, "
-    "expected_monthly_group_name, expected_yearly_group_name",
+    "recording_datetime, expected_daily_group_name, expected_weekly_group_name, expected_monthly_group_name, expected_yearly_group_name",
     [
         (
             datetime.datetime(2019, 2, 19, 13, 15, 13),

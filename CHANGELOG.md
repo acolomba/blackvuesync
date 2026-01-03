@@ -8,6 +8,8 @@
 * Build Docker images for amd64, arm64, and armv7 architectures. (#12)
 * Add support for 'O' (Optional) camera direction on DR770X Box Pro and similar models. (inspired by grysage/blackvuesync)
 * Add support for DMS (Driver Monitoring System) recording types: D (Drowsiness), L (Distraction), Y (Seatbelt), F (Undetected).
+* Publish to PyPi. Can be run with `uvx blackvuesync` without explicitly installing.
+* Introduce integration tests for some features.
 
 ## 1.10 (2025-12-28)
 

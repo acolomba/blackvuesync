@@ -11,8 +11,7 @@ def assert_blackvuesync_exit_code(context: Context, code: int) -> None:
     # validates prerequisites
     if not hasattr(context, "exit_code"):
         raise RuntimeError(
-            "Cannot verify exit code: blackvuesync has not been run yet. "
-            "This test scenario is missing the 'When blackvuesync runs' step."
+            "Cannot verify exit code: blackvuesync has not been run yet. This test scenario is missing the 'When blackvuesync runs' step."
         )
 
     assert_that(
