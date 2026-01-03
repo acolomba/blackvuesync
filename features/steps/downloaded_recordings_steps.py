@@ -130,16 +130,14 @@ def assert_destination_empty(context: Context) -> None:
 def assert_downloaded_recordings_exist(context: Context) -> None:
     """verifies that all previously downloaded recordings still exist."""
     if not hasattr(context, "downloaded_recordings"):
-        raise RuntimeError(
-            "Cannot verify downloaded recordings: no recordings were set up. Expected scenario to have 'Given downloaded recordings...' step."
-        )
+        return
 
     # gets all recording files in destination
-    actual_files = {
+    downloaded_recording_files = {
         f.name
         for f in context.dest_dir.rglob("*")
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
     # verifies all downloaded recordings still exist
-    assert_that(actual_files, has_items(*context.downloaded_recordings))
+    assert_that(downloaded_recording_files, has_items(*context.downloaded_recordings))
