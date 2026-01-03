@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 2.0a
+## 2.0
 
 * Modernize for Python 3.9, now that it's available in Debian Bullseye oldoldstable, the earliest LTS-supported Debian release. Now uses type hints, f-strings; walrus operator.
 * Logging uses lazy evaluation.
