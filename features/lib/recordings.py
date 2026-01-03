@@ -163,10 +163,10 @@ def filter_recording_filenames_by_period(
     args:
         filenames: list of recording filenames to filter
         from_period: start of time range, furthest in the past (e.g., "2w")
-        to_period: end of time range, closest to today (e.g., "1d")
+        to_period: end of time range, closest to today (e.g., "1d"), exclusive
 
     returns:
-        filtered list of filenames within the period
+        filtered list of filenames within the period [start_date, end_date)
 
     raises:
         ValueError: if any filename doesn't match expected pattern
@@ -183,7 +183,7 @@ def filter_recording_filenames_by_period(
     return [
         filename
         for filename in filenames
-        if start_date <= extract_date_from_recording_filename(filename) <= end_date
+        if start_date <= extract_date_from_recording_filename(filename) < end_date
     ]
 
 
