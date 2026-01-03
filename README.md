@@ -1,7 +1,7 @@
 # BlackVue Sync
 
-[![CI](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml/badge.svg)](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml)
-[![Build Docker image](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml/badge.svg)](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml)
+[![CI](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml)
+[![Build Docker image](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
 [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
