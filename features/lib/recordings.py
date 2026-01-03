@@ -66,11 +66,8 @@ def generate_recording_filenames(
             f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
         )
 
-    # calculates number of days to generate
-    day_range = (end_date - start_date).days
-
-    if day_range == 0:
-        return
+    # calculates number of days to generate (inclusive range)
+    day_range = (end_date - start_date).days + 1
 
     # parses recording types
     recording_types = list(recording_types_str) if recording_types_str else []
@@ -163,10 +160,10 @@ def filter_recording_filenames_by_period(
     args:
         filenames: list of recording filenames to filter
         from_period: start of time range, furthest in the past (e.g., "2w")
-        to_period: end of time range, closest to today (e.g., "1d"), exclusive
+        to_period: end of time range, closest to today (e.g., "1d"), inclusive
 
     returns:
-        filtered list of filenames within the period [start_date, end_date)
+        filtered list of filenames within the period [start_date, end_date]
 
     raises:
         ValueError: if any filename doesn't match expected pattern

@@ -42,7 +42,7 @@ A cloud-enabled [BlackVue](https://www.blackvue.com/) dashcam must be connected 
 
 The dashcam must be kept powered for some time after the vehicle is turned off. BlackVue offers [hardwiring kits](https://blackvue.com/product-tag/battery/) and [batteries](https://blackvue.com/product-tag/battery/).
 
-The camera should stay active for a period long enough sufficient for recordings to be downloaded. Consult the dashcam manual for the bit rate for your chosen image quality, and compare it with the download speed reported by BlackVue Sync.
+The camera should stay active for a period sufficiently long for recordings to be downloaded. Consult the dashcam manual for the bit rate for your chosen image quality, and compare it with the download speed reported by BlackVue Sync.
 
 Example with a DR750S-2CH recording with two cameras at the highest quality setting and a good but conservative download speed:
 
