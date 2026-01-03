@@ -1,4 +1,9 @@
 {
+    "[python]": {
+        "editor.rulers": [
+            88
+        ]
+    },
     "cucumber.features": [
         "features/**/*.feature"
     ],
@@ -7,5 +12,9 @@
         "features/steps/*.py"
     ],
     "cucumberautocomplete.strictGherkinCompletion": true,
-    "cucumberautocomplete.strictGherkinValidation": true
+    "cucumberautocomplete.strictGherkinValidation": true,
+    "sonarlint.connectedMode.project": {
+        "connectionId": "acolomba",
+        "projectKey": "acolomba_blackvuesync"
+    }
 }
