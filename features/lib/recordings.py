@@ -183,7 +183,7 @@ def filter_recording_filenames_by_period(
     return [
         filename
         for filename in filenames
-        if start_date <= extract_date_from_recording_filename(filename) < end_date
+        if start_date <= extract_date_from_recording_filename(filename) <= end_date
     ]
 
 
