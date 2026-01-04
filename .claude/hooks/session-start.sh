@@ -23,7 +23,5 @@ pre-commit install
 pre-commit install --hook-type commit-msg
 
 # activate the venv for the session
-if [[ -n ${CLAUDE_ENV_FILE:-} ]]; then
-  # shellcheck disable=SC2016
-  echo 'source "${CLAUDE_PROJECT_DIR:-$(pwd)}/venv/bin/activate"' >> "$CLAUDE_ENV_FILE"
-fi
+# shellcheck disable=SC2016
+echo 'source "$CLAUDE_PROJECT_DIR/venv/bin/activate"' >> "$CLAUDE_ENV_FILE"
