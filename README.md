@@ -85,6 +85,7 @@ BlackVue Sync is a single script, and can be obtained in a number of ways:
 * **[uv](https://docs.astral.sh/uv/)**: Run with `uvx blackvuesync <args>`, or install with `uv tool install blackvuesync` and run with `blackvuesync <args>`.
 * **[Pip](https://pypi.org/project/pip/):** Install with `pip install blackvuesync` and run with `blackvuesync <args>`.
 * **Direct:** [Download from GitHub](https://raw.githubusercontent.com/acolomba/blackvuesync/refs/heads/main/blackvuesync.py), save to the desired location, and either run it with `python3 blackvuesync.py <args>`, or mark it executable and run it with `blackvuesync.py <args>`.
+* **Docker Hub:** The [Docker image](https://hub.docker.com/r/acolomba/blackvuesync) can be pulled with `docker pull acolomba/blackvuesync`.
 
 The interactive instructions assume a uv or Pip installation.
 
