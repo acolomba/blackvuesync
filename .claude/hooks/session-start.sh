@@ -2,14 +2,12 @@
 set -euo pipefail
 
 # install system packages for pre-commit hooks (remote only)
-if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
-  if ! command -v shellcheck &> /dev/null; then
-    apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null 2>&1
-  fi
+if [[ ${CLAUDE_CODE_REMOTE:-} == true ]] && ! command -v shellcheck &> /dev/null; then
+  apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null 2>&1
 fi
 
 # create venv if it doesn't exist
-if [ ! -d "venv" ]; then
+if [[ ! -d venv ]]; then
   python3 -m venv venv
 fi
 
