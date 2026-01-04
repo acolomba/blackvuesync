@@ -18,5 +18,5 @@ venv/bin/pip install -q -e ".[dev]"
 venv/bin/pre-commit install
 venv/bin/pre-commit install --hook-type commit-msg
 
-# add venv/bin to PATH for the session
-echo 'export PATH="$CLAUDE_PROJECT_DIR/venv/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
+# activate the venv for the session
+echo 'source "$CLAUDE_PROJECT_DIR/venv/bin/activate"' >> "$CLAUDE_ENV_FILE"
