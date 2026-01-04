@@ -1,11 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# only run in Claude Code on the web
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
-  exit 0
-fi
-
 # create venv if it doesn't exist
 if [ ! -d "venv" ]; then
   python3 -m venv venv
