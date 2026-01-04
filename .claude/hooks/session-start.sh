@@ -1,9 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-# install system packages needed for pre-commit hooks
-if ! command -v shellcheck &> /dev/null; then
-  apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null 2>&1
+# install system packages for pre-commit hooks (remote only)
+if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+  if ! command -v shellcheck &> /dev/null; then
+    apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null 2>&1
+  fi
 fi
 
 # create venv if it doesn't exist
