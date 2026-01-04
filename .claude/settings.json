@@ -9,11 +9,10 @@
       {
         "hooks": [
           {
-            "command": "echo 'source venv/bin/activate' >> \"$CLAUDE_ENV_FILE\"",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh",
             "type": "command"
           }
-        ],
-        "matcher": "*"
+        ]
       }
     ]
   },
