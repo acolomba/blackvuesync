@@ -11,12 +11,15 @@ if [ ! -d "venv" ]; then
   python3 -m venv venv
 fi
 
+# activate the venv for the script and session
+source venv/bin/activate
+
 # install package in editable mode with dev dependencies
-venv/bin/pip install -q -e ".[dev]"
+pip install -q -e ".[dev]"
 
 # install pre-commit hooks (without --install-hooks to avoid network issues)
-venv/bin/pre-commit install
-venv/bin/pre-commit install --hook-type commit-msg
+pre-commit install
+pre-commit install --hook-type commit-msg
 
 # activate the venv for the session
 echo 'source "$CLAUDE_PROJECT_DIR/venv/bin/activate"' >> "$CLAUDE_ENV_FILE"
