@@ -9,16 +9,17 @@ fi
 # create venv if it doesn't exist
 if [[ ! -d venv ]]; then
   python3 -m venv venv
+  # shellcheck source=/dev/null
+  source venv/bin/activate
+
+  # install package in editable mode with dev dependencies
+  pip install -q -e ".[dev]"
+else
+  # shellcheck source=/dev/null
+  source venv/bin/activate
 fi
 
-# activate the venv for the script and session
-# shellcheck source=/dev/null
-source venv/bin/activate
-
-# install package in editable mode with dev dependencies
-pip install -q -e ".[dev]"
-
-# install pre-commit hooks (without --install-hooks to avoid network issues)
+# install pre-commit hooks (fast if already installed)
 pre-commit install
 pre-commit install --hook-type commit-msg
 
