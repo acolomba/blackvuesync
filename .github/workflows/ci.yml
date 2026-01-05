@@ -87,8 +87,8 @@ jobs:
           retention-days: 1
 
   publish:
-    # only publish on main branch after tests and build pass
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # only publish on version tags after tests and build pass
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
