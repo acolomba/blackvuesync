@@ -7,6 +7,7 @@ from pathlib import Path
 from behave.model import Scenario, Step
 from behave.runner import Context
 
+from features.lib.docker import ensure_docker_image_built
 from features.mock_dashcam import MockDashcam
 
 # logger for environment hooks
@@ -42,12 +43,23 @@ def before_all(context: Context) -> None:
 
     logger.info("test run directory: %s", context.test_run_dir)
 
+    # builds docker image if testing with docker implementation
+    implementation = context.config.userdata.get("implementation", "direct")
+    if implementation == "docker":
+        ensure_docker_image_built()
+        logger.info("docker implementation enabled")
+
 
 def after_all(context: Context) -> None:
     """after all"""
-    # combines coverage data if collection was enabled
+    # combines coverage data if collection was enabled (direct mode only)
     collect_coverage = context.config.userdata.getbool("collect_coverage", False)
-    if collect_coverage and hasattr(context, "test_run_dir"):
+    implementation = context.config.userdata.get("implementation", "direct")
+    if (
+        collect_coverage
+        and implementation == "direct"
+        and hasattr(context, "test_run_dir")
+    ):
         _combine_coverage(context.test_run_dir)
 
     # stops mock dashcam server

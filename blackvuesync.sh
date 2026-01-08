@@ -20,7 +20,7 @@ timeout=${TIMEOUT:+--timeout $TIMEOUT}
 # as many verbose options as the value in VERBOSE
 verbose=${VERBOSE:+$(if [[ $VERBOSE -gt 0 ]]; then for _ in $(seq 1 $VERBOSE); do echo --verbose; done; fi)}
 
-# dry-run option if DRY_RUN set to anything
+# quiet option if QUIET set to anything
 quiet="${QUIET:+--quiet}"
 
 # cron option if CRON set to anything
@@ -29,5 +29,8 @@ cron="${CRON:+--cron}"
 # dry-run option if DRY_RUN set to anything
 dry_run="${DRY_RUN:+--dry-run}"
 
+# session key option if SESSION_KEY set
+session_key="${SESSION_KEY:+--session-key $SESSION_KEY}"
+
 /blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
-    ${quiet} ${cron} ${dry_run}
+    ${quiet} ${cron} ${dry_run} ${session_key}

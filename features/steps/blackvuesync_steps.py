@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import uuid
 from pathlib import Path
 
 from behave import when
 from behave.runner import Context
+
+from features.lib.docker import IMAGE_TAG
 
 logger = logging.getLogger("features.steps")
 
@@ -30,6 +33,61 @@ def execute_blackvuesync(
     dry_run: bool = False,
 ) -> None:
     """executes blackvuesync with specified parameters and stores results in context."""
+    implementation = context.config.userdata.get("implementation", "direct")
+
+    if implementation == "docker":
+        _execute_docker(
+            context,
+            address,
+            destination,
+            session_key,
+            grouping,
+            keep,
+            priority,
+            filter_list,
+            max_used_disk,
+            timeout,
+            verbose,
+            quiet,
+            cron,
+            dry_run,
+        )
+    else:
+        _execute_direct(
+            context,
+            address,
+            destination,
+            session_key,
+            grouping,
+            keep,
+            priority,
+            filter_list,
+            max_used_disk,
+            timeout,
+            verbose,
+            quiet,
+            cron,
+            dry_run,
+        )
+
+
+def _execute_direct(
+    context: Context,
+    address: str,
+    destination: str,
+    session_key: str,
+    grouping: str | None = None,
+    keep: str | None = None,
+    priority: str | None = None,
+    filter_list: list[str] | None = None,
+    max_used_disk: int | None = None,
+    timeout: float | None = None,
+    verbose: int | None = None,
+    quiet: bool = False,
+    cron: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """executes blackvuesync directly via python."""
     # locates blackvuesync.py
     project_root = Path(__file__).parent.parent.parent
     blackvuesync_script = project_root / "blackvuesync.py"
@@ -93,7 +151,7 @@ def execute_blackvuesync(
     if dry_run:
         cmd.append("--dry-run")
 
-    logger.info("Running: %s", cmd)
+    logger.info("Running (direct): %s", cmd)
 
     # prepares environment for coverage collection
     env = os.environ.copy()
@@ -131,6 +189,145 @@ def execute_blackvuesync(
     context.stderr = result.stderr
 
     logger.info("blackvuesync exited with code %s", result.returncode)
+
+
+def _execute_docker(
+    context: Context,
+    address: str,
+    destination: str,
+    session_key: str,
+    grouping: str | None = None,
+    keep: str | None = None,
+    priority: str | None = None,
+    filter_list: list[str] | None = None,
+    max_used_disk: int | None = None,
+    timeout: float | None = None,
+    verbose: int | None = None,
+    quiet: bool = False,
+    cron: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """executes blackvuesync via docker container."""
+    # translates localhost address to host.docker.internal for container
+    docker_address = address.replace("127.0.0.1", "host.docker.internal")
+
+    # gets current user's UID/GID
+    puid = os.getuid()
+    pgid = os.getgid()
+
+    # generates unique container name for this test run
+    container_name = f"blackvuesync-test-{uuid.uuid4().hex[:8]}"
+
+    # builds docker command
+    cmd = [
+        "docker",
+        "run",
+        "--name",
+        container_name,
+        "--add-host=host.docker.internal:host-gateway",
+        "-v",
+        f"{destination}:/recordings",
+        "-e",
+        "PYTHONUNBUFFERED=1",
+        "-e",
+        f"ADDRESS={docker_address}",
+        "-e",
+        f"SESSION_KEY={session_key}",
+        "-e",
+        f"PUID={puid}",
+        "-e",
+        f"PGID={pgid}",
+    ]
+
+    # sets RUN_ONCE=1 only if not in cron mode
+    if not cron:
+        cmd.extend(["-e", "RUN_ONCE=1"])
+
+    if grouping:
+        cmd.extend(["-e", f"GROUPING={grouping}"])
+
+    if keep:
+        cmd.extend(["-e", f"KEEP={keep}"])
+
+    if priority:
+        cmd.extend(["-e", f"PRIORITY={priority}"])
+
+    if filter_list:
+        raise NotImplementedError(
+            "filter option not supported in docker implementation"
+        )
+
+    if max_used_disk is not None:
+        cmd.extend(["-e", f"MAX_USED_DISK={max_used_disk}"])
+
+    if timeout is not None:
+        cmd.extend(["-e", f"TIMEOUT={timeout}"])
+
+    if verbose is not None:
+        cmd.extend(["-e", f"VERBOSE={verbose}"])
+
+    if quiet:
+        cmd.extend(["-e", "QUIET=1"])
+
+    if cron:
+        cmd.extend(["-e", "CRON=1"])
+
+    if dry_run:
+        cmd.extend(["-e", "DRY_RUN=1"])
+
+    # adds image tag
+    cmd.append(IMAGE_TAG)
+
+    logger.info("Running (docker): %s", " ".join(cmd))
+
+    # runs docker container with timeout
+    exit_code = 0
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        exit_code = result.returncode
+    except subprocess.TimeoutExpired as e:
+        logger.error("docker container timed out after 120 seconds")
+        # cleans up timed-out container
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+        raise RuntimeError(
+            "docker container did not complete within 120 seconds"
+        ) from e
+
+    # retrieves container output using docker logs
+    try:
+        logs_result = subprocess.run(
+            ["docker", "logs", container_name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        stdout = logs_result.stdout
+        stderr = logs_result.stderr
+    except subprocess.TimeoutExpired:
+        logger.error("docker logs timed out after 30 seconds")
+        stdout = ""
+        stderr = ""
+    finally:
+        # cleans up container
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+
+    # logs on failure
+    if exit_code != 0:
+        logger.error("docker container failed")
+        logger.error("stdout: %r (len=%d)", stdout, len(stdout))
+        logger.error("stderr: %r (len=%d)", stderr, len(stderr))
+
+    # stores results in context
+    context.exit_code = exit_code
+    context.stdout = stdout
+    context.stderr = stderr
+
+    logger.info("docker container exited with code %s", exit_code)
 
 
 @when("blackvuesync runs")
