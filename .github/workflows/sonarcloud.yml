@@ -18,6 +18,8 @@ concurrency:
 
 jobs:
   sonarcloud:
+    # skips for Dependabot PRs as secrets are not available
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
