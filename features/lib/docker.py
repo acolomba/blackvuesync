@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from testcontainers.core.image import DockerImage
@@ -14,7 +15,16 @@ logger = logging.getLogger("features.docker")
 DEFAULT_IMAGE_TAG = "acolomba/blackvuesync:test"
 
 
-def get_docker_image(image_name: str | None = None) -> tuple[DockerImage, str]:
+@dataclass
+class ImageReference:
+    """reference to a pre-existing docker image."""
+
+    tag: str
+
+
+def get_docker_image(
+    image_name: str | None = None,
+) -> tuple[DockerImage | ImageReference, str]:
     """gets docker image for testing, building if necessary.
 
     args:
@@ -22,12 +32,12 @@ def get_docker_image(image_name: str | None = None) -> tuple[DockerImage, str]:
                    if not provided, builds image with default tag.
 
     returns:
-        tuple of (DockerImage, image_tag)
+        tuple of (DockerImage or ImageReference, image_tag)
     """
     if image_name:
         logger.info("using existing docker image: %s", image_name)
-        # creates DockerImage reference without building
-        image = DockerImage(tag=image_name)
+        # creates reference to existing image without building
+        image = ImageReference(tag=image_name)
         return image, image_name
 
     # builds image if no name provided
@@ -37,9 +47,9 @@ def get_docker_image(image_name: str | None = None) -> tuple[DockerImage, str]:
     project_root = Path(__file__).parent.parent.parent
 
     # builds image using testcontainers
-    image = DockerImage(path=str(project_root), tag=DEFAULT_IMAGE_TAG)
-    image.build()
+    docker_image = DockerImage(path=str(project_root), tag=DEFAULT_IMAGE_TAG)
+    docker_image.build()
 
     logger.info("docker image built successfully: %s", DEFAULT_IMAGE_TAG)
 
-    return image, DEFAULT_IMAGE_TAG
+    return docker_image, DEFAULT_IMAGE_TAG
