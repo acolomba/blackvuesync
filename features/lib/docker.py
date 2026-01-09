@@ -1,8 +1,9 @@
 """docker image management for integration tests"""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Optional
 
 from testcontainers.core.image import DockerImage
 
@@ -13,7 +14,7 @@ logger = logging.getLogger("features.docker")
 DEFAULT_IMAGE_TAG = "acolomba/blackvuesync:test"
 
 
-def get_docker_image(image_name: Optional[str] = None) -> tuple[DockerImage, str]:
+def get_docker_image(image_name: str | None = None) -> tuple[DockerImage, str]:
     """gets docker image for testing, building if necessary.
 
     args:
