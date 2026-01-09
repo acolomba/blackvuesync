@@ -41,7 +41,7 @@ dev = [
     "python-lsp-server~=1.14",
     "requests~=2.32",
     "ruff~=0.9",
-    "testcontainers~=4.14",
+    "testcontainers~=4.13",
     "tzlocal~=5.2",
 ]
 
