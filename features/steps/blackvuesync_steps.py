@@ -206,8 +206,8 @@ def _execute_docker(
     dry_run: bool = False,
 ) -> None:
     """executes blackvuesync via docker container."""
-    # translates localhost address to host.docker.internal for container
-    docker_address = address.replace("127.0.0.1", "host.docker.internal")
+    # uses address as-is (should be mock dashcam container name on docker network)
+    docker_address = address
 
     # gets current user's UID/GID
     puid = os.getuid()
@@ -215,6 +215,9 @@ def _execute_docker(
 
     # creates container from pre-built image
     container = DockerContainer(image=context.docker_image.tag)
+
+    # joins the same network as mock dashcam container
+    container.with_network(context.docker_network)
 
     # configures volume mounting
     container.with_volume_mapping(str(destination), "/recordings", mode="rw")
@@ -274,9 +277,6 @@ def _execute_docker(
 
     if dry_run:
         container.with_env("DRY_RUN", "1")
-
-    # configures networking for host.docker.internal
-    container.with_kwargs(extra_hosts={"host.docker.internal": "host-gateway"})
 
     logger.info("Starting docker container with image: %s", context.docker_image.tag)
 
