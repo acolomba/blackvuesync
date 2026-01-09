@@ -226,6 +226,43 @@ def _execute_docker(
     container.with_env("PUID", str(puid))
     container.with_env("PGID", str(pgid))
 
+    # syncs timezone with host to ensure date calculations match
+    # gets host timezone from TZ env var or system default
+    import subprocess
+
+    if "TZ" in os.environ:
+        host_tz = os.environ["TZ"]
+    else:
+        # gets system IANA timezone name on macOS/Linux
+        try:
+            # tries macOS systemsetup command first
+            result = subprocess.run(
+                ["systemsetup", "-gettimezone"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if result.returncode == 0:
+                # output is "Time Zone: America/New_York"
+                host_tz = result.stdout.strip().split(": ")[1]
+            else:
+                raise RuntimeError("systemsetup failed")
+        except (FileNotFoundError, RuntimeError, IndexError):
+            # fallback: reads /etc/localtime symlink (Linux/some macOS)
+            try:
+                localtime_path = os.readlink("/etc/localtime")
+                # extracts timezone from path like /usr/share/zoneinfo/America/New_York
+                host_tz = localtime_path.split("zoneinfo/")[1]
+            except (FileNotFoundError, IndexError, OSError):
+                # final fallback: uses UTC
+                logger.warning(
+                    "could not detect host timezone, using UTC for docker container"
+                )
+                host_tz = "UTC"
+
+    logger.debug("setting docker container timezone to: %s", host_tz)
+    container.with_env("TZ", host_tz)
+
     # sets RUN_ONCE=1 only if not in cron mode
     if not cron:
         container.with_env("RUN_ONCE", "1")
