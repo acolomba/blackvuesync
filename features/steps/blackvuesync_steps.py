@@ -227,49 +227,18 @@ def _execute_docker(
     container.with_env("PGID", str(pgid))
 
     # syncs timezone with host to ensure date calculations match
-    import subprocess
-    from pathlib import Path
-
     # gets host timezone from TZ env var or system default
     if "TZ" in os.environ:
         host_tz = os.environ["TZ"]
     else:
-        host_tz = None
-        # tries /etc/localtime symlink (works on Linux and macOS)
         try:
-            localtime = Path("/etc/localtime")
-            if localtime.is_symlink():
-                target = localtime.resolve()
-                # extracts timezone from path like /usr/share/zoneinfo/America/New_York
-                # handles both 'zoneinfo' and 'zoneinfo.default' (macOS)
-                parts = target.parts
-                for i, part in enumerate(parts):
-                    if "zoneinfo" in part and i + 1 < len(parts):
-                        host_tz = "/".join(parts[i + 1 :])
-                        break
-        except (OSError, ValueError):
-            pass
+            from tzlocal import get_localzone_name
 
-        # fallback: tries macOS systemsetup command
-        if not host_tz:
-            try:
-                result = subprocess.run(
-                    ["systemsetup", "-gettimezone"],
-                    capture_output=True,
-                    text=True,
-                    timeout=1,
-                    check=False,
-                )
-                if result.returncode == 0 and ": " in result.stdout:
-                    # output is "Time Zone: America/New_York"
-                    host_tz = result.stdout.strip().split(": ", 1)[1]
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-
-        # final fallback: uses UTC
-        if not host_tz:
+            host_tz = get_localzone_name()
+        except Exception as e:
             logger.warning(
-                "could not detect host timezone, using UTC for docker container"
+                "could not detect host timezone (%s), using UTC for docker container",
+                e,
             )
             host_tz = "UTC"
 
