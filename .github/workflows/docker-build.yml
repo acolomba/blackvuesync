@@ -25,6 +25,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TZ: UTC
     steps:
       - name: Checkout
         uses: actions/checkout@v6
