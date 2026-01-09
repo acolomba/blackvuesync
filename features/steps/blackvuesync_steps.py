@@ -231,16 +231,9 @@ def _execute_docker(
     if "TZ" in os.environ:
         host_tz = os.environ["TZ"]
     else:
-        try:
-            from tzlocal import get_localzone_name
+        from tzlocal import get_localzone_name
 
-            host_tz = get_localzone_name()
-        except Exception as e:
-            logger.warning(
-                "could not detect host timezone (%s), using UTC for docker container",
-                e,
-            )
-            host_tz = "UTC"
+        host_tz = get_localzone_name()
 
     logger.debug("setting docker container timezone to: %s", host_tz)
     container.with_env("TZ", host_tz)
