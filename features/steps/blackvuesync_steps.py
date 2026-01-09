@@ -227,38 +227,51 @@ def _execute_docker(
     container.with_env("PGID", str(pgid))
 
     # syncs timezone with host to ensure date calculations match
-    # gets host timezone from TZ env var or system default
     import subprocess
+    from pathlib import Path
 
+    # gets host timezone from TZ env var or system default
     if "TZ" in os.environ:
         host_tz = os.environ["TZ"]
     else:
-        # gets system IANA timezone name on macOS/Linux
+        host_tz = None
+        # tries /etc/localtime symlink (works on Linux and macOS)
         try:
-            # tries macOS systemsetup command first
-            result = subprocess.run(
-                ["systemsetup", "-gettimezone"],
-                capture_output=True,
-                text=True,
-                timeout=1,
-            )
-            if result.returncode == 0:
-                # output is "Time Zone: America/New_York"
-                host_tz = result.stdout.strip().split(": ")[1]
-            else:
-                raise RuntimeError("systemsetup failed")
-        except (FileNotFoundError, RuntimeError, IndexError):
-            # fallback: reads /etc/localtime symlink (Linux/some macOS)
-            try:
-                localtime_path = os.readlink("/etc/localtime")
+            localtime = Path("/etc/localtime")
+            if localtime.is_symlink():
+                target = localtime.resolve()
                 # extracts timezone from path like /usr/share/zoneinfo/America/New_York
-                host_tz = localtime_path.split("zoneinfo/")[1]
-            except (FileNotFoundError, IndexError, OSError):
-                # final fallback: uses UTC
-                logger.warning(
-                    "could not detect host timezone, using UTC for docker container"
+                # handles both 'zoneinfo' and 'zoneinfo.default' (macOS)
+                parts = target.parts
+                for i, part in enumerate(parts):
+                    if "zoneinfo" in part and i + 1 < len(parts):
+                        host_tz = "/".join(parts[i + 1 :])
+                        break
+        except (OSError, ValueError):
+            pass
+
+        # fallback: tries macOS systemsetup command
+        if not host_tz:
+            try:
+                result = subprocess.run(
+                    ["systemsetup", "-gettimezone"],
+                    capture_output=True,
+                    text=True,
+                    timeout=1,
+                    check=False,
                 )
-                host_tz = "UTC"
+                if result.returncode == 0 and ": " in result.stdout:
+                    # output is "Time Zone: America/New_York"
+                    host_tz = result.stdout.strip().split(": ", 1)[1]
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # final fallback: uses UTC
+        if not host_tz:
+            logger.warning(
+                "could not detect host timezone, using UTC for docker container"
+            )
+            host_tz = "UTC"
 
     logger.debug("setting docker container timezone to: %s", host_tz)
     container.with_env("TZ", host_tz)
