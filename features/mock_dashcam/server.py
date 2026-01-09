@@ -75,12 +75,15 @@ def to_recording(filename: str) -> Recording | None:
 class MockDashcam:
     """mock blackvue dashcam server"""
 
-    def __init__(self, port: int = 5000, log_level: str = "INFO"):
+    def __init__(
+        self, port: int = 5000, log_level: str = "INFO", host: str = "127.0.0.1"
+    ):
         # validates port
         if not (4001 <= port <= 65535):
             raise ValueError(f"Port must be between 4001 and 65535, got {port}")
 
         self.port = port
+        self.host = host
         self.log_level = log_level
         self.app = flask.Flask(__name__)
         self.server_thread: threading.Thread | None = None
@@ -239,7 +242,7 @@ class MockDashcam:
 
         def run_server() -> None:
             # runs flask dev server - if it fails, thread dies and HTTP check will timeout
-            self.app.run(host="127.0.0.1", port=self.port, use_reloader=False)
+            self.app.run(host=self.host, port=self.port, use_reloader=False)
 
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()

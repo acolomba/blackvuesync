@@ -41,6 +41,8 @@ dev = [
     "python-lsp-server~=1.14",
     "requests~=2.32",
     "ruff~=0.9",
+    "testcontainers~=4.13",
+    "tzlocal~=5.2",
 ]
 
 [project.urls]
@@ -90,6 +92,11 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = ["venv/", "build/", "dist/"]
 
+# ignores third-party packages without type stubs
+[[tool.mypy.overrides]]
+module = ["requests", "hamcrest", "testcontainers.*", "tzlocal"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = "blackvuesync_test"
 disallow_untyped_decorators = false
@@ -105,14 +112,6 @@ disallow_untyped_decorators = false
 [[tool.mypy.overrides]]
 module = "features.mock_dashcam.*"
 disallow_untyped_decorators = false
-
-[[tool.mypy.overrides]]
-module = "requests"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "hamcrest"
-ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "features.mock_dashcam.server"
