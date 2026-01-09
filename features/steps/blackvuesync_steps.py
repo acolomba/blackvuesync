@@ -5,13 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-import uuid
 from pathlib import Path
 
 from behave import when
 from behave.runner import Context
-
-from features.lib.docker import IMAGE_TAG
+from testcontainers.core.container import DockerContainer
 
 logger = logging.getLogger("features.steps")
 
@@ -215,42 +213,32 @@ def _execute_docker(
     puid = os.getuid()
     pgid = os.getgid()
 
-    # generates unique container name for this test run
-    container_name = f"blackvuesync-test-{uuid.uuid4().hex[:8]}"
+    # creates container from pre-built image
+    container = DockerContainer(image=context.docker_image.tag)
 
-    # builds docker command
-    cmd = [
-        "docker",
-        "run",
-        "--name",
-        container_name,
-        "--add-host=host.docker.internal:host-gateway",
-        "-v",
-        f"{destination}:/recordings",
-        "-e",
-        "PYTHONUNBUFFERED=1",
-        "-e",
-        f"ADDRESS={docker_address}",
-        "-e",
-        f"SESSION_KEY={session_key}",
-        "-e",
-        f"PUID={puid}",
-        "-e",
-        f"PGID={pgid}",
-    ]
+    # configures volume mounting
+    container.with_volume_mapping(str(destination), "/recordings", mode="rw")
+
+    # configures core environment variables
+    container.with_env("PYTHONUNBUFFERED", "1")
+    container.with_env("ADDRESS", docker_address)
+    container.with_env("SESSION_KEY", session_key)
+    container.with_env("PUID", str(puid))
+    container.with_env("PGID", str(pgid))
 
     # sets RUN_ONCE=1 only if not in cron mode
     if not cron:
-        cmd.extend(["-e", "RUN_ONCE=1"])
+        container.with_env("RUN_ONCE", "1")
 
+    # configures optional parameters
     if grouping:
-        cmd.extend(["-e", f"GROUPING={grouping}"])
+        container.with_env("GROUPING", grouping)
 
     if keep:
-        cmd.extend(["-e", f"KEEP={keep}"])
+        container.with_env("KEEP", keep)
 
     if priority:
-        cmd.extend(["-e", f"PRIORITY={priority}"])
+        container.with_env("PRIORITY", priority)
 
     if filter_list:
         raise NotImplementedError(
@@ -258,63 +246,47 @@ def _execute_docker(
         )
 
     if max_used_disk is not None:
-        cmd.extend(["-e", f"MAX_USED_DISK={max_used_disk}"])
+        container.with_env("MAX_USED_DISK", str(max_used_disk))
 
     if timeout is not None:
-        cmd.extend(["-e", f"TIMEOUT={timeout}"])
+        container.with_env("TIMEOUT", str(timeout))
 
     if verbose is not None:
-        cmd.extend(["-e", f"VERBOSE={verbose}"])
+        container.with_env("VERBOSE", str(verbose))
 
     if quiet:
-        cmd.extend(["-e", "QUIET=1"])
+        container.with_env("QUIET", "1")
 
     if cron:
-        cmd.extend(["-e", "CRON=1"])
+        container.with_env("CRON", "1")
 
     if dry_run:
-        cmd.extend(["-e", "DRY_RUN=1"])
+        container.with_env("DRY_RUN", "1")
 
-    # adds image tag
-    cmd.append(IMAGE_TAG)
+    # configures networking for host.docker.internal
+    container.with_kwargs(extra_hosts={"host.docker.internal": "host-gateway"})
 
-    logger.info("Running (docker): %s", " ".join(cmd))
+    logger.info("Starting docker container with image: %s", context.docker_image.tag)
 
-    # runs docker container with timeout
-    exit_code = 0
+    # starts container and waits for completion
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        exit_code = result.returncode
-    except subprocess.TimeoutExpired as e:
-        logger.error("docker container timed out after 120 seconds")
-        # cleans up timed-out container
-        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-        raise RuntimeError(
-            "docker container did not complete within 120 seconds"
-        ) from e
+        with container:
+            # waits for container to exit (max 120 seconds)
+            result = container.get_wrapped_container().wait(timeout=120)
 
-    # retrieves container output using docker logs
-    try:
-        logs_result = subprocess.run(
-            ["docker", "logs", container_name],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        stdout = logs_result.stdout
-        stderr = logs_result.stderr
-    except subprocess.TimeoutExpired:
-        logger.error("docker logs timed out after 30 seconds")
-        stdout = ""
-        stderr = ""
-    finally:
-        # cleans up container
-        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+            # extracts exit code from result (can be int or dict with 'StatusCode')
+            if isinstance(result, dict):
+                exit_code = result.get("StatusCode", 1)
+            else:
+                exit_code = result
+
+            # retrieves logs
+            stdout = container.get_logs()[0].decode("utf-8")
+            stderr = container.get_logs()[1].decode("utf-8")
+
+    except Exception as e:
+        logger.error("docker container execution failed: %s", e)
+        raise RuntimeError(f"docker container execution failed: {e}") from e
 
     # logs on failure
     if exit_code != 0:
