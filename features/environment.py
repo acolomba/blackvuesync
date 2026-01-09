@@ -7,7 +7,7 @@ from pathlib import Path
 from behave.model import Scenario, Step
 from behave.runner import Context
 
-from features.lib.docker import build_docker_image
+from features.lib.docker import get_docker_image
 from features.mock_dashcam import MockDashcam
 
 # logger for environment hooks
@@ -43,13 +43,13 @@ def before_all(context: Context) -> None:
 
     logger.info("test run directory: %s", context.test_run_dir)
 
-    # builds docker image if testing with docker implementation
+    # gets docker image if testing with docker implementation
     implementation = context.config.userdata.get("implementation", "direct")
     if implementation == "docker":
-        context.docker_image = build_docker_image()
-        logger.info(
-            "docker implementation enabled with image: %s", context.docker_image.tag
-        )
+        # checks if image name provided, otherwise builds
+        image_name = context.config.userdata.get("image_name")
+        context.docker_image, image_tag = get_docker_image(image_name)
+        logger.info("docker implementation enabled with image: %s", image_tag)
 
 
 def after_all(context: Context) -> None:

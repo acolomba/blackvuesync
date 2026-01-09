@@ -40,13 +40,25 @@ jobs:
         run: |
           pip install -e ".[dev]"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Docker image for testing
-        run: |
-          docker build -t acolomba/blackvuesync:local .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.REGISTRY_IMAGE }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run Docker integration tests
         run: |
-          behave -D implementation=docker --no-capture --format progress
+          behave -D implementation=docker -D image_name=${{ env.REGISTRY_IMAGE }}:test --no-capture --format progress
 
   build:
     needs: [test]
