@@ -68,10 +68,14 @@ repos:
     hooks:
       - id: mypy
 
-  - repo: https://github.com/pycqa/pylint
-    rev: v4.0.4
+  - repo: local
     hooks:
       - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+        require_serial: true
 
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1
