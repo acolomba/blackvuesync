@@ -84,8 +84,8 @@ socket_timeout = None  # pylint: disable=invalid-name
 # indicator that we're doing a dry run
 dry_run = None  # pylint: disable=invalid-name
 
-# session key reserved for test isolation
-session_key: str | None = None  # pylint: disable=invalid-name
+# affinity key reserved for test isolation
+affinity_key: str | None = None  # pylint: disable=invalid-name
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
@@ -225,8 +225,8 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
     try:
         url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
         request = urllib.request.Request(url)
-        if session_key:
-            request.add_header("X-Session-Key", session_key)
+        if affinity_key:
+            request.add_header("X-Affinity-Key", affinity_key)
 
         with urllib.request.urlopen(request) as response:
             response_status_code = response.getcode()
@@ -342,8 +342,8 @@ def download_file(
         try:
             # request
             request = urllib.request.Request(url)
-            if session_key:
-                request.add_header("X-Session-Key", session_key)
+            if affinity_key:
+                request.add_header("X-Affinity-Key", affinity_key)
 
             # downloads file
             with urllib.request.urlopen(request) as response:
@@ -828,9 +828,9 @@ def parse_args() -> argparse.Namespace:
         "--dry-run", action="store_true", help="shows what the program would do"
     )
     arg_parser.add_argument(
-        "--session-key",
-        metavar="SESSION_KEY",
-        help="session key; reserved for test isolation",
+        "--affinity-key",
+        metavar="AFFINITY_KEY",
+        help="affinity key; reserved for test isolation",
     )
     arg_parser.add_argument(
         "--version",
@@ -851,12 +851,12 @@ def main() -> int:
     global max_disk_used_percent
     global cutoff_date
     global socket_timeout
-    global session_key
+    global affinity_key
 
     args = parse_args()
 
     dry_run = args.dry_run
-    session_key = args.session_key
+    affinity_key = args.affinity_key
     if dry_run:
         logger.info("DRY RUN No action will be taken.")
 

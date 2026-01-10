@@ -93,24 +93,24 @@ class MockDashcam:
         # sets up routes
         self._setup_routes()
 
-    def _get_session_key(self) -> str:
-        """extracts session key from request header, raises 400 if missing"""
-        session_key = flask.request.headers.get("X-Session-Key")
+    def _get_affinity_key(self) -> str:
+        """extracts affinity key from request header, raises 400 if missing"""
+        affinity_key = flask.request.headers.get("X-Affinity-Key")
 
-        if not session_key:
-            flask.abort(400, description="X-Session-Key header is required")
+        if not affinity_key:
+            flask.abort(400, description="X-Affinity-Key header is required")
 
-        return session_key
+        return affinity_key
 
-    def _get_recordings(self, session_key: str) -> list[str]:
+    def _get_recordings(self, affinity_key: str) -> list[str]:
         """thread-safe read access to session-specific recordings"""
         with self._sessions_lock:
-            return self._recordings_by_session[session_key].copy()
+            return self._recordings_by_session[affinity_key].copy()
 
-    def _set_recordings(self, session_key: str, recordings: list[str]) -> None:
+    def _set_recordings(self, affinity_key: str, recordings: list[str]) -> None:
         """thread-safe write access to session-specific recordings"""
         with self._sessions_lock:
-            self._recordings_by_session[session_key] = recordings
+            self._recordings_by_session[affinity_key] = recordings
 
     def _setup_routes(self) -> None:
         """sets up flask routes"""
@@ -124,12 +124,12 @@ class MockDashcam:
         def vod() -> str:
             """returns the index of recordings"""
             logger.debug("GET /blackvue_vod.cgi")
-            session_key = self._get_session_key()
+            affinity_key = self._get_affinity_key()
 
             # format: n:/Record/filename.ext,s:1000000
             # we'll use a fixed size for simplicity
             lines = ["v:1.00"]
-            recordings = self._get_recordings(session_key)
+            recordings = self._get_recordings(affinity_key)
             for filename in recordings:
                 lines.append(f"n:/Record/{filename},s:1000000")
 
@@ -142,10 +142,10 @@ class MockDashcam:
         def record(filename: str) -> flask.Response:
             """serves any file associated to recordings"""
             logger.debug("GET /Record/%s", filename)
-            session_key = self._get_session_key()
+            affinity_key = self._get_affinity_key()
 
             # validates that filename exists in session-specific recordings
-            recordings = self._get_recordings(session_key)
+            recordings = self._get_recordings(affinity_key)
             if filename not in recordings:
                 logger.debug("Response: 404 Not Found (not in session recordings)")
                 return flask.abort(404)
@@ -172,7 +172,7 @@ class MockDashcam:
             data = flask.request.get_json() or {}
             logger.debug("POST /mock/recordings")
             logger.debug("Request body: %s", data)
-            session_key = self._get_session_key()
+            affinity_key = self._get_affinity_key()
 
             period_start = data.get("period_start", "0d")
             period_end = data.get("period_end", "0d")
@@ -191,7 +191,7 @@ class MockDashcam:
             )
 
             # stores in session-specific server state
-            self._set_recordings(session_key, filenames)
+            self._set_recordings(affinity_key, filenames)
 
             response = {"recordings": filenames, "count": len(filenames)}
             logger.debug("Response body: %s", response)
@@ -202,8 +202,8 @@ class MockDashcam:
         def clear_recordings_route() -> tuple[dict[str, str], int]:
             """clears all recordings from server state"""
             logger.debug("DELETE /mock/recordings")
-            session_key = self._get_session_key()
-            self._set_recordings(session_key, [])
+            affinity_key = self._get_affinity_key()
+            self._set_recordings(affinity_key, [])
             logger.debug("Response body: {'status': 'cleared'}")
             return {"status": "cleared"}, 200
 
@@ -213,12 +213,12 @@ class MockDashcam:
             data = flask.request.get_json() or {}
             logger.debug("POST /mock/recordings/filenames")
             logger.debug("Request body: %s", data)
-            session_key = self._get_session_key()
+            affinity_key = self._get_affinity_key()
 
             recordings = data.get("recordings", [])
 
             # stores in session-specific server state
-            self._set_recordings(session_key, recordings)
+            self._set_recordings(affinity_key, recordings)
 
             response = {"recordings": recordings, "count": len(recordings)}
             logger.debug("Response body: %s", response)
@@ -283,12 +283,12 @@ class MockDashcam:
         # daemon threads will terminate automatically when the test process exits
         self.server_thread = None
 
-    def clear_recordings(self, session_key: str | None = None) -> None:
+    def clear_recordings(self, affinity_key: str | None = None) -> None:
         """clears recordings (for cleanup)"""
         with self._sessions_lock:
-            if session_key:
+            if affinity_key:
                 # clears only session-specific recordings
-                self._recordings_by_session[session_key] = []
+                self._recordings_by_session[affinity_key] = []
             else:
                 # clears all recordings across all sessions
                 self._recordings_by_session.clear()

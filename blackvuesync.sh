@@ -29,8 +29,8 @@ cron="${CRON:+--cron}"
 # dry-run option if DRY_RUN set to anything
 dry_run="${DRY_RUN:+--dry-run}"
 
-# session key option if SESSION_KEY set
-session_key="${SESSION_KEY:+--session-key $SESSION_KEY}"
+# session key option if AFFINITY_KEY set
+affinity_key="${AFFINITY_KEY:+--affinity-key $AFFINITY_KEY}"
 
 /blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
-    ${quiet} ${cron} ${dry_run} ${session_key}
+    ${quiet} ${cron} ${dry_run} ${affinity_key}

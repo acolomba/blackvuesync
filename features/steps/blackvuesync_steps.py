@@ -18,7 +18,7 @@ def execute_blackvuesync(
     context: Context,
     address: str,
     destination: str,
-    session_key: str,
+    affinity_key: str,
     grouping: str | None = None,
     keep: str | None = None,
     priority: str | None = None,
@@ -38,7 +38,7 @@ def execute_blackvuesync(
             context,
             address,
             destination,
-            session_key,
+            affinity_key,
             grouping,
             keep,
             priority,
@@ -55,7 +55,7 @@ def execute_blackvuesync(
             context,
             address,
             destination,
-            session_key,
+            affinity_key,
             grouping,
             keep,
             priority,
@@ -73,7 +73,7 @@ def _execute_direct(
     context: Context,
     address: str,
     destination: str,
-    session_key: str,
+    affinity_key: str,
     grouping: str | None = None,
     keep: str | None = None,
     priority: str | None = None,
@@ -104,8 +104,8 @@ def _execute_direct(
             address,
             "-d",
             destination,
-            "--session-key",
-            session_key,
+            "--affinity-key",
+            affinity_key,
         ]
     else:
         cmd = [
@@ -114,8 +114,8 @@ def _execute_direct(
             address,
             "-d",
             destination,
-            "--session-key",
-            session_key,
+            "--affinity-key",
+            affinity_key,
         ]
 
     if grouping:
@@ -193,7 +193,7 @@ def _execute_docker(
     context: Context,
     address: str,
     destination: str,
-    session_key: str,
+    affinity_key: str,
     grouping: str | None = None,
     keep: str | None = None,
     priority: str | None = None,
@@ -225,7 +225,7 @@ def _execute_docker(
     # configures core environment variables
     container.with_env("PYTHONUNBUFFERED", "1")
     container.with_env("ADDRESS", docker_address)
-    container.with_env("SESSION_KEY", session_key)
+    container.with_env("AFFINITY_KEY", affinity_key)
     container.with_env("PUID", str(puid))
     container.with_env("PGID", str(pgid))
 
