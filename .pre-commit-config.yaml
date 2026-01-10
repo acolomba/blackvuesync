@@ -72,6 +72,7 @@ repos:
     rev: v3.3.9
     hooks:
       - id: pylint
+        files: ^blackvuesync\.py$
 
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1

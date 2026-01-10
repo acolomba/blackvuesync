@@ -29,7 +29,7 @@ def dashcam_recordings(
     }
     headers = {"X-Session-Key": context.scenario_token}
 
-    response = requests.post(url, json=data, headers=headers)
+    response = requests.post(url, json=data, headers=headers, timeout=10)
     response.raise_for_status()
 
     # stores recordings in context for later verification
@@ -100,7 +100,7 @@ def dashcam_recordings_same_as_downloaded(
     headers = {"X-Session-Key": context.scenario_token}
     data = {"recordings": filtered_recordings}
 
-    response = requests.post(url, json=data, headers=headers)
+    response = requests.post(url, json=data, headers=headers, timeout=10)
     response.raise_for_status()
 
     # stores in context for later verification
