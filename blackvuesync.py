@@ -76,20 +76,20 @@ def flush_logs() -> None:
 
 
 # max disk usage percent
-max_disk_used_percent = None
+max_disk_used_percent = None  # pylint: disable=invalid-name
 
 # socket timeout
-socket_timeout = None
+socket_timeout = None  # pylint: disable=invalid-name
 
 # indicator that we're doing a dry run
-dry_run = None
+dry_run = None  # pylint: disable=invalid-name
 
 # session key reserved for test isolation
-session_key: str | None = None
+session_key: str | None = None  # pylint: disable=invalid-name
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
-cutoff_date: datetime.date | None = None
+cutoff_date: datetime.date | None = None  # pylint: disable=invalid-name
 
 # errno codes for unavailable dashcam
 dashcam_unavailable_errno_codes = (
@@ -228,16 +228,15 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
         if session_key:
             request.add_header("X-Session-Key", session_key)
 
-        response = urllib.request.urlopen(request)
+        with urllib.request.urlopen(request) as response:
+            response_status_code = response.getcode()
+            if response_status_code != 200:
+                raise RuntimeError(
+                    f"Error response from : {base_url} ; status code : {response_status_code}"
+                )
 
-        response_status_code = response.getcode()
-        if response_status_code != 200:
-            raise RuntimeError(
-                f"Error response from : {base_url} ; status code : {response_status_code}"
-            )
-
-        charset = response.info().get_param("charset", "UTF-8")
-        file_lines = [x.decode(charset) for x in response.readlines()]
+            charset = response.info().get_param("charset", "UTF-8")
+            file_lines = [x.decode(charset) for x in response.readlines()]
 
         return get_filenames(file_lines)
     except urllib.error.URLError as e:
@@ -316,6 +315,7 @@ def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
+    # pylint: disable=too-many-locals
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
         group_filepath = os.path.join(destination, group_name)
@@ -501,9 +501,10 @@ group_name_globs = {
 }
 
 
-# represents a recording downloaded to the destination; matches all files (video front/rear, gps, etc.)
 @dataclass(frozen=True)
 class DownloadedRecording:
+    """represents a recording downloaded to the destination; matches all files (video front/rear, gps, etc.)"""
+
     base_filename: str
     group_name: str | None
     datetime: datetime.datetime
@@ -539,7 +540,7 @@ def to_downloaded_recording(filename: str, grouping: str) -> DownloadedRecording
 
 
 # downloaded recording filename glob pattern
-downloaded_filename_glob = (
+DOWNLOADED_FILENAME_GLOB = (
     "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_*.*"
 )
 
@@ -551,7 +552,7 @@ def get_downloaded_recordings(
     group_name_glob = group_name_globs[grouping]
 
     downloaded_filepath_glob = get_filepath(
-        destination, group_name_glob, downloaded_filename_glob
+        destination, group_name_glob, DOWNLOADED_FILENAME_GLOB
     )
 
     downloaded_filepaths = glob.glob(downloaded_filepath_glob)
@@ -681,13 +682,13 @@ def is_empty_directory(dirpath: str) -> bool:
 
 
 # temp filename regular expression
-temp_filename_glob = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXGDLYF]*.*"
+TEMP_FILENAME_GLOB = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXGDLYF]*.*"
 
 
 def clean_destination(destination: str, grouping: str) -> None:
     """removes temporary artifacts from the destination directory"""
     # removes temporary files from interrupted downloads
-    temp_filepath_glob = os.path.join(destination, temp_filename_glob)
+    temp_filepath_glob = os.path.join(destination, TEMP_FILENAME_GLOB)
     temp_filepaths = glob.glob(temp_filepath_glob)
 
     for temp_filepath in temp_filepaths:
@@ -845,6 +846,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """run forrest run"""
     # dry-run is a global setting
+    # pylint: disable=global-statement
     global dry_run
     global max_disk_used_percent
     global cutoff_date
@@ -896,7 +898,7 @@ def main() -> int:
     except RuntimeError as e:
         logger.error(e.args[0])
         return 2
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception(e)
         return 3
     finally:
