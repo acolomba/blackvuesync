@@ -31,7 +31,7 @@ ENV ADDRESS="" \
     CRON=1 \
     DRY_RUN="" \
     RUN_ONCE="" \
-    SESSION_KEY=""
+    AFFINITY_KEY=""
 
 COPY --chown=dashcam blackvuesync.sh /blackvuesync.sh
 RUN chmod +x /blackvuesync.sh

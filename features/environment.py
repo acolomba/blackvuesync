@@ -215,7 +215,7 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
 def after_scenario(context: Context, scenario: Scenario) -> None:
     """after scenario"""
     # clears recordings from mock dashcam (direct mode only)
-    # in docker mode, each scenario uses session key isolation, and container is destroyed in after_all
+    # in docker mode, each scenario uses affinity key isolation, and container is destroyed in after_all
     if hasattr(context, "mock_dashcam"):
         # direct mode: clears via method call
         context.mock_dashcam.clear_recordings(context.scenario_token)

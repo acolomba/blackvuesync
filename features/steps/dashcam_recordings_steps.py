@@ -27,9 +27,9 @@ def dashcam_recordings(
         "recording_directions": recording_directions,
         "recording_others": recording_others,
     }
-    headers = {"X-Session-Key": context.scenario_token}
+    headers = {"X-Affinity-Key": context.scenario_token}
 
-    response = requests.post(url, json=data, headers=headers)
+    response = requests.post(url, json=data, headers=headers, timeout=10)
     response.raise_for_status()
 
     # stores recordings in context for later verification
@@ -97,10 +97,10 @@ def dashcam_recordings_same_as_downloaded(
     )
 
     url = f"{context.mock_dashcam_url}/mock/recordings/filenames"
-    headers = {"X-Session-Key": context.scenario_token}
+    headers = {"X-Affinity-Key": context.scenario_token}
     data = {"recordings": filtered_recordings}
 
-    response = requests.post(url, json=data, headers=headers)
+    response = requests.post(url, json=data, headers=headers, timeout=10)
     response.raise_for_status()
 
     # stores in context for later verification

@@ -36,6 +36,7 @@ dev = [
     "mypy~=1.14",
     "pre-commit~=4.3",
     "PyHamcrest~=2.1",
+    "pylint~=3.3",
     "pytest~=8.3",
     "pytest-cov~=7.0",
     "python-lsp-server~=1.14",
@@ -136,3 +137,11 @@ omit = [
 
 [tool.coverage.html]
 directory = "coverage_report"
+
+[tool.pylint.messages_control]
+disable = [
+    "line-too-long",  # handled by black/ruff
+]
+
+[tool.pylint.format]
+max-line-length = 88  # for consistency with black/ruff
