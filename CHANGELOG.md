@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.1.1
+
+* Switch to semver.
+
 ## 2.1
 
 * Minor resource cleanup fix. (#52)
