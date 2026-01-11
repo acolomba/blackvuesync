@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -62,7 +64,7 @@ jobs:
           behave --no-capture --format progress
 
   build:
-    # builds package on all events (PRs and main) to catch build errors early
+    # builds package on all events (PRs, main, and tags) to catch build errors early
     needs: [unit-tests, integration-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 10
