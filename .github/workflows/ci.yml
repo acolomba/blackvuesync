@@ -62,7 +62,8 @@ jobs:
           behave --no-capture --format progress
 
   build:
-    # builds package on all events (PRs and main) to catch build errors early
+    # builds package on all events (PRs, main, and tags) to catch build errors early
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     needs: [unit-tests, integration-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 10
