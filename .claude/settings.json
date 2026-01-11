@@ -1,7 +1,6 @@
 {
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true
   },
   "hooks": {
