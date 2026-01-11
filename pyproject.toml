@@ -7,7 +7,7 @@ requires-python = ">=3.9"
 license = "MIT"
 keywords = ["blackvue", "dashcam", "sync", "backup"]
 authors = [
-    {name = "Alessandro Colomba", email = "angelo@colomba.org"}
+    {name = "Alessandro Colomba", email = "acolomba@colomba.org"}
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
