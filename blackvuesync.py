@@ -3,6 +3,7 @@
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 https://github.com/acolomba/blackvuesync
 """
+# pylint: disable=too-many-lines
 
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from __future__ import annotations
 __version__ = "2.1.1"
 
 import argparse
+import contextlib
 import datetime
 import errno
 import fcntl
@@ -83,6 +85,9 @@ socket_timeout = None  # pylint: disable=invalid-name
 
 # indicator that we're doing a dry run
 dry_run = None  # pylint: disable=invalid-name
+
+# hours to wait before retrying a failed download
+retry_failed_after_hours: float = 24.0  # pylint: disable=invalid-name
 
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
@@ -311,6 +316,55 @@ def get_filepath(destination: str, group_name: str | None, filename: str) -> str
     return os.path.join(destination, filename)
 
 
+def get_failed_marker_filepath(destination: str, filename: str) -> str:
+    """returns the filepath for a .failed marker file"""
+    return os.path.join(destination, f".{filename}.failed")
+
+
+def is_download_blocked_by_failure(destination: str, filename: str) -> bool:
+    """checks if a recent failure marker exists for this file"""
+    marker_filepath = get_failed_marker_filepath(destination, filename)
+
+    if not os.path.exists(marker_filepath):
+        return False
+
+    try:
+        with open(marker_filepath, encoding="utf-8") as f:
+            timestamp_str = f.read().strip()
+
+        failure_time = datetime.datetime.fromisoformat(timestamp_str)
+        elapsed_hours = (
+            datetime.datetime.now() - failure_time
+        ).total_seconds() / 3600.0
+
+        return elapsed_hours < retry_failed_after_hours
+    except (ValueError, OSError):
+        # marker file is corrupted or unreadable; treat as stale and retry
+        return False
+
+
+def mark_download_failed(destination: str, filename: str) -> None:
+    """creates or updates a .failed marker file with the current timestamp"""
+    marker_filepath = get_failed_marker_filepath(destination, filename)
+
+    try:
+        with open(marker_filepath, "w", encoding="utf-8") as f:
+            f.write(datetime.datetime.now().isoformat())
+    except OSError as e:
+        logger.debug("Could not create failure marker : %s; error : %s", filename, e)
+
+
+def remove_failed_marker(destination: str, filename: str) -> None:
+    """removes a .failed marker file if it exists"""
+    marker_filepath = get_failed_marker_filepath(destination, filename)
+
+    try:
+        if os.path.exists(marker_filepath):
+            os.remove(marker_filepath)
+    except OSError as e:
+        logger.debug("Could not remove failure marker : %s; error : %s", filename, e)
+
+
 def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
@@ -325,6 +379,11 @@ def download_file(
 
     if os.path.exists(destination_filepath):
         logger.debug("Ignoring already downloaded file : %s", filename)
+        return False, None
+
+    # checks for recent failure marker to avoid retrying known-bad downloads
+    if is_download_blocked_by_failure(destination, filename):
+        logger.debug("Skipping recently failed download : %s", filename)
         return False, None
 
     temp_filepath = os.path.join(destination, f".{filename}")
@@ -359,6 +418,9 @@ def download_file(
 
         os.rename(temp_filepath, destination_filepath)
 
+        # successful download; removes any existing failure marker
+        remove_failed_marker(destination, filename)
+
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
         speed_str = format_natural_speed(speed_bps)
         logger.debug("Downloaded file : %s%s", filename, speed_str)
@@ -369,6 +431,8 @@ def download_file(
         cron_logger.warning(
             "Could not download file : %s; error : %s; ignoring.", filename, e
         )
+        # marks as failed to avoid repeated retries
+        mark_download_failed(destination, filename)
         return False, None
     except socket.timeout as e:
         raise UserWarning(
@@ -684,8 +748,13 @@ def is_empty_directory(dirpath: str) -> bool:
 # temp filename regular expression
 TEMP_FILENAME_GLOB = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXGDLYF]*.*"
 
+# failed marker filename glob pattern
+FAILED_MARKER_GLOB = ".[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]_[NEPMIOATBRXGDLYF]*.*.failed"
 
-def clean_destination(destination: str, grouping: str) -> None:
+
+def clean_destination(
+    destination: str, grouping: str
+) -> None:  # pylint: disable=too-many-locals,too-many-branches
     """removes temporary artifacts from the destination directory"""
     # removes temporary files from interrupted downloads
     temp_filepath_glob = os.path.join(destination, TEMP_FILENAME_GLOB)
@@ -697,6 +766,40 @@ def clean_destination(destination: str, grouping: str) -> None:
             os.remove(temp_filepath)
         else:
             logger.debug("DRY RUN Would remove temporary file : %s", temp_filepath)
+
+    # removes stale failure markers (older than retry period)
+    failed_marker_glob = os.path.join(destination, FAILED_MARKER_GLOB)
+    failed_marker_filepaths = glob.glob(failed_marker_glob)
+
+    for marker_filepath in failed_marker_filepaths:
+        try:
+            with open(marker_filepath, encoding="utf-8") as f:
+                timestamp_str = f.read().strip()
+            failure_time = datetime.datetime.fromisoformat(timestamp_str)
+            elapsed_hours = (
+                datetime.datetime.now() - failure_time
+            ).total_seconds() / 3600.0
+
+            if elapsed_hours >= retry_failed_after_hours:
+                if not dry_run:
+                    logger.debug("Removing stale failure marker : %s", marker_filepath)
+                    os.remove(marker_filepath)
+                else:
+                    logger.debug(
+                        "DRY RUN Would remove stale failure marker : %s",
+                        marker_filepath,
+                    )
+        except (ValueError, OSError):
+            # corrupted marker; remove it
+            if not dry_run:
+                logger.debug("Removing corrupted failure marker : %s", marker_filepath)
+                with contextlib.suppress(OSError):
+                    os.remove(marker_filepath)
+            else:
+                logger.debug(
+                    "DRY RUN Would remove corrupted failure marker : %s",
+                    marker_filepath,
+                )
 
     # removes empty grouping directories; ignores dotfiles such as .DS_Store
     group_name_glob = group_name_globs[grouping]
@@ -811,6 +914,13 @@ def parse_args() -> argparse.Namespace:
         help="sets the connection timeout in seconds (float); defaults to 10.0 seconds",
     )
     arg_parser.add_argument(
+        "--retry-failed-after",
+        metavar="HOURS",
+        default=24.0,
+        type=float,
+        help="hours to wait before retrying a failed download; defaults to 24.0",
+    )
+    arg_parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="increases verbosity"
     )
     arg_parser.add_argument(
@@ -852,6 +962,7 @@ def main() -> int:
     global cutoff_date
     global socket_timeout
     global affinity_key
+    global retry_failed_after_hours
 
     args = parse_args()
 
@@ -861,6 +972,7 @@ def main() -> int:
         logger.info("DRY RUN No action will be taken.")
 
     max_disk_used_percent = args.max_used_disk
+    retry_failed_after_hours = args.retry_failed_after
 
     set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 
