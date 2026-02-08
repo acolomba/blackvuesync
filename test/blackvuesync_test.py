@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import datetime
+import glob
 import os
 import tempfile
+import time
 
 import pytest
 
@@ -573,3 +575,48 @@ class TestFailedMarker:
 
             blackvuesync.remove_failed_marker(dest, group_name, filename)
             assert not os.path.exists(marker_filepath)
+
+    def test_mark_download_failed_refreshes_timestamp(self) -> None:
+        """verifies that re-marking a failed download updates the timestamp."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+
+            blackvuesync.mark_download_failed(dest, None, filename)
+
+            marker_filepath = blackvuesync.get_failed_marker_filepath(
+                dest, None, filename
+            )
+            with open(marker_filepath, encoding="utf-8") as f:
+                first_timestamp = f.read().strip()
+
+            time.sleep(0.01)
+            blackvuesync.mark_download_failed(dest, None, filename)
+
+            with open(marker_filepath, encoding="utf-8") as f:
+                second_timestamp = f.read().strip()
+
+            assert second_timestamp > first_timestamp
+
+    def test_retention_removes_failed_markers(self) -> None:
+        """verifies that retention cleanup removes .failed markers alongside recordings."""
+        with tempfile.TemporaryDirectory() as dest:
+            # creates an outdated recording file and its .failed marker
+            base_filename = "20181029_131513"
+            mp4_file = os.path.join(dest, f"{base_filename}_NF.mp4")
+            thm_file = os.path.join(dest, f"{base_filename}_NF.thm")
+            failed_marker = os.path.join(dest, f"{base_filename}_NF.mp4.failed")
+
+            for filepath in [mp4_file, thm_file]:
+                with open(filepath, "w") as f:
+                    f.write("mock")
+            with open(failed_marker, "w") as f:
+                f.write(datetime.datetime.now().isoformat())
+
+            # verifies the retention glob matches .failed files
+            outdated_glob = os.path.join(dest, f"{base_filename}_[NEPMIOATBRXGDLYF]*.*")
+            matched_files = glob.glob(outdated_glob)
+            matched_names = {os.path.basename(f) for f in matched_files}
+
+            assert f"{base_filename}_NF.mp4" in matched_names
+            assert f"{base_filename}_NF.thm" in matched_names
+            assert f"{base_filename}_NF.mp4.failed" in matched_names

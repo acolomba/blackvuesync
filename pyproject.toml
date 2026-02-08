@@ -143,5 +143,8 @@ disable = [
     "line-too-long",  # handled by black/ruff
 ]
 
+[tool.pylint.design]
+max-module-lines = 1100  # single-file project by design
+
 [tool.pylint.format]
 max-line-length = 88  # for consistency with black/ruff

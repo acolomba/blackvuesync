@@ -93,7 +93,7 @@ affinity_key: str | None = None  # pylint: disable=invalid-name
 # duration regex for --keep and --retry-failed-after
 duration_re = re.compile(r"""(?P<range>\d+)(?P<unit>[shdw]?)""")
 
-# keep and cutoff date; only recordings from this date on are downloaded and kept
+# cutoff date; only recordings from this date on are downloaded and kept
 cutoff_date: datetime.date | None = None  # pylint: disable=invalid-name
 
 # errno codes for unavailable dashcam
@@ -333,7 +333,7 @@ def get_failed_marker_filepath(
 def is_download_blocked_by_failure(
     destination: str, group_name: str | None, filename: str
 ) -> bool:
-    """checks if a recent failure marker exists for this file"""
+    """returns whether a non-stale failure marker prevents retrying this download"""
     marker_filepath = get_failed_marker_filepath(destination, group_name, filename)
 
     if not os.path.exists(marker_filepath):
@@ -347,8 +347,15 @@ def is_download_blocked_by_failure(
         elapsed = datetime.datetime.now() - failure_time
 
         return elapsed < retry_failed_after
-    except (ValueError, OSError):
-        # marker is corrupted or unreadable; treats as stale and allows retry
+    except ValueError:
+        # marker contains an invalid timestamp; treats as stale and allows retry
+        return False
+    except OSError as e:
+        cron_logger.warning(
+            "Could not read failure marker : %s; error : %s; allowing retry",
+            filename,
+            e,
+        )
         return False
 
 
@@ -362,7 +369,9 @@ def mark_download_failed(
         with open(marker_filepath, "w", encoding="utf-8") as f:
             f.write(datetime.datetime.now().isoformat())
     except OSError as e:
-        logger.debug("Could not create failure marker : %s; error : %s", filename, e)
+        cron_logger.warning(
+            "Could not create failure marker : %s; error : %s", filename, e
+        )
 
 
 def remove_failed_marker(
@@ -372,10 +381,13 @@ def remove_failed_marker(
     marker_filepath = get_failed_marker_filepath(destination, group_name, filename)
 
     try:
-        if os.path.exists(marker_filepath):
-            os.remove(marker_filepath)
+        os.remove(marker_filepath)
+    except FileNotFoundError:
+        pass
     except OSError as e:
-        logger.debug("Could not remove failure marker : %s; error : %s", filename, e)
+        cron_logger.warning(
+            "Could not remove failure marker : %s; error : %s", filename, e
+        )
 
 
 def download_file(
@@ -394,7 +406,11 @@ def download_file(
         logger.debug("Ignoring already downloaded file : %s", filename)
         return False, None
 
-    # checks for recent failure marker to avoid retrying known-bad downloads
+    if dry_run:
+        logger.debug("DRY RUN Would download file : %s", filename)
+        return True, None
+
+    # checks for recent failure marker to delay retrying recently failed downloads
     if is_download_blocked_by_failure(destination, group_name, filename):
         logger.debug("Skipping recently failed download : %s", filename)
         return False, None
@@ -402,10 +418,6 @@ def download_file(
     temp_filepath = os.path.join(destination, f".{filename}")
     if os.path.exists(temp_filepath):
         logger.debug("Found incomplete download : %s", temp_filepath)
-
-    if dry_run:
-        logger.debug("DRY RUN Would download file : %s", filename)
-        return True, None
 
     try:
         url = urllib.parse.urljoin(base_url, f"Record/{filename}")
@@ -444,7 +456,7 @@ def download_file(
         cron_logger.warning(
             "Could not download file : %s; error : %s; ignoring.", filename, e
         )
-        # marks as failed to avoid repeated retries
+        # marks as failed to delay retries
         mark_download_failed(destination, group_name, filename)
         return False, None
     except socket.timeout as e:
@@ -945,7 +957,6 @@ def main() -> int:
         logger.info("DRY RUN No action will be taken.")
 
     max_disk_used_percent = args.max_used_disk
-    retry_failed_after = parse_duration(args.retry_failed_after)
 
     set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 
@@ -959,6 +970,8 @@ def main() -> int:
     lf_fd = None
 
     try:
+        retry_failed_after = parse_duration(args.retry_failed_after)
+
         if args.keep:
             cutoff_date = calc_cutoff_date(args.keep)
             logger.info("Recording cutoff date : %s", cutoff_date)
