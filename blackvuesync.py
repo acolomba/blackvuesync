@@ -84,11 +84,16 @@ socket_timeout = None  # pylint: disable=invalid-name
 # indicator that we're doing a dry run
 dry_run = None  # pylint: disable=invalid-name
 
+# duration to wait before retrying a failed download
+retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: disable=invalid-name
+
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
 
+# duration regex for --keep and --retry-failed-after
+duration_re = re.compile(r"""(?P<range>\d+)(?P<unit>[hdw]?)""")
+
 # keep and cutoff date; only recordings from this date on are downloaded and kept
-keep_re = re.compile(r"""(?P<range>\d+)(?P<unit>[dw]?)""")
 cutoff_date: datetime.date | None = None  # pylint: disable=invalid-name
 
 # errno codes for unavailable dashcam
@@ -103,28 +108,33 @@ dashcam_unavailable_errno_codes = (
 today = datetime.date.today()
 
 
+def parse_duration(duration: str) -> datetime.timedelta:
+    """parses a duration string like '12h', '1d', '2w' into a timedelta; defaults to days"""
+
+    if (duration_match := re.fullmatch(duration_re, duration)) is None:
+        raise RuntimeError("DURATION must be in the format <number>[hdw]")
+
+    duration_range = int(duration_match.group("range"))
+
+    if duration_range < 1:
+        raise RuntimeError("DURATION must be greater than zero.")
+
+    duration_unit = duration_match.group("unit") or "d"
+
+    if duration_unit == "h":
+        return datetime.timedelta(hours=duration_range)
+    if duration_unit == "d":
+        return datetime.timedelta(days=duration_range)
+    if duration_unit == "w":
+        return datetime.timedelta(weeks=duration_range)
+
+    # this indicates a coding error
+    raise RuntimeError(f"unknown DURATION unit : {duration_unit}")
+
+
 def calc_cutoff_date(keep: str) -> datetime.date:
     """given a retention period, calculates the date before which files should be deleted"""
-
-    if (keep_match := re.fullmatch(keep_re, keep)) is None:
-        raise RuntimeError("KEEP must be in the format <number>[dw]")
-
-    keep_range = int(keep_match.group("range"))
-
-    if keep_range < 1:
-        raise RuntimeError("KEEP must be greater than one.")
-
-    keep_unit = keep_match.group("unit") or "d"
-
-    if keep_unit == "d" or keep_unit is None:
-        keep_range_timedelta = datetime.timedelta(days=keep_range)
-    elif keep_unit == "w":
-        keep_range_timedelta = datetime.timedelta(weeks=keep_range)
-    else:
-        # this indicates a coding error
-        raise RuntimeError(f"unknown KEEP unit : {keep_unit}")
-
-    return today - keep_range_timedelta
+    return today - parse_duration(keep)
 
 
 @dataclass(frozen=True)
@@ -311,6 +321,61 @@ def get_filepath(destination: str, group_name: str | None, filename: str) -> str
     return os.path.join(destination, filename)
 
 
+def get_failed_marker_filepath(
+    destination: str, group_name: str | None, filename: str
+) -> str:
+    """returns the filepath for a .failed marker file"""
+    return get_filepath(destination, group_name, f"{filename}.failed")
+
+
+def is_download_blocked_by_failure(
+    destination: str, group_name: str | None, filename: str
+) -> bool:
+    """checks if a recent failure marker exists for this file"""
+    marker_filepath = get_failed_marker_filepath(destination, group_name, filename)
+
+    if not os.path.exists(marker_filepath):
+        return False
+
+    try:
+        with open(marker_filepath, encoding="utf-8") as f:
+            timestamp_str = f.read().strip()
+
+        failure_time = datetime.datetime.fromisoformat(timestamp_str)
+        elapsed = datetime.datetime.now() - failure_time
+
+        return elapsed < retry_failed_after
+    except (ValueError, OSError):
+        # marker is corrupted or unreadable; treats as stale and allows retry
+        return False
+
+
+def mark_download_failed(
+    destination: str, group_name: str | None, filename: str
+) -> None:
+    """creates or updates a .failed marker file with the current timestamp"""
+    marker_filepath = get_failed_marker_filepath(destination, group_name, filename)
+
+    try:
+        with open(marker_filepath, "w", encoding="utf-8") as f:
+            f.write(datetime.datetime.now().isoformat())
+    except OSError as e:
+        logger.debug("Could not create failure marker : %s; error : %s", filename, e)
+
+
+def remove_failed_marker(
+    destination: str, group_name: str | None, filename: str
+) -> None:
+    """removes a .failed marker file if it exists"""
+    marker_filepath = get_failed_marker_filepath(destination, group_name, filename)
+
+    try:
+        if os.path.exists(marker_filepath):
+            os.remove(marker_filepath)
+    except OSError as e:
+        logger.debug("Could not remove failure marker : %s; error : %s", filename, e)
+
+
 def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
@@ -325,6 +390,11 @@ def download_file(
 
     if os.path.exists(destination_filepath):
         logger.debug("Ignoring already downloaded file : %s", filename)
+        return False, None
+
+    # checks for recent failure marker to avoid retrying known-bad downloads
+    if is_download_blocked_by_failure(destination, group_name, filename):
+        logger.debug("Skipping recently failed download : %s", filename)
         return False, None
 
     temp_filepath = os.path.join(destination, f".{filename}")
@@ -359,6 +429,9 @@ def download_file(
 
         os.rename(temp_filepath, destination_filepath)
 
+        # successful download; removes any existing failure marker
+        remove_failed_marker(destination, group_name, filename)
+
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
         speed_str = format_natural_speed(speed_bps)
         logger.debug("Downloaded file : %s%s", filename, speed_str)
@@ -369,6 +442,8 @@ def download_file(
         cron_logger.warning(
             "Could not download file : %s; error : %s; ignoring.", filename, e
         )
+        # marks as failed to avoid repeated retries
+        mark_download_failed(destination, group_name, filename)
         return False, None
     except socket.timeout as e:
         raise UserWarning(
@@ -811,6 +886,12 @@ def parse_args() -> argparse.Namespace:
         help="sets the connection timeout in seconds (float); defaults to 10.0 seconds",
     )
     arg_parser.add_argument(
+        "--retry-failed-after",
+        metavar="DURATION",
+        default="1d",
+        help="waits at least the given duration before retrying a failed download; defaults to days, but can suffix with h, d, w for hours, days or weeks respectively; defaults to 1d",
+    )
+    arg_parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="increases verbosity"
     )
     arg_parser.add_argument(
@@ -852,6 +933,7 @@ def main() -> int:
     global cutoff_date
     global socket_timeout
     global affinity_key
+    global retry_failed_after
 
     args = parse_args()
 
@@ -861,6 +943,7 @@ def main() -> int:
         logger.info("DRY RUN No action will be taken.")
 
     max_disk_used_percent = args.max_used_disk
+    retry_failed_after = parse_duration(args.retry_failed_after)
 
     set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 

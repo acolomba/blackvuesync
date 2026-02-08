@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime
+import os
+import tempfile
 
 import pytest
 
@@ -406,3 +408,170 @@ def test_sort_recordings(
     blackvuesync.sort_recordings(sorted_recordings, priority)
 
     assert expected_sorted_recordings == sorted_recordings
+
+
+@pytest.mark.parametrize(
+    "duration, expected_timedelta",
+    [
+        ("1h", datetime.timedelta(hours=1)),
+        ("12h", datetime.timedelta(hours=12)),
+        ("1d", datetime.timedelta(days=1)),
+        ("7d", datetime.timedelta(days=7)),
+        ("1w", datetime.timedelta(weeks=1)),
+        ("2w", datetime.timedelta(weeks=2)),
+        ("3", datetime.timedelta(days=3)),
+    ],
+)
+def test_parse_duration(duration: str, expected_timedelta: datetime.timedelta) -> None:
+    assert expected_timedelta == blackvuesync.parse_duration(duration)
+
+
+@pytest.mark.parametrize(
+    "duration",
+    ["0d", "0h", "abc", ""],
+)
+def test_parse_duration_invalid(duration: str) -> None:
+    with pytest.raises(RuntimeError):
+        blackvuesync.parse_duration(duration)
+
+
+class TestFailedMarker:
+    """tests for failure marker functionality"""
+
+    def test_get_failed_marker_filepath_no_grouping(self) -> None:
+        """verifies the marker filepath without grouping."""
+        filepath = blackvuesync.get_failed_marker_filepath(
+            "/dest", None, "20181029_131513_NF.mp4"
+        )
+        assert filepath == "/dest/20181029_131513_NF.mp4.failed"
+
+    def test_get_failed_marker_filepath_with_grouping(self) -> None:
+        """verifies the marker filepath with grouping."""
+        filepath = blackvuesync.get_failed_marker_filepath(
+            "/dest", "2018-10-29", "20181029_131513_NF.mp4"
+        )
+        assert filepath == "/dest/2018-10-29/20181029_131513_NF.mp4.failed"
+
+    def test_mark_download_failed_creates_marker(self) -> None:
+        """verifies that marking a download as failed creates a marker file."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+
+            blackvuesync.mark_download_failed(dest, None, filename)
+
+            marker_filepath = blackvuesync.get_failed_marker_filepath(
+                dest, None, filename
+            )
+            assert os.path.exists(marker_filepath)
+
+            with open(marker_filepath, encoding="utf-8") as f:
+                content = f.read()
+
+            # verifies content is a valid ISO timestamp
+            datetime.datetime.fromisoformat(content)
+
+    def test_remove_failed_marker(self) -> None:
+        """verifies that removing a marker works."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+
+            blackvuesync.mark_download_failed(dest, None, filename)
+            marker_filepath = blackvuesync.get_failed_marker_filepath(
+                dest, None, filename
+            )
+            assert os.path.exists(marker_filepath)
+
+            blackvuesync.remove_failed_marker(dest, None, filename)
+            assert not os.path.exists(marker_filepath)
+
+    def test_remove_failed_marker_nonexistent(self) -> None:
+        """verifies that removing a nonexistent marker does not error."""
+        with tempfile.TemporaryDirectory() as dest:
+            blackvuesync.remove_failed_marker(dest, None, "20181029_131513_NF.mp4")
+
+    def test_is_download_blocked_by_failure_no_marker(self) -> None:
+        """verifies that downloads are not blocked when no marker exists."""
+        with tempfile.TemporaryDirectory() as dest:
+            assert not blackvuesync.is_download_blocked_by_failure(
+                dest, None, "20181029_131513_NF.mp4"
+            )
+
+    def test_is_download_blocked_by_failure_recent_marker(self) -> None:
+        """verifies that downloads are blocked when a recent marker exists."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original = blackvuesync.retry_failed_after
+
+            try:
+                blackvuesync.retry_failed_after = datetime.timedelta(days=1)
+                blackvuesync.mark_download_failed(dest, None, filename)
+
+                assert blackvuesync.is_download_blocked_by_failure(
+                    dest, None, filename
+                )
+            finally:
+                blackvuesync.retry_failed_after = original
+
+    def test_is_download_blocked_by_failure_stale_marker(self) -> None:
+        """verifies that downloads are not blocked when the marker is stale."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original = blackvuesync.retry_failed_after
+
+            try:
+                marker_filepath = blackvuesync.get_failed_marker_filepath(
+                    dest, None, filename
+                )
+                old_time = datetime.datetime.now() - datetime.timedelta(hours=25)
+                with open(marker_filepath, "w", encoding="utf-8") as f:
+                    f.write(old_time.isoformat())
+
+                blackvuesync.retry_failed_after = datetime.timedelta(days=1)
+
+                assert not blackvuesync.is_download_blocked_by_failure(
+                    dest, None, filename
+                )
+            finally:
+                blackvuesync.retry_failed_after = original
+
+    def test_is_download_blocked_by_failure_corrupted_marker(self) -> None:
+        """verifies that corrupted markers are treated as stale."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+
+            marker_filepath = blackvuesync.get_failed_marker_filepath(
+                dest, None, filename
+            )
+            with open(marker_filepath, "w", encoding="utf-8") as f:
+                f.write("not a valid timestamp")
+
+            assert not blackvuesync.is_download_blocked_by_failure(
+                dest, None, filename
+            )
+
+    def test_marker_in_grouping_directory(self) -> None:
+        """verifies markers work within grouping subdirectories."""
+        with tempfile.TemporaryDirectory() as dest:
+            group_name = "2018-10-29"
+            filename = "20181029_131513_NF.mp4"
+            os.makedirs(os.path.join(dest, group_name))
+
+            blackvuesync.mark_download_failed(dest, group_name, filename)
+
+            marker_filepath = blackvuesync.get_failed_marker_filepath(
+                dest, group_name, filename
+            )
+            assert os.path.exists(marker_filepath)
+            assert group_name in marker_filepath
+
+            original = blackvuesync.retry_failed_after
+            try:
+                blackvuesync.retry_failed_after = datetime.timedelta(days=1)
+                assert blackvuesync.is_download_blocked_by_failure(
+                    dest, group_name, filename
+                )
+            finally:
+                blackvuesync.retry_failed_after = original
+
+            blackvuesync.remove_failed_marker(dest, group_name, filename)
+            assert not os.path.exists(marker_filepath)
