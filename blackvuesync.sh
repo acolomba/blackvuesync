@@ -29,8 +29,11 @@ cron="${CRON:+--cron}"
 # dry-run option if DRY_RUN set to anything
 dry_run="${DRY_RUN:+--dry-run}"
 
+# retry-failed-after option if RETRY_FAILED_AFTER set
+retry_failed_after=${RETRY_FAILED_AFTER:+--retry-failed-after $RETRY_FAILED_AFTER}
+
 # session key option if AFFINITY_KEY set
 affinity_key="${AFFINITY_KEY:+--affinity-key $AFFINITY_KEY}"
 
 /blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
-    ${quiet} ${cron} ${dry_run} ${affinity_key}
+    ${quiet} ${cron} ${dry_run} ${affinity_key} ${retry_failed_after}
