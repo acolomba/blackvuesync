@@ -85,13 +85,13 @@ socket_timeout = None  # pylint: disable=invalid-name
 dry_run = None  # pylint: disable=invalid-name
 
 # duration to wait before retrying a failed download
-retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: disable=invalid-name
+retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: disable=invalid-name  # fmt: skip
 
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
 
 # duration regex for --keep and --retry-failed-after
-duration_re = re.compile(r"""(?P<range>\d+)(?P<unit>[hdw]?)""")
+duration_re = re.compile(r"""(?P<range>\d+)(?P<unit>[shdw]?)""")
 
 # keep and cutoff date; only recordings from this date on are downloaded and kept
 cutoff_date: datetime.date | None = None  # pylint: disable=invalid-name
@@ -121,6 +121,8 @@ def parse_duration(duration: str) -> datetime.timedelta:
 
     duration_unit = duration_match.group("unit") or "d"
 
+    if duration_unit == "s":
+        return datetime.timedelta(seconds=duration_range)
     if duration_unit == "h":
         return datetime.timedelta(hours=duration_range)
     if duration_unit == "d":

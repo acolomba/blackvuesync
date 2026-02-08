@@ -413,6 +413,8 @@ def test_sort_recordings(
 @pytest.mark.parametrize(
     "duration, expected_timedelta",
     [
+        ("1s", datetime.timedelta(seconds=1)),
+        ("30s", datetime.timedelta(seconds=30)),
         ("1h", datetime.timedelta(hours=1)),
         ("12h", datetime.timedelta(hours=12)),
         ("1d", datetime.timedelta(days=1)),
@@ -428,7 +430,7 @@ def test_parse_duration(duration: str, expected_timedelta: datetime.timedelta) -
 
 @pytest.mark.parametrize(
     "duration",
-    ["0d", "0h", "abc", ""],
+    ["0s", "0d", "0h", "abc", ""],
 )
 def test_parse_duration_invalid(duration: str) -> None:
     with pytest.raises(RuntimeError):
@@ -506,9 +508,7 @@ class TestFailedMarker:
                 blackvuesync.retry_failed_after = datetime.timedelta(days=1)
                 blackvuesync.mark_download_failed(dest, None, filename)
 
-                assert blackvuesync.is_download_blocked_by_failure(
-                    dest, None, filename
-                )
+                assert blackvuesync.is_download_blocked_by_failure(dest, None, filename)
             finally:
                 blackvuesync.retry_failed_after = original
 
@@ -545,9 +545,7 @@ class TestFailedMarker:
             with open(marker_filepath, "w", encoding="utf-8") as f:
                 f.write("not a valid timestamp")
 
-            assert not blackvuesync.is_download_blocked_by_failure(
-                dest, None, filename
-            )
+            assert not blackvuesync.is_download_blocked_by_failure(dest, None, filename)
 
     def test_marker_in_grouping_directory(self) -> None:
         """verifies markers work within grouping subdirectories."""
