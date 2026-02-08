@@ -218,7 +218,7 @@ def after_scenario(context: Context, scenario: Scenario) -> None:
     # in docker mode, each scenario uses affinity key isolation, and container is destroyed in after_all
     if hasattr(context, "mock_dashcam"):
         # direct mode: clears via method call
-        context.mock_dashcam.clear_recordings(context.scenario_token)
+        context.mock_dashcam.clear_session(context.scenario_token)
 
     # if scenario failed, preserve the directory for debugging
     if scenario.status == "failed":
