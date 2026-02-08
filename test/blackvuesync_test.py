@@ -432,15 +432,25 @@ def test_parse_duration(duration: str, expected_timedelta: datetime.timedelta) -
 
 @pytest.mark.parametrize(
     "duration",
-    ["0s", "0d", "0h", "abc", ""],
+    ["0s", "0d", "0h", "0w", "abc", ""],
 )
 def test_parse_duration_invalid(duration: str) -> None:
     with pytest.raises(RuntimeError):
         blackvuesync.parse_duration(duration)
 
 
+@pytest.mark.parametrize(
+    "keep",
+    ["1s", "1h", "12h", "30s"],
+)
+def test_calc_cutoff_date_rejects_sub_day_units(keep: str) -> None:
+    """verifies that --keep rejects sub-day units (s, h)."""
+    with pytest.raises(RuntimeError, match="does not support unit"):
+        blackvuesync.calc_cutoff_date(keep)
+
+
 class TestFailedMarker:
-    """tests for failure marker functionality"""
+    """tests for failure marker functionality."""
 
     def test_get_failed_marker_filepath_no_grouping(self) -> None:
         """verifies the marker filepath without grouping."""
@@ -596,6 +606,30 @@ class TestFailedMarker:
                 second_timestamp = f.read().strip()
 
             assert second_timestamp > first_timestamp
+
+    def test_dry_run_ignores_failure_markers(self) -> None:
+        """verifies that dry-run reports files as would-download even with failure markers."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_dry_run = blackvuesync.dry_run
+            original_retry = blackvuesync.retry_failed_after
+
+            try:
+                blackvuesync.retry_failed_after = datetime.timedelta(days=1)
+                blackvuesync.mark_download_failed(dest, None, filename)
+
+                # enables dry-run mode
+                blackvuesync.dry_run = True
+
+                downloaded, _ = blackvuesync.download_file(
+                    "http://127.0.0.1:0", filename, dest, None
+                )
+
+                # dry-run returns True (would download) despite failure marker
+                assert downloaded is True
+            finally:
+                blackvuesync.dry_run = original_dry_run
+                blackvuesync.retry_failed_after = original_retry
 
     def test_retention_removes_failed_markers(self) -> None:
         """verifies that retention cleanup removes .failed markers alongside recordings."""
