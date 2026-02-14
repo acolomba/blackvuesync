@@ -127,6 +127,7 @@ Other options:
 * `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
 * `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 * `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
+* `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
 * `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 
@@ -229,6 +230,7 @@ Other parameters:
 * `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
 * `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
 * `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
+* `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
 * `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
 * `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
 * `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
