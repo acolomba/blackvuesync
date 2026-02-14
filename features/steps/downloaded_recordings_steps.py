@@ -103,10 +103,10 @@ def assert_all_recordings_downloaded(context: Context) -> None:
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
-    # gets expected recordings from context, filtering out skipped metadata
+    # gets expected recordings from context
     expected_recordings = set(context.expected_recordings)
 
-    # filters out skipped metadata file extensions
+    # excludes skipped metadata extensions from expected recordings
     skip_metadata: set[str] = getattr(context, "skip_metadata", set())
     skip_extensions: set[str] = set()
     if "t" in skip_metadata:
@@ -160,7 +160,7 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
     assert_that(downloaded_recording_files, has_items(*context.downloaded_recordings))
 
 
-@then("only mp4 files are downloaded")
+@then("the destination contains only mp4 files")
 def assert_only_mp4_files(context: Context) -> None:
     """verifies that only .mp4 files exist in the destination."""
     non_mp4_files = [
@@ -175,7 +175,7 @@ def assert_only_mp4_files(context: Context) -> None:
     )
 
 
-@then("no gps files are downloaded")
+@then("the destination contains no gps files")
 def assert_no_gps_files(context: Context) -> None:
     """verifies that no .gps files exist in the destination."""
     gps_files = [

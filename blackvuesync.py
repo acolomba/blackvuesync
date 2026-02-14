@@ -90,6 +90,7 @@ retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: d
 
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
+
 # metadata types to skip downloading
 skip_metadata: set[str] = set()  # pylint: disable=invalid-name
 
@@ -120,10 +121,9 @@ def parse_skip_metadata(value: str) -> set[str]:
     types = set(value)
     invalid = types - VALID_METADATA_TYPES
     if invalid:
-        invalid_char = sorted(invalid)[0]
         raise argparse.ArgumentTypeError(
-            f"invalid value '{value}': unknown metadata type '{invalid_char}'"
-            f" (valid: t, 3, g)"
+            f"invalid value '{value}': unknown metadata type(s)"
+            f" '{', '.join(sorted(invalid))}' (valid: t, 3, g)"
         )
     return types
 
@@ -530,6 +530,10 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
             base_url, thm_filename, destination, recording.group_name
         )
         any_downloaded |= downloaded
+    else:
+        logger.debug(
+            "Skipping thumbnail : %s (--skip-metadata)", recording.base_filename
+        )
 
     # downloads the accelerometer data
     if "3" not in skip_metadata:
@@ -538,6 +542,10 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
             base_url, tgf_filename, destination, recording.group_name
         )
         any_downloaded |= downloaded
+    else:
+        logger.debug(
+            "Skipping accelerometer : %s (--skip-metadata)", recording.base_filename
+        )
 
     # downloads the gps data
     if "g" not in skip_metadata:
@@ -546,6 +554,8 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
             base_url, gps_filename, destination, recording.group_name
         )
         any_downloaded |= downloaded
+    else:
+        logger.debug("Skipping gps : %s (--skip-metadata)", recording.base_filename)
 
     # logs if any part of a recording was downloaded (or would have been)
     if any_downloaded:
@@ -1001,6 +1011,8 @@ def main() -> int:
     dry_run = args.dry_run
     affinity_key = args.affinity_key
     skip_metadata = args.skip_metadata
+    if skip_metadata:
+        logger.info("Skipping metadata types : %s", ", ".join(sorted(skip_metadata)))
     if dry_run:
         logger.info("DRY RUN No action will be taken.")
 
