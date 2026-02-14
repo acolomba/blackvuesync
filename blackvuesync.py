@@ -424,6 +424,9 @@ def download_file(
         logger.debug("Skipping recently failed download : %s", filename)
         return False, None
 
+    # clears any prior failure marker now that we've decided to retry
+    remove_download_failed_marker(destination, group_name, filename)
+
     temp_filepath = os.path.join(destination, f".{filename}")
     if os.path.exists(temp_filepath):
         logger.debug("Found incomplete download : %s", temp_filepath)
@@ -451,9 +454,6 @@ def download_file(
             elapsed_s = end - start
 
         os.rename(temp_filepath, destination_filepath)
-
-        # successful download; removes any existing failure marker
-        remove_download_failed_marker(destination, group_name, filename)
 
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
         speed_str = format_natural_speed(speed_bps)
