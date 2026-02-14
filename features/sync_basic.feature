@@ -38,4 +38,4 @@ Feature: Basic sync operations
     When blackvuesync runs with skip-metadata "g"
     Then blackvuesync exits with code 0
     Then the destination contains no gps files
-    Then all the recordings are downloaded
+    Then all the expected recordings are downloaded

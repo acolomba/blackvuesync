@@ -669,17 +669,15 @@ class TestFailedMarker:
         ("3g", {"3", "g"}),
         ("tg", {"t", "g"}),
         ("t3", {"t", "3"}),
+        ("ttt", {"t"}),
+        ("t3gt3g", {"t", "3", "g"}),
     ],
 )
 def test_parse_skip_metadata(value: str, expected: set[str]) -> None:
-    from blackvuesync import parse_skip_metadata
-
-    assert parse_skip_metadata(value) == expected
+    assert blackvuesync.parse_skip_metadata(value) == expected
 
 
 @pytest.mark.parametrize("value", ["x", "t3x", "abc", "T", "mp4"])
 def test_parse_skip_metadata_invalid(value: str) -> None:
-    from blackvuesync import parse_skip_metadata
-
     with pytest.raises(argparse.ArgumentTypeError):
-        parse_skip_metadata(value)
+        blackvuesync.parse_skip_metadata(value)

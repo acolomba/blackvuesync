@@ -103,17 +103,36 @@ def assert_all_recordings_downloaded(context: Context) -> None:
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
+    # checks that all expected recordings are downloaded
+    assert_that(downloaded_recording_files, has_items(*context.expected_recordings))
+
+
+@then("all the expected recordings are downloaded")
+def assert_all_expected_recordings_downloaded(context: Context) -> None:
+    """verifies that all non-skipped recordings from the mock dashcam exist in the destination."""
+    # validates prerequisites
+    if not hasattr(context, "expected_recordings"):
+        raise RuntimeError(
+            "Cannot verify recordings: test scenario is missing 'Given recordings...' step. Expected recordings were never configured."
+        )
+
+    # gets all recording files in destination
+    downloaded_recording_files = {
+        f.name
+        for f in context.dest_dir.rglob("*")
+        if f.is_file() and recording_filename_re.match(f.name)
+    }
+
     # gets expected recordings from context
     expected_recordings = set(context.expected_recordings)
 
     # excludes skipped metadata extensions from expected recordings
-    skip_metadata: set[str] = getattr(context, "skip_metadata", set())
     skip_extensions: set[str] = set()
-    if "t" in skip_metadata:
+    if "t" in context.skip_metadata:
         skip_extensions.add(".thm")
-    if "3" in skip_metadata:
+    if "3" in context.skip_metadata:
         skip_extensions.add(".3gf")
-    if "g" in skip_metadata:
+    if "g" in context.skip_metadata:
         skip_extensions.add(".gps")
 
     if skip_extensions:
