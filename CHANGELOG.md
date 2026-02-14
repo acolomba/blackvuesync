@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.2.0
+
+* Add `--retry-failed-after` option to retry failed downloads after a configurable delay. (#58)
+
 ## 2.1.1
 
 * Switch to semver.
