@@ -89,6 +89,7 @@ class MockDashcam:
         self.server_thread: threading.Thread | None = None
         self._sessions_lock = threading.RLock()
         self._recordings_by_session: defaultdict[str, list[str]] = defaultdict(list)
+        self._download_errors_by_session: defaultdict[str, set[str]] = defaultdict(set)
 
         # sets up routes
         self._setup_routes()
@@ -111,6 +112,16 @@ class MockDashcam:
         """thread-safe write access to session-specific recordings"""
         with self._sessions_lock:
             self._recordings_by_session[affinity_key] = recordings
+
+    def _get_download_errors(self, affinity_key: str) -> set[str]:
+        """thread-safe read access to session-specific download errors"""
+        with self._sessions_lock:
+            return self._download_errors_by_session[affinity_key].copy()
+
+    def _set_download_errors(self, affinity_key: str, filenames: set[str]) -> None:
+        """thread-safe write access to session-specific download errors"""
+        with self._sessions_lock:
+            self._download_errors_by_session[affinity_key] = filenames
 
     def _setup_routes(self) -> None:
         """sets up flask routes"""
@@ -149,6 +160,12 @@ class MockDashcam:
             if filename not in recordings:
                 logger.debug("Response: 404 Not Found (not in session recordings)")
                 return flask.abort(404)
+
+            # checks if file is configured to fail
+            download_errors = self._get_download_errors(affinity_key)
+            if filename in download_errors:
+                logger.debug("Response: 500 Internal Server Error (configured error)")
+                flask.abort(500)
 
             if recording := to_recording(filename):
                 # uses the mock file with the same extension
@@ -225,6 +242,31 @@ class MockDashcam:
 
             return response, 201
 
+        @self.app.route("/mock/downloads/errors", methods=["POST"])
+        def set_download_errors() -> tuple[dict[str, Any], int]:
+            """configures which files return download errors"""
+            data = flask.request.get_json() or {}
+            logger.debug("POST /mock/downloads/errors")
+            logger.debug("Request body: %s", data)
+            affinity_key = self._get_affinity_key()
+
+            filenames = set(data.get("filenames", []))
+            self._set_download_errors(affinity_key, filenames)
+
+            response = {"status": "configured", "count": len(filenames)}
+            logger.debug("Response body: %s", response)
+
+            return response, 201
+
+        @self.app.route("/mock/downloads/errors", methods=["DELETE"])
+        def clear_download_errors_route() -> tuple[dict[str, str], int]:
+            """clears download errors for the session"""
+            logger.debug("DELETE /mock/downloads/errors")
+            affinity_key = self._get_affinity_key()
+            self._set_download_errors(affinity_key, set())
+            logger.debug("Response body: {'status': 'cleared'}")
+            return {"status": "cleared"}, 200
+
     def start(self) -> None:
         """starts the flask server in a background thread"""
         if self.server_thread is not None:
@@ -283,12 +325,12 @@ class MockDashcam:
         # daemon threads will terminate automatically when the test process exits
         self.server_thread = None
 
-    def clear_recordings(self, affinity_key: str | None = None) -> None:
-        """clears recordings (for cleanup)"""
+    def clear_session(self, affinity_key: str | None = None) -> None:
+        """clears all session state (recordings, download errors) for cleanup"""
         with self._sessions_lock:
             if affinity_key:
-                # clears only session-specific recordings
                 self._recordings_by_session[affinity_key] = []
+                self._download_errors_by_session[affinity_key] = set()
             else:
-                # clears all recordings across all sessions
                 self._recordings_by_session.clear()
+                self._download_errors_by_session.clear()
