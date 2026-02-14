@@ -484,7 +484,7 @@ class TestFailedMarker:
             # verifies content is a valid ISO timestamp
             datetime.datetime.fromisoformat(content)
 
-    def test_remove_failed_marker(self) -> None:
+    def test_remove_download_failed_marker(self) -> None:
         """verifies that removing a marker works."""
         with tempfile.TemporaryDirectory() as dest:
             filename = "20181029_131513_NF.mp4"
@@ -495,13 +495,15 @@ class TestFailedMarker:
             )
             assert os.path.exists(marker_filepath)
 
-            blackvuesync.remove_failed_marker(dest, None, filename)
+            blackvuesync.remove_download_failed_marker(dest, None, filename)
             assert not os.path.exists(marker_filepath)
 
-    def test_remove_failed_marker_nonexistent(self) -> None:
+    def test_remove_download_failed_marker_nonexistent(self) -> None:
         """verifies that removing a nonexistent marker does not error."""
         with tempfile.TemporaryDirectory() as dest:
-            blackvuesync.remove_failed_marker(dest, None, "20181029_131513_NF.mp4")
+            blackvuesync.remove_download_failed_marker(
+                dest, None, "20181029_131513_NF.mp4"
+            )
 
     def test_is_download_blocked_by_failure_no_marker(self) -> None:
         """verifies that downloads are not blocked when no marker exists."""
@@ -583,7 +585,7 @@ class TestFailedMarker:
             finally:
                 blackvuesync.retry_failed_after = original
 
-            blackvuesync.remove_failed_marker(dest, group_name, filename)
+            blackvuesync.remove_download_failed_marker(dest, group_name, filename)
             assert not os.path.exists(marker_filepath)
 
     def test_mark_download_failed_refreshes_timestamp(self) -> None:

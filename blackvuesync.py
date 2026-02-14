@@ -383,7 +383,7 @@ def mark_download_failed(
         )
 
 
-def remove_failed_marker(
+def remove_download_failed_marker(
     destination: str, group_name: str | None, filename: str
 ) -> None:
     """removes a .failed marker file if it exists"""
@@ -453,7 +453,7 @@ def download_file(
         os.rename(temp_filepath, destination_filepath)
 
         # successful download; removes any existing failure marker
-        remove_failed_marker(destination, group_name, filename)
+        remove_download_failed_marker(destination, group_name, filename)
 
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
         speed_str = format_natural_speed(speed_bps)
