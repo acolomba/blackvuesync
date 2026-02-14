@@ -984,13 +984,13 @@ def main() -> int:
     lf_fd = None
 
     try:
-        retry_failed_after = parse_duration(
-            args.retry_failed_after, label="RETRY_FAILED_AFTER"
-        )
-
         if args.keep:
             cutoff_date = calc_cutoff_date(args.keep)
             logger.info("Recording cutoff date : %s", cutoff_date)
+
+        retry_failed_after = parse_duration(
+            args.retry_failed_after, label="RETRY_FAILED_AFTER"
+        )
 
         # prepares the local file destination
         destination = args.destination or os.getcwd()
