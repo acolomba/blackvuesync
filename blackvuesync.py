@@ -109,6 +109,23 @@ dashcam_unavailable_errno_codes = (
 today = datetime.date.today()
 
 
+# valid metadata type codes for --skip-metadata
+VALID_METADATA_TYPES = frozenset("t3g")
+
+
+def parse_skip_metadata(value: str) -> set[str]:
+    """parses and validates the --skip-metadata argument"""
+    types = set(value)
+    invalid = types - VALID_METADATA_TYPES
+    if invalid:
+        invalid_char = sorted(invalid)[0]
+        raise argparse.ArgumentTypeError(
+            f"invalid value '{value}': unknown metadata type '{invalid_char}'"
+            f" (valid: t, 3, g)"
+        )
+    return types
+
+
 def parse_duration(
     duration: str, *, label: str = "DURATION", allowed_units: str = "shdw"
 ) -> datetime.timedelta:

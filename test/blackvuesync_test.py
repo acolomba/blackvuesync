@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import datetime
 import glob
 import os
@@ -656,3 +657,29 @@ class TestFailedMarker:
             assert f"{base_filename}_NF.mp4" in matched_names
             assert f"{base_filename}_NF.thm" in matched_names
             assert f"{base_filename}_NF.mp4.failed" in matched_names
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("t", {"t"}),
+        ("3", {"3"}),
+        ("g", {"g"}),
+        ("t3g", {"t", "3", "g"}),
+        ("3g", {"3", "g"}),
+        ("tg", {"t", "g"}),
+        ("t3", {"t", "3"}),
+    ],
+)
+def test_parse_skip_metadata(value: str, expected: set[str]) -> None:
+    from blackvuesync import parse_skip_metadata
+
+    assert parse_skip_metadata(value) == expected
+
+
+@pytest.mark.parametrize("value", ["x", "t3x", "abc", "T", "mp4"])
+def test_parse_skip_metadata_invalid(value: str) -> None:
+    from blackvuesync import parse_skip_metadata
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_skip_metadata(value)
