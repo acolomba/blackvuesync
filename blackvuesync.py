@@ -522,27 +522,30 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
     any_downloaded |= downloaded
 
     # downloads the thumbnail file
-    thm_filename = (
-        f"{recording.base_filename}_{recording.type}{recording.direction}.thm"
-    )
-    downloaded, _ = download_file(
-        base_url, thm_filename, destination, recording.group_name
-    )
-    any_downloaded |= downloaded
+    if "t" not in skip_metadata:
+        thm_filename = (
+            f"{recording.base_filename}_{recording.type}{recording.direction}.thm"
+        )
+        downloaded, _ = download_file(
+            base_url, thm_filename, destination, recording.group_name
+        )
+        any_downloaded |= downloaded
 
     # downloads the accelerometer data
-    tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
-    downloaded, _ = download_file(
-        base_url, tgf_filename, destination, recording.group_name
-    )
-    any_downloaded |= downloaded
+    if "3" not in skip_metadata:
+        tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
+        downloaded, _ = download_file(
+            base_url, tgf_filename, destination, recording.group_name
+        )
+        any_downloaded |= downloaded
 
     # downloads the gps data
-    gps_filename = f"{recording.base_filename}_{recording.type}.gps"
-    downloaded, _ = download_file(
-        base_url, gps_filename, destination, recording.group_name
-    )
-    any_downloaded |= downloaded
+    if "g" not in skip_metadata:
+        gps_filename = f"{recording.base_filename}_{recording.type}.gps"
+        downloaded, _ = download_file(
+            base_url, gps_filename, destination, recording.group_name
+        )
+        any_downloaded |= downloaded
 
     # logs if any part of a recording was downloaded (or would have been)
     if any_downloaded:

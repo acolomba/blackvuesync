@@ -26,3 +26,16 @@ Feature: Basic sync operations
     When blackvuesync runs
     Then blackvuesync exits with code 0
     Then the destination is empty
+
+  Scenario: Sync recordings skipping all metadata files
+    Given recordings for the past "1d" of types "N", directions "F"
+    When blackvuesync runs with skip-metadata "t3g"
+    Then blackvuesync exits with code 0
+    Then only mp4 files are downloaded
+
+  Scenario: Sync recordings skipping only gps files
+    Given recordings for the past "1d" of types "N", directions "F"
+    When blackvuesync runs with skip-metadata "g"
+    Then blackvuesync exits with code 0
+    Then no gps files are downloaded
+    Then all the recordings are downloaded

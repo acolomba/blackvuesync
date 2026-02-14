@@ -103,8 +103,25 @@ def assert_all_recordings_downloaded(context: Context) -> None:
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
-    # gets expected recordings from context
+    # gets expected recordings from context, filtering out skipped metadata
     expected_recordings = set(context.expected_recordings)
+
+    # filters out skipped metadata file extensions
+    skip_metadata: set[str] = getattr(context, "skip_metadata", set())
+    skip_extensions: set[str] = set()
+    if "t" in skip_metadata:
+        skip_extensions.add(".thm")
+    if "3" in skip_metadata:
+        skip_extensions.add(".3gf")
+    if "g" in skip_metadata:
+        skip_extensions.add(".gps")
+
+    if skip_extensions:
+        expected_recordings = {
+            r
+            for r in expected_recordings
+            if not any(r.endswith(ext) for ext in skip_extensions)
+        }
 
     # checks that all expected recordings are downloaded
     assert_that(downloaded_recording_files, has_items(*expected_recordings))
@@ -141,3 +158,33 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
 
     # verifies all downloaded recordings still exist
     assert_that(downloaded_recording_files, has_items(*context.downloaded_recordings))
+
+
+@then("only mp4 files are downloaded")
+def assert_only_mp4_files(context: Context) -> None:
+    """verifies that only .mp4 files exist in the destination."""
+    non_mp4_files = [
+        f.name
+        for f in context.dest_dir.rglob("*")
+        if f.is_file() and not f.name.startswith(".") and not f.name.endswith(".mp4")
+    ]
+    assert_that(
+        non_mp4_files,
+        empty(),
+        f"Expected only .mp4 files, but found: {non_mp4_files}",
+    )
+
+
+@then("no gps files are downloaded")
+def assert_no_gps_files(context: Context) -> None:
+    """verifies that no .gps files exist in the destination."""
+    gps_files = [
+        f.name
+        for f in context.dest_dir.rglob("*")
+        if f.is_file() and f.name.endswith(".gps")
+    ]
+    assert_that(
+        gps_files,
+        empty(),
+        f"Expected no .gps files, but found: {gps_files}",
+    )
