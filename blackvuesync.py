@@ -90,6 +90,8 @@ retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: d
 
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
+# metadata types to skip downloading
+skip_metadata: set[str] = set()  # pylint: disable=invalid-name
 
 # duration regex for --keep and --retry-failed-after
 duration_re = re.compile(r"""(?P<range>\d+)(?P<unit>[shdw]?)""")
@@ -938,6 +940,15 @@ def parse_args() -> argparse.Namespace:
         help="waits at least the given duration before retrying a failed download; defaults to days, but can suffix with s, h, d, w for seconds, hours, days or weeks respectively; defaults to 1d",
     )
     arg_parser.add_argument(
+        "--skip-metadata",
+        metavar="TYPES",
+        default=set(),
+        type=parse_skip_metadata,
+        help="skips downloading metadata file types; t=thumbnail (.thm),"
+        " 3=accelerometer (.3gf), g=gps (.gps); e.g. --skip-metadata t3g"
+        " skips all metadata files",
+    )
+    arg_parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="increases verbosity"
     )
     arg_parser.add_argument(
@@ -980,11 +991,13 @@ def main() -> int:
     global socket_timeout
     global affinity_key
     global retry_failed_after
+    global skip_metadata
 
     args = parse_args()
 
     dry_run = args.dry_run
     affinity_key = args.affinity_key
+    skip_metadata = args.skip_metadata
     if dry_run:
         logger.info("DRY RUN No action will be taken.")
 
