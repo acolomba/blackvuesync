@@ -38,6 +38,7 @@ import stat
 import sys
 import time
 import urllib
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
