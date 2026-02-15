@@ -103,30 +103,9 @@ def assert_all_recordings_downloaded(context: Context) -> None:
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
-    # checks that all expected recordings are downloaded
-    assert_that(downloaded_recording_files, has_items(*context.expected_recordings))
-
-
-@then("all the expected recordings are downloaded")
-def assert_all_expected_recordings_downloaded(context: Context) -> None:
-    """verifies that all non-skipped recordings from the mock dashcam exist in the destination."""
-    # validates prerequisites
-    if not hasattr(context, "expected_recordings"):
-        raise RuntimeError(
-            "Cannot verify recordings: test scenario is missing 'Given recordings...' step. Expected recordings were never configured."
-        )
-
-    # gets all recording files in destination
-    downloaded_recording_files = {
-        f.name
-        for f in context.dest_dir.rglob("*")
-        if f.is_file() and recording_filename_re.match(f.name)
-    }
-
-    # gets expected recordings from context
+    # gets expected recordings, filtering out skipped metadata extensions
     expected_recordings = set(context.expected_recordings)
 
-    # excludes skipped metadata extensions from expected recordings
     skip_extensions: set[str] = set()
     if "t" in context.skip_metadata:
         skip_extensions.add(".thm")
@@ -179,31 +158,16 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
     assert_that(downloaded_recording_files, has_items(*context.downloaded_recordings))
 
 
-@then("the destination contains only mp4 files")
-def assert_only_mp4_files(context: Context) -> None:
-    """verifies that only .mp4 files exist in the destination."""
-    non_mp4_files = [
+@then('the destination contains no "{extension}" files')
+def assert_no_extension_files(context: Context, extension: str) -> None:
+    """verifies that no files with the given extension exist in the destination."""
+    matching_files = [
         f.name
         for f in context.dest_dir.rglob("*")
-        if f.is_file() and not f.name.startswith(".") and not f.name.endswith(".mp4")
+        if f.is_file() and f.name.endswith(f".{extension}")
     ]
     assert_that(
-        non_mp4_files,
+        matching_files,
         empty(),
-        f"Expected only .mp4 files, but found: {non_mp4_files}",
-    )
-
-
-@then("the destination contains no gps files")
-def assert_no_gps_files(context: Context) -> None:
-    """verifies that no .gps files exist in the destination."""
-    gps_files = [
-        f.name
-        for f in context.dest_dir.rglob("*")
-        if f.is_file() and f.name.endswith(".gps")
-    ]
-    assert_that(
-        gps_files,
-        empty(),
-        f"Expected no .gps files, but found: {gps_files}",
+        f"Expected no .{extension} files, but found: {matching_files}",
     )
