@@ -1,6 +1,6 @@
 [project]
 name = "blackvuesync"
-version = "2.2.0a1"
+version = "2.2.0a2"
 description = "Synchronize recordings from BlackVue dashcams to a local directory"
 readme = "README.md"
 requires-python = ">=3.9"

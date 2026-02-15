@@ -10,7 +10,7 @@ This project is on GitHub: <https://github.com/acolomba/blackvuesync>
 
 - Prefer using the LSP plugin over textual search.
 - When a sandbox operation fails, stop to ask the user. Avoid disabling the sandbox.
-- Create plans under the `plans/` directory.
+- Create plans under the `docs/plans/` directory.
 
 ## Development Setup
 

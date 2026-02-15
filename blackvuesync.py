@@ -21,7 +21,7 @@ from __future__ import annotations
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "2.2.0a1"
+__version__ = "2.2.0a2"
 
 import argparse
 import datetime
@@ -91,6 +91,9 @@ retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: d
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
 
+# metadata types to skip downloading
+skip_metadata: set[str] = set()  # pylint: disable=invalid-name
+
 # duration regex for --keep and --retry-failed-after
 duration_re = re.compile(r"""(?P<range>\d+)(?P<unit>[shdw]?)""")
 
@@ -107,6 +110,22 @@ dashcam_unavailable_errno_codes = (
 
 # for unit testing
 today = datetime.date.today()
+
+
+# valid metadata type codes for --skip-metadata
+VALID_METADATA_TYPES = frozenset("t3g")
+
+
+def parse_skip_metadata(value: str) -> set[str]:
+    """parses and validates the --skip-metadata argument"""
+    types = set(value)
+    invalid = types - VALID_METADATA_TYPES
+    if invalid:
+        raise argparse.ArgumentTypeError(
+            f"invalid value '{value}': unknown metadata type(s)"
+            f" '{', '.join(sorted(invalid))}' (valid: t, 3, g)"
+        )
+    return types
 
 
 def parse_duration(
@@ -503,27 +522,40 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
     any_downloaded |= downloaded
 
     # downloads the thumbnail file
-    thm_filename = (
-        f"{recording.base_filename}_{recording.type}{recording.direction}.thm"
-    )
-    downloaded, _ = download_file(
-        base_url, thm_filename, destination, recording.group_name
-    )
-    any_downloaded |= downloaded
+    if "t" not in skip_metadata:
+        thm_filename = (
+            f"{recording.base_filename}_{recording.type}{recording.direction}.thm"
+        )
+        downloaded, _ = download_file(
+            base_url, thm_filename, destination, recording.group_name
+        )
+        any_downloaded |= downloaded
+    else:
+        logger.debug(
+            "Skipping thumbnail : %s (--skip-metadata)", recording.base_filename
+        )
 
     # downloads the accelerometer data
-    tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
-    downloaded, _ = download_file(
-        base_url, tgf_filename, destination, recording.group_name
-    )
-    any_downloaded |= downloaded
+    if "3" not in skip_metadata:
+        tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
+        downloaded, _ = download_file(
+            base_url, tgf_filename, destination, recording.group_name
+        )
+        any_downloaded |= downloaded
+    else:
+        logger.debug(
+            "Skipping accelerometer : %s (--skip-metadata)", recording.base_filename
+        )
 
     # downloads the gps data
-    gps_filename = f"{recording.base_filename}_{recording.type}.gps"
-    downloaded, _ = download_file(
-        base_url, gps_filename, destination, recording.group_name
-    )
-    any_downloaded |= downloaded
+    if "g" not in skip_metadata:
+        gps_filename = f"{recording.base_filename}_{recording.type}.gps"
+        downloaded, _ = download_file(
+            base_url, gps_filename, destination, recording.group_name
+        )
+        any_downloaded |= downloaded
+    else:
+        logger.debug("Skipping gps : %s (--skip-metadata)", recording.base_filename)
 
     # logs if any part of a recording was downloaded (or would have been)
     if any_downloaded:
@@ -921,6 +953,15 @@ def parse_args() -> argparse.Namespace:
         help="waits at least the given duration before retrying a failed download; defaults to days, but can suffix with s, h, d, w for seconds, hours, days or weeks respectively; defaults to 1d",
     )
     arg_parser.add_argument(
+        "--skip-metadata",
+        metavar="TYPES",
+        default=set(),
+        type=parse_skip_metadata,
+        help="skips downloading metadata file types; t=thumbnail (.thm),"
+        " 3=accelerometer (.3gf), g=gps (.gps); e.g. --skip-metadata t3g"
+        " skips all metadata files",
+    )
+    arg_parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="increases verbosity"
     )
     arg_parser.add_argument(
@@ -963,11 +1004,15 @@ def main() -> int:
     global socket_timeout
     global affinity_key
     global retry_failed_after
+    global skip_metadata
 
     args = parse_args()
 
     dry_run = args.dry_run
     affinity_key = args.affinity_key
+    skip_metadata = args.skip_metadata
+    if skip_metadata:
+        logger.info("Skipping metadata types : %s", ", ".join(sorted(skip_metadata)))
     if dry_run:
         logger.info("DRY RUN No action will be taken.")
 

@@ -103,8 +103,23 @@ def assert_all_recordings_downloaded(context: Context) -> None:
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
-    # gets expected recordings from context
+    # gets expected recordings, filtering out skipped metadata extensions
     expected_recordings = set(context.expected_recordings)
+
+    skip_extensions: set[str] = set()
+    if "t" in context.skip_metadata:
+        skip_extensions.add(".thm")
+    if "3" in context.skip_metadata:
+        skip_extensions.add(".3gf")
+    if "g" in context.skip_metadata:
+        skip_extensions.add(".gps")
+
+    if skip_extensions:
+        expected_recordings = {
+            r
+            for r in expected_recordings
+            if not any(r.endswith(ext) for ext in skip_extensions)
+        }
 
     # checks that all expected recordings are downloaded
     assert_that(downloaded_recording_files, has_items(*expected_recordings))
@@ -141,3 +156,18 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
 
     # verifies all downloaded recordings still exist
     assert_that(downloaded_recording_files, has_items(*context.downloaded_recordings))
+
+
+@then('the destination contains no "{extension}" files')
+def assert_no_extension_files(context: Context, extension: str) -> None:
+    """verifies that no files with the given extension exist in the destination."""
+    matching_files = [
+        f.name
+        for f in context.dest_dir.rglob("*")
+        if f.is_file() and f.name.endswith(f".{extension}")
+    ]
+    assert_that(
+        matching_files,
+        empty(),
+        f"Expected no .{extension} files, but found: {matching_files}",
+    )

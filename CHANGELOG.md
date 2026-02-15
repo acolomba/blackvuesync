@@ -3,6 +3,7 @@
 ## 2.2.0
 
 * Add `--retry-failed-after` option to retry failed downloads after a configurable delay. (#58)
+* Add `--skip-metadata` option to skip downloading metadata files (thumbnails, accelerometer, GPS). (#14)
 
 ## 2.1.1
 

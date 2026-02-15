@@ -30,6 +30,7 @@ def execute_blackvuesync(
     cron: bool = False,
     dry_run: bool = False,
     retry_failed_after: str | None = None,
+    skip_metadata: str | None = None,
 ) -> None:
     """executes blackvuesync with specified parameters and stores results in context."""
     implementation = context.config.userdata.get("implementation", "direct")
@@ -51,6 +52,7 @@ def execute_blackvuesync(
             cron,
             dry_run,
             retry_failed_after,
+            skip_metadata,
         )
     else:
         _execute_direct(
@@ -69,6 +71,7 @@ def execute_blackvuesync(
             cron,
             dry_run,
             retry_failed_after,
+            skip_metadata,
         )
 
 
@@ -88,6 +91,7 @@ def _execute_direct(
     cron: bool = False,
     dry_run: bool = False,
     retry_failed_after: str | None = None,
+    skip_metadata: str | None = None,
 ) -> None:
     """executes blackvuesync directly via python."""
     # locates blackvuesync.py
@@ -156,6 +160,9 @@ def _execute_direct(
     if retry_failed_after:
         cmd.extend(["--retry-failed-after", retry_failed_after])
 
+    if skip_metadata:
+        cmd.extend(["--skip-metadata", skip_metadata])
+
     logger.info("Running (direct): %s", cmd)
 
     # prepares environment for coverage collection
@@ -212,6 +219,7 @@ def _execute_docker(
     cron: bool = False,
     dry_run: bool = False,
     retry_failed_after: str | None = None,
+    skip_metadata: str | None = None,
 ) -> None:
     """executes blackvuesync via docker container."""
     # uses address as-is (should be mock dashcam container name on docker network)
@@ -288,6 +296,9 @@ def _execute_docker(
 
     if retry_failed_after:
         container.with_env("RETRY_FAILED_AFTER", retry_failed_after)
+
+    if skip_metadata:
+        container.with_env("SKIP_METADATA", skip_metadata)
 
     logger.info("Starting docker container with image: %s", context.docker_image.tag)
 

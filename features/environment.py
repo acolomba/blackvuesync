@@ -204,6 +204,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.dest_dir = context.scenario_dir / "destination"
     context.dest_dir.mkdir(parents=True, exist_ok=True)
 
+    # skip_metadata defaults to empty; steps that set --skip-metadata will populate it
+    context.skip_metadata = set()
+
     # logs directory
     context.log_dir = context.scenario_dir / "logs"
     context.log_dir.mkdir(parents=True, exist_ok=True)
