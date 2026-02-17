@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import fcntl
 import glob
 import os
 import tempfile
 import time
+import urllib.request
 
 import pytest
 
@@ -681,3 +683,113 @@ def test_parse_skip_metadata(value: str, expected: set[str]) -> None:
 def test_parse_skip_metadata_invalid(value: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
         blackvuesync.parse_skip_metadata(value)
+
+
+def test_download_file_streams_response_in_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies downloads stream body data without calling read() with no chunk size."""
+
+    class FakeResponse:
+        def __init__(self) -> None:
+            self._chunks = [b"abc", b"def", b""]
+
+        def getcode(self) -> int:
+            return 200
+
+        def info(self) -> dict[str, str]:
+            return {"Content-Length": "6"}
+
+        def read(self, size: int = -1) -> bytes:
+            if size == -1:
+                raise AssertionError("read() must be called with a chunk size")
+            return self._chunks.pop(0)
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(urllib.request, "urlopen", lambda _request: FakeResponse())
+
+        original_dry_run = blackvuesync.dry_run
+        try:
+            blackvuesync.dry_run = False
+            downloaded, _ = blackvuesync.download_file(
+                "http://127.0.0.1:1",
+                "20181029_131513_NF.mp4",
+                destination,
+                None,
+            )
+        finally:
+            blackvuesync.dry_run = original_dry_run
+
+        assert downloaded is True
+
+        output_path = os.path.join(destination, "20181029_131513_NF.mp4")
+        with open(output_path, "rb") as f:
+            assert f.read() == b"abcdef"
+
+
+def test_lock_closes_fd_when_lock_acquisition_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies lock closes the file descriptor when non-blocking lock fails."""
+    opened_fd = 123
+    close_calls: list[int] = []
+
+    monkeypatch.setattr(os, "open", lambda *_args: opened_fd)
+    monkeypatch.setattr(os, "close", lambda fd: close_calls.append(fd))
+
+    def fake_lockf(_fd: int, _operation: int) -> None:
+        raise OSError("lock busy")
+
+    monkeypatch.setattr(fcntl, "lockf", fake_lockf)
+
+    with pytest.raises(UserWarning):
+        blackvuesync.lock("/tmp")
+
+    assert close_calls == [opened_fd]
+
+
+def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """verifies main unlocks the lock file descriptor when it is zero."""
+    unlock_calls: list[int] = []
+
+    args = argparse.Namespace(
+        address="127.0.0.1",
+        destination="/tmp",
+        grouping="none",
+        keep=None,
+        priority="date",
+        filter=None,
+        max_used_disk=90,
+        timeout=1.0,
+        retry_failed_after="1d",
+        skip_metadata=set(),
+        verbose=0,
+        quiet=False,
+        cron=False,
+        dry_run=False,
+        affinity_key=None,
+    )
+
+    monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
+    monkeypatch.setattr(blackvuesync, "ensure_destination", lambda _destination: None)
+    monkeypatch.setattr(blackvuesync, "lock", lambda _destination: 0)
+    monkeypatch.setattr(
+        blackvuesync,
+        "sync",
+        lambda _address, _destination, _grouping, _priority, _filter: None,
+    )
+    monkeypatch.setattr(
+        blackvuesync, "clean_destination", lambda _destination, _grouping: None
+    )
+    monkeypatch.setattr(
+        blackvuesync, "unlock", lambda lf_fd: unlock_calls.append(lf_fd)
+    )
+
+    assert blackvuesync.main() == 0
+    assert unlock_calls == [0]

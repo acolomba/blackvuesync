@@ -82,6 +82,9 @@ max_disk_used_percent = None  # pylint: disable=invalid-name
 # socket timeout
 socket_timeout = None  # pylint: disable=invalid-name
 
+# download chunk size in bytes
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+
 # indicator that we're doing a dry run
 dry_run = None  # pylint: disable=invalid-name
 
@@ -468,7 +471,8 @@ def download_file(
 
                 # writes response to temp file
                 with open(temp_filepath, "wb") as f:
-                    f.write(response.read())
+                    while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                        f.write(chunk)
         finally:
             end = time.perf_counter()
             elapsed_s = end - start
@@ -875,6 +879,7 @@ def lock(destination: str) -> int:
 
         return lf_fd
     except OSError as e:
+        os.close(lf_fd)
         raise UserWarning(
             f"Another instance is already running for destination : {destination}"
         ) from e
@@ -1062,7 +1067,7 @@ def main() -> int:
         logger.exception(e)
         return 3
     finally:
-        if lf_fd:
+        if lf_fd is not None:
             unlock(lf_fd)
 
         flush_logs()
