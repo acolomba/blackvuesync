@@ -21,7 +21,7 @@ from __future__ import annotations
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "2.2.0a2"
+__version__ = "2.2.0a3"
 
 import argparse
 import datetime
@@ -82,9 +82,6 @@ max_disk_used_percent = None  # pylint: disable=invalid-name
 # socket timeout
 socket_timeout = None  # pylint: disable=invalid-name
 
-# download chunk size in bytes
-DOWNLOAD_CHUNK_SIZE = 1024 * 1024
-
 # indicator that we're doing a dry run
 dry_run = None  # pylint: disable=invalid-name
 
@@ -114,9 +111,11 @@ dashcam_unavailable_errno_codes = (
 # for unit testing
 today = datetime.date.today()
 
-
 # valid metadata type codes for --skip-metadata
 VALID_METADATA_TYPES = frozenset("t3g")
+
+# download chunk size in bytes
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def parse_skip_metadata(value: str) -> set[str]:
