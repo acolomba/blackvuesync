@@ -1,15 +1,12 @@
 # CHANGELOG
 
-## 2.2.0a3
-
-* Stream recording downloads in chunks to avoid buffering full files in memory.
-* Close the lock file descriptor when lock acquisition fails.
-* Ensure lock descriptor `0` is always unlocked on exit.
-
 ## 2.2.0
 
 * Add `--retry-failed-after` option to retry failed downloads after a configurable delay. (#58)
 * Add `--skip-metadata` option to skip downloading metadata files (thumbnails, accelerometer, GPS). (#14)
+* Stream recording downloads in chunks to avoid buffering full files in memory.
+* Close the lock file descriptor when lock acquisition fails.
+* Ensure lock descriptor `0` is always unlocked on exit.
 
 ## 2.1.1
 
