@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import errno
 import fcntl
 import glob
 import os
@@ -688,7 +689,9 @@ def test_parse_skip_metadata_invalid(value: str) -> None:
 def test_download_file_streams_response_in_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """verifies downloads stream body data without calling read() with no chunk size."""
+    """verifies downloads stream body data using the configured chunk size."""
+
+    read_sizes: list[int] = []
 
     class FakeResponse:
         def __init__(self) -> None:
@@ -703,6 +706,7 @@ def test_download_file_streams_response_in_chunks(
         def read(self, size: int = -1) -> bytes:
             if size == -1:
                 raise AssertionError("read() must be called with a chunk size")
+            read_sizes.append(size)
             return self._chunks.pop(0)
 
         def __enter__(self) -> FakeResponse:
@@ -713,20 +717,17 @@ def test_download_file_streams_response_in_chunks(
 
     with tempfile.TemporaryDirectory() as destination:
         monkeypatch.setattr(urllib.request, "urlopen", lambda _request: FakeResponse())
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
 
-        original_dry_run = blackvuesync.dry_run
-        try:
-            blackvuesync.dry_run = False
-            downloaded, _ = blackvuesync.download_file(
-                "http://127.0.0.1:1",
-                "20181029_131513_NF.mp4",
-                destination,
-                None,
-            )
-        finally:
-            blackvuesync.dry_run = original_dry_run
+        downloaded, _ = blackvuesync.download_file(
+            "http://127.0.0.1:1",
+            "20181029_131513_NF.mp4",
+            destination,
+            None,
+        )
 
         assert downloaded is True
+        assert all(s == blackvuesync.DOWNLOAD_CHUNK_SIZE for s in read_sizes)
 
         output_path = os.path.join(destination, "20181029_131513_NF.mp4")
         with open(output_path, "rb") as f:
@@ -736,7 +737,7 @@ def test_download_file_streams_response_in_chunks(
 def test_lock_closes_fd_when_lock_acquisition_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """verifies lock closes the file descriptor when non-blocking lock fails."""
+    """verifies lock closes the file descriptor when non-blocking lock fails due to contention."""
     opened_fd = 123
     close_calls: list[int] = []
 
@@ -744,7 +745,7 @@ def test_lock_closes_fd_when_lock_acquisition_fails(
     monkeypatch.setattr(os, "close", lambda fd: close_calls.append(fd))
 
     def fake_lockf(_fd: int, _operation: int) -> None:
-        raise OSError("lock busy")
+        raise OSError(errno.EAGAIN, "lock busy")
 
     monkeypatch.setattr(fcntl, "lockf", fake_lockf)
 
@@ -793,3 +794,80 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert blackvuesync.main() == 0
     assert unlock_calls == [0]
+
+
+def test_lock_raises_runtime_error_for_non_contention_os_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies lock raises RuntimeError when lockf fails for reasons other than contention."""
+    close_calls: list[int] = []
+
+    monkeypatch.setattr(os, "open", lambda *_args: 42)
+    monkeypatch.setattr(os, "close", lambda fd: close_calls.append(fd))
+
+    def fake_lockf(_fd: int, _operation: int) -> None:
+        raise OSError(errno.ENOLCK, "no locks available")
+
+    monkeypatch.setattr(fcntl, "lockf", fake_lockf)
+
+    with pytest.raises(RuntimeError, match="Could not acquire lock"):
+        blackvuesync.lock("/tmp")
+
+    assert close_calls == [42]
+
+
+def test_lock_closes_fd_zero_when_lock_acquisition_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies lock closes file descriptor 0 when non-blocking lock fails."""
+    close_calls: list[int] = []
+
+    monkeypatch.setattr(os, "open", lambda *_args: 0)
+    monkeypatch.setattr(os, "close", lambda fd: close_calls.append(fd))
+
+    def fake_lockf(_fd: int, _operation: int) -> None:
+        raise OSError(errno.EAGAIN, "lock busy")
+
+    monkeypatch.setattr(fcntl, "lockf", fake_lockf)
+
+    with pytest.raises(UserWarning):
+        blackvuesync.lock("/tmp")
+
+    assert close_calls == [0]
+
+
+def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """verifies main does not call unlock when lock acquisition fails."""
+    unlock_calls: list[int] = []
+
+    args = argparse.Namespace(
+        address="127.0.0.1",
+        destination="/tmp",
+        grouping="none",
+        keep=None,
+        priority="date",
+        filter=None,
+        max_used_disk=90,
+        timeout=1.0,
+        retry_failed_after="1d",
+        skip_metadata=set(),
+        verbose=0,
+        quiet=False,
+        cron=False,
+        dry_run=False,
+        affinity_key=None,
+    )
+
+    monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
+    monkeypatch.setattr(blackvuesync, "ensure_destination", lambda _destination: None)
+
+    def lock_raises(_destination: str) -> int:
+        raise UserWarning("Another instance is already running")
+
+    monkeypatch.setattr(blackvuesync, "lock", lock_raises)
+    monkeypatch.setattr(
+        blackvuesync, "unlock", lambda lf_fd: unlock_calls.append(lf_fd)
+    )
+
+    assert blackvuesync.main() == 1
+    assert unlock_calls == []

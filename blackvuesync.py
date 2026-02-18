@@ -24,6 +24,7 @@ from __future__ import annotations
 __version__ = "2.2.0a3"
 
 import argparse
+import contextlib
 import datetime
 import errno
 import fcntl
@@ -878,9 +879,16 @@ def lock(destination: str) -> int:
 
         return lf_fd
     except OSError as e:
-        os.close(lf_fd)
-        raise UserWarning(
-            f"Another instance is already running for destination : {destination}"
+        with contextlib.suppress(OSError):
+            os.close(lf_fd)
+
+        if e.errno in (errno.EAGAIN, errno.EACCES):
+            raise UserWarning(
+                f"Another instance is already running for destination : {destination}"
+            ) from e
+
+        raise RuntimeError(
+            f"Could not acquire lock on destination : {destination}"
         ) from e
 
 
