@@ -21,9 +21,10 @@ from __future__ import annotations
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "2.2.0a2"
+__version__ = "2.2.0a3"
 
 import argparse
+import contextlib
 import datetime
 import errno
 import fcntl
@@ -111,9 +112,11 @@ dashcam_unavailable_errno_codes = (
 # for unit testing
 today = datetime.date.today()
 
-
 # valid metadata type codes for --skip-metadata
 VALID_METADATA_TYPES = frozenset("t3g")
+
+# download chunk size in bytes
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def parse_skip_metadata(value: str) -> set[str]:
@@ -468,7 +471,8 @@ def download_file(
 
                 # writes response to temp file
                 with open(temp_filepath, "wb") as f:
-                    f.write(response.read())
+                    while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                        f.write(chunk)
         finally:
             end = time.perf_counter()
             elapsed_s = end - start
@@ -875,8 +879,16 @@ def lock(destination: str) -> int:
 
         return lf_fd
     except OSError as e:
-        raise UserWarning(
-            f"Another instance is already running for destination : {destination}"
+        with contextlib.suppress(OSError):
+            os.close(lf_fd)
+
+        if e.errno in (errno.EAGAIN, errno.EACCES):
+            raise UserWarning(
+                f"Another instance is already running for destination : {destination}"
+            ) from e
+
+        raise RuntimeError(
+            f"Could not acquire lock on destination : {destination}"
         ) from e
 
 
@@ -1062,7 +1074,7 @@ def main() -> int:
         logger.exception(e)
         return 3
     finally:
-        if lf_fd:
+        if lf_fd is not None:
             unlock(lf_fd)
 
         flush_logs()
