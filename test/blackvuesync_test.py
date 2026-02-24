@@ -868,7 +868,8 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
         grouping="none",
         keep=None,
         priority="date",
-        filter=None,
+        include=None,
+        exclude=None,
         max_used_disk=90,
         timeout=1.0,
         retry_failed_after="1d",
@@ -886,7 +887,7 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         blackvuesync,
         "sync",
-        lambda _address, _destination, _grouping, _priority, _filter: None,
+        lambda _address, _destination, _grouping, _priority, _include, _exclude: None,
     )
     monkeypatch.setattr(
         blackvuesync, "clean_destination", lambda _destination, _grouping: None
@@ -949,7 +950,8 @@ def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> 
         grouping="none",
         keep=None,
         priority="date",
-        filter=None,
+        include=None,
+        exclude=None,
         max_used_disk=90,
         timeout=1.0,
         retry_failed_after="1d",

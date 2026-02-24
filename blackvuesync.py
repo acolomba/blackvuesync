@@ -758,17 +758,6 @@ def get_current_recordings(recordings: list[Recording]) -> list[Recording]:
     )
 
 
-def get_filtered_recordings(
-    recordings: list[Recording], recording_filter: tuple[str, ...] | None
-) -> list[Recording]:
-    """returns recordings filtered by recording_filter"""
-    return (
-        recordings
-        if recording_filter is None
-        else [x for x in recordings if f"{x.type}{x.direction}" in recording_filter]
-    )
-
-
 def _matches_filter(recording: Recording, code: str) -> bool:
     """checks if a recording matches a single filter code"""
     if len(code) == 1:
@@ -839,12 +828,13 @@ def prepare_destination(destination: str, grouping: str) -> None:
                 os.remove(outdated_filepath)
 
 
-def sync(
+def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     address: str,
     destination: str,
     grouping: str,
     download_priority: str,
-    recording_filter: tuple[str, ...] | None,
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
 ) -> None:
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
@@ -858,9 +848,9 @@ def sync(
     # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
 
-    # filters recordings according to recording_filter tuple
-    current_dashcam_recordings = get_filtered_recordings(
-        current_dashcam_recordings, recording_filter
+    # filters recordings according to include/exclude options
+    current_dashcam_recordings = apply_recording_filters(
+        current_dashcam_recordings, include, exclude
     )
 
     # sorts the dashcam recordings so we download them according to some priority
@@ -989,11 +979,23 @@ def parse_args() -> argparse.Namespace:
         help="sets the recording download priority; date: downloads in chronological order from oldest to newest; rdate: downloads in chronological order from newest to oldest; type: prioritizes manual, event, normal and then parkingrecordings; defaults to date",
     )
     arg_parser.add_argument(
-        "-f",
-        "--filter",
+        "-i",
+        "--include",
         default=None,
-        help="downloads recordings filtered by event type and camera direction; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
-        nargs="+",
+        type=parse_filter,
+        help="downloads only recordings matching the given codes; each code"
+        " is a recording type optionally followed by a camera direction;"
+        " e.g. --include P,NF downloads all Parking and Normal Front"
+        " recordings",
+    )
+    arg_parser.add_argument(
+        "-e",
+        "--exclude",
+        default=None,
+        type=parse_filter,
+        help="excludes recordings matching the given codes; takes priority"
+        " over --include; e.g. --include N --exclude NR downloads all Normal"
+        " recordings except Normal Rear",
     )
     arg_parser.add_argument(
         "-u",
@@ -1114,7 +1116,14 @@ def main() -> int:
         lf_fd = lock(destination)
 
         try:
-            sync(args.address, destination, grouping, args.priority, args.filter)
+            sync(
+                args.address,
+                destination,
+                grouping,
+                args.priority,
+                args.include,
+                args.exclude,
+            )
         finally:
             # removes temporary files (if we synced successfully, these are temp files from lost recordings)
             clean_destination(destination, grouping)
