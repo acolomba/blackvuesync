@@ -769,6 +769,27 @@ def get_filtered_recordings(
     )
 
 
+def _matches_filter(recording: Recording, code: str) -> bool:
+    """checks if a recording matches a single filter code"""
+    if len(code) == 1:
+        return recording.type == code
+    return f"{recording.type}{recording.direction}" == code
+
+
+def apply_recording_filters(
+    recordings: list[Recording],
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
+) -> list[Recording]:
+    """returns recordings filtered by include/exclude codes"""
+    result = recordings
+    if include is not None:
+        result = [r for r in result if any(_matches_filter(r, c) for c in include)]
+    if exclude is not None:
+        result = [r for r in result if not any(_matches_filter(r, c) for c in exclude)]
+    return result
+
+
 def ensure_destination(destination: str) -> None:
     """ensures the destination directory exists, creates if not, verifies it's writeable"""
     # if no destination, creates it

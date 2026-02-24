@@ -710,6 +710,85 @@ def test_parse_filter_invalid(value: str) -> None:
         blackvuesync.parse_filter(value)
 
 
+def _recording(type: str, direction: str) -> blackvuesync.Recording:
+    """creates a minimal Recording for filter tests"""
+    return blackvuesync.Recording(
+        filename=f"20250101_120000_{type}{direction}.mp4",
+        base_filename="20250101_120000",
+        group_name=None,
+        datetime=datetime.datetime(2025, 1, 1, 12, 0, 0),
+        type=type,
+        direction=direction,
+    )
+
+
+class TestApplyRecordingFilters:
+    """tests for apply_recording_filters"""
+
+    def test_no_filters_returns_all(self) -> None:
+        recordings = [_recording("N", "F"), _recording("P", "R")]
+        result = blackvuesync.apply_recording_filters(recordings, None, None)
+        assert result == recordings
+
+    def test_include_type_only(self) -> None:
+        recordings = [
+            _recording("N", "F"),
+            _recording("N", "R"),
+            _recording("P", "F"),
+        ]
+        result = blackvuesync.apply_recording_filters(recordings, ("N",), None)
+        assert result == [recordings[0], recordings[1]]
+
+    def test_include_type_and_direction(self) -> None:
+        recordings = [
+            _recording("N", "F"),
+            _recording("N", "R"),
+            _recording("P", "F"),
+        ]
+        result = blackvuesync.apply_recording_filters(recordings, ("NF",), None)
+        assert result == [recordings[0]]
+
+    def test_include_multiple_codes(self) -> None:
+        recordings = [
+            _recording("N", "F"),
+            _recording("P", "F"),
+            _recording("E", "F"),
+        ]
+        result = blackvuesync.apply_recording_filters(recordings, ("N", "PF"), None)
+        assert result == [recordings[0], recordings[1]]
+
+    def test_exclude_type_only(self) -> None:
+        recordings = [
+            _recording("N", "F"),
+            _recording("P", "F"),
+            _recording("E", "F"),
+        ]
+        result = blackvuesync.apply_recording_filters(recordings, None, ("P",))
+        assert result == [recordings[0], recordings[2]]
+
+    def test_exclude_type_and_direction(self) -> None:
+        recordings = [
+            _recording("N", "F"),
+            _recording("N", "R"),
+        ]
+        result = blackvuesync.apply_recording_filters(recordings, None, ("NR",))
+        assert result == [recordings[0]]
+
+    def test_include_and_exclude_combined(self) -> None:
+        recordings = [
+            _recording("N", "F"),
+            _recording("N", "R"),
+            _recording("P", "F"),
+        ]
+        result = blackvuesync.apply_recording_filters(recordings, ("N",), ("NR",))
+        assert result == [recordings[0]]
+
+    def test_empty_result(self) -> None:
+        recordings = [_recording("N", "F")]
+        result = blackvuesync.apply_recording_filters(recordings, ("P",), None)
+        assert result == []
+
+
 def test_download_file_streams_response_in_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
