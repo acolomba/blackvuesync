@@ -710,14 +710,14 @@ def test_parse_filter_invalid(value: str) -> None:
         blackvuesync.parse_filter(value)
 
 
-def _recording(type: str, direction: str) -> blackvuesync.Recording:
+def _recording(rec_type: str, direction: str) -> blackvuesync.Recording:
     """creates a minimal Recording for filter tests"""
     return blackvuesync.Recording(
-        filename=f"20250101_120000_{type}{direction}.mp4",
+        filename=f"20250101_120000_{rec_type}{direction}.mp4",
         base_filename="20250101_120000",
         group_name=None,
         datetime=datetime.datetime(2025, 1, 1, 12, 0, 0),
-        type=type,
+        type=rec_type,
         direction=direction,
     )
 

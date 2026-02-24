@@ -118,6 +118,9 @@ VALID_METADATA_TYPES = frozenset("t3g")
 # download chunk size in bytes
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
+RECORDING_TYPES = "NEPMIOATBRXGDLYF"
+RECORDING_DIRECTIONS = "FRIO"
+
 
 def parse_skip_metadata(value: str) -> set[str]:
     """parses and validates the --skip-metadata argument"""
@@ -238,9 +241,6 @@ class Recording:
 # O: Optional camera
 #
 # L or S: upload flag, Substream or Live
-
-RECORDING_TYPES = "NEPMIOATBRXGDLYF"
-RECORDING_DIRECTIONS = "FRIO"
 
 filename_re = re.compile(
     rf"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)

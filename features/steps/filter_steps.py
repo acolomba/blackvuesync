@@ -8,10 +8,11 @@ import re
 from behave import then, when
 from behave.runner import Context
 
+from blackvuesync import RECORDING_DIRECTIONS, RECORDING_TYPES
 from features.steps.blackvuesync_steps import execute_blackvuesync
 
 _recording_filename_re = re.compile(
-    r"^\d{8}_\d{6}_([NEPMIOATBRXGDLYF])([FRIO])[LS]?\.(mp4|thm|3gf|gps)$"
+    rf"^\d{{8}}_\d{{6}}_([{RECORDING_TYPES}])([{RECORDING_DIRECTIONS}])[LS]?\.(mp4|thm|3gf|gps)$"
 )
 
 
@@ -55,14 +56,14 @@ def run_blackvuesync_with_exclude(context: Context, exclude: str) -> None:
 
 
 @then('the destination contains "{code}" recordings')
-def destination_contains_recordings(context: Context, code: str) -> None:
+def assert_destination_contains_recordings(context: Context, code: str) -> None:
     """verifies that the destination contains recordings matching the code."""
     matching = _find_recordings_matching(context.dest_dir, code)
     assert matching, f"expected recordings matching '{code}' but found none"
 
 
 @then('the destination does not contain "{code}" recordings')
-def destination_does_not_contain_recordings(context: Context, code: str) -> None:
+def assert_destination_does_not_contain_recordings(context: Context, code: str) -> None:
     """verifies that the destination does not contain recordings matching the code."""
     matching = _find_recordings_matching(context.dest_dir, code)
     assert not matching, f"unexpected recordings matching '{code}': {matching}"

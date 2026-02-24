@@ -23,6 +23,13 @@ Feature: Sync with include/exclude filters
     Then the destination contains "E" recordings
     Then the destination does not contain "P" recordings
 
+  Scenario: Exclude by type and direction
+    Given recordings for the past "1d" of types "N", directions "F,R"
+    When blackvuesync runs with exclude "NR"
+    Then blackvuesync exits with code 0
+    Then the destination contains "NF" recordings
+    Then the destination does not contain "NR" recordings
+
   Scenario: Include and exclude combined
     Given recordings for the past "1d" of types "N", directions "F,R"
     When blackvuesync runs with include "N" exclude "NR"
