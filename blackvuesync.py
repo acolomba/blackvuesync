@@ -209,11 +209,15 @@ class Recording:
 # O: Optional camera
 #
 # L or S: upload flag, Substream or Live
+
+RECORDING_TYPES = "NEPMIOATBRXGDLYF"
+RECORDING_DIRECTIONS = "FRIO"
+
 filename_re = re.compile(
-    r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+    rf"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPMIOATBRXGDLYF])
-    (?P<direction>[FRIO])
+    _(?P<type>[{RECORDING_TYPES}])
+    (?P<direction>[{RECORDING_DIRECTIONS}])
     (?P<upload>[LS]?)
     \.(?P<extension>mp4)""",
     re.VERBOSE,
