@@ -137,7 +137,7 @@ def parse_skip_metadata(value: str) -> set[str]:
 
 def parse_filter(value: str) -> tuple[str, ...]:
     """parses and validates a comma-separated filter of recording type/direction codes"""
-    codes = value.split(",")
+    codes = [c.strip() for c in value.split(",")]
     for code in codes:
         if len(code) == 1:
             if code not in RECORDING_TYPES:
@@ -995,8 +995,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         type=parse_filter,
         help="excludes recordings matching the given codes; takes priority"
-        " over --include; e.g. --include N --exclude NR downloads all Normal"
-        " recordings except Normal Rear",
+        " over --include; e.g. --include N,E --exclude NR downloads all"
+        " Normal and Event recordings except Normal Rear",
     )
     arg_parser.add_argument(
         "-u",

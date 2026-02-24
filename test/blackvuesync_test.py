@@ -692,6 +692,8 @@ def test_parse_skip_metadata_invalid(value: str) -> None:
         ("PF", ("PF",)),
         ("P", ("P",)),
         ("PF,PR", ("PF", "PR")),
+        ("PF, PR", ("PF", "PR")),
+        ("PF , PR", ("PF", "PR")),
         ("P,NF", ("P", "NF")),
         ("N", ("N",)),
         ("NF,NR,NI,NO", ("NF", "NR", "NI", "NO")),

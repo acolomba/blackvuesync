@@ -129,7 +129,7 @@ Other options:
 * `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
 * `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
 * `--include`: Downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `--include P,NF` downloads all Parking recordings and Normal Front recordings. See the table below for valid codes.
-* `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N --exclude NR` downloads all Normal recordings except Normal Rear.
+* `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
 * `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 
