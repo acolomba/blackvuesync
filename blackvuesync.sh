@@ -35,8 +35,14 @@ retry_failed_after=${RETRY_FAILED_AFTER:+--retry-failed-after $RETRY_FAILED_AFTE
 # skip-metadata option if SKIP_METADATA set
 skip_metadata=${SKIP_METADATA:+--skip-metadata $SKIP_METADATA}
 
+# include option if INCLUDE set
+include=${INCLUDE:+--include $INCLUDE}
+
+# exclude option if EXCLUDE set
+exclude=${EXCLUDE:+--exclude $EXCLUDE}
+
 # session key option if AFFINITY_KEY set
 affinity_key="${AFFINITY_KEY:+--affinity-key $AFFINITY_KEY}"
 
 /blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
-    ${quiet} ${cron} ${dry_run} ${affinity_key} ${retry_failed_after} ${skip_metadata}
+    ${quiet} ${cron} ${dry_run} ${affinity_key} ${retry_failed_after} ${skip_metadata} ${include} ${exclude}
