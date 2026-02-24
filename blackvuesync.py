@@ -118,6 +118,7 @@ VALID_METADATA_TYPES = frozenset("t3g")
 # download chunk size in bytes
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
+# valid recording type and direction characters
 RECORDING_TYPES = "NEPMIOATBRXGDLYF"
 RECORDING_DIRECTIONS = "FRIO"
 
