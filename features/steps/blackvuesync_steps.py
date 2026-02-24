@@ -22,7 +22,8 @@ def execute_blackvuesync(
     grouping: str | None = None,
     keep: str | None = None,
     priority: str | None = None,
-    filter_list: list[str] | None = None,
+    include: str | None = None,
+    exclude: str | None = None,
     max_used_disk: int | None = None,
     timeout: float | None = None,
     verbose: int | None = None,
@@ -44,7 +45,8 @@ def execute_blackvuesync(
             grouping,
             keep,
             priority,
-            filter_list,
+            include,
+            exclude,
             max_used_disk,
             timeout,
             verbose,
@@ -63,7 +65,8 @@ def execute_blackvuesync(
             grouping,
             keep,
             priority,
-            filter_list,
+            include,
+            exclude,
             max_used_disk,
             timeout,
             verbose,
@@ -83,7 +86,8 @@ def _execute_direct(
     grouping: str | None = None,
     keep: str | None = None,
     priority: str | None = None,
-    filter_list: list[str] | None = None,
+    include: str | None = None,
+    exclude: str | None = None,
     max_used_disk: int | None = None,
     timeout: float | None = None,
     verbose: int | None = None,
@@ -135,9 +139,11 @@ def _execute_direct(
     if priority:
         cmd.extend(["-p", priority])
 
-    if filter_list:
-        cmd.append("-f")
-        cmd.extend(filter_list)
+    if include:
+        cmd.extend(["-i", include])
+
+    if exclude:
+        cmd.extend(["-e", exclude])
 
     if max_used_disk is not None:
         cmd.extend(["-u", str(max_used_disk)])
@@ -211,7 +217,8 @@ def _execute_docker(
     grouping: str | None = None,
     keep: str | None = None,
     priority: str | None = None,
-    filter_list: list[str] | None = None,
+    include: str | None = None,
+    exclude: str | None = None,
     max_used_disk: int | None = None,
     timeout: float | None = None,
     verbose: int | None = None,
@@ -271,10 +278,11 @@ def _execute_docker(
     if priority:
         container.with_env("PRIORITY", priority)
 
-    if filter_list:
-        raise NotImplementedError(
-            "filter option not supported in docker implementation"
-        )
+    if include:
+        container.with_env("INCLUDE", include)
+
+    if exclude:
+        container.with_env("EXCLUDE", exclude)
 
     if max_used_disk is not None:
         container.with_env("MAX_USED_DISK", str(max_used_disk))
