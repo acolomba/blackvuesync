@@ -686,6 +686,30 @@ def test_parse_skip_metadata_invalid(value: str) -> None:
         blackvuesync.parse_skip_metadata(value)
 
 
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("PF", ("PF",)),
+        ("P", ("P",)),
+        ("PF,PR", ("PF", "PR")),
+        ("P,NF", ("P", "NF")),
+        ("N", ("N",)),
+        ("NF,NR,NI,NO", ("NF", "NR", "NI", "NO")),
+    ],
+)
+def test_parse_filter(value: str, expected: tuple[str, ...]) -> None:
+    assert blackvuesync.parse_filter(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["ZZ", "PX", "ABC", "", "P,", ",P", "P,,N", "pf", "1F"],
+)
+def test_parse_filter_invalid(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        blackvuesync.parse_filter(value)
+
+
 def test_download_file_streams_response_in_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

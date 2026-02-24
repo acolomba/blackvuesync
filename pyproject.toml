@@ -144,7 +144,7 @@ disable = [
 ]
 
 [tool.pylint.design]
-max-module-lines = 1100  # single-file project by design
+max-module-lines = 1200  # single-file project by design
 
 [tool.pylint.format]
 max-line-length = 88  # for consistency with black/ruff

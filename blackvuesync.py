@@ -131,6 +131,35 @@ def parse_skip_metadata(value: str) -> set[str]:
     return types
 
 
+def parse_filter(value: str) -> tuple[str, ...]:
+    """parses and validates a comma-separated filter of recording type/direction codes"""
+    codes = value.split(",")
+    for code in codes:
+        if len(code) == 1:
+            if code not in RECORDING_TYPES:
+                raise argparse.ArgumentTypeError(
+                    f"invalid filter code '{code}': unknown recording type"
+                    f" (valid: {', '.join(RECORDING_TYPES)})"
+                )
+        elif len(code) == 2:
+            if code[0] not in RECORDING_TYPES:
+                raise argparse.ArgumentTypeError(
+                    f"invalid filter code '{code}': unknown recording type"
+                    f" '{code[0]}' (valid: {', '.join(RECORDING_TYPES)})"
+                )
+            if code[1] not in RECORDING_DIRECTIONS:
+                raise argparse.ArgumentTypeError(
+                    f"invalid filter code '{code}': unknown direction"
+                    f" '{code[1]}' (valid: {', '.join(RECORDING_DIRECTIONS)})"
+                )
+        else:
+            raise argparse.ArgumentTypeError(
+                f"invalid filter code '{code}': must be 1 or 2 characters"
+                " (type, or type + direction)"
+            )
+    return tuple(codes)
+
+
 def parse_duration(
     duration: str, *, label: str = "DURATION", allowed_units: str = "shdw"
 ) -> datetime.timedelta:
