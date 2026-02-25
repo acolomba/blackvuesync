@@ -77,14 +77,8 @@ def _find_recordings_matching(dest_dir: str, code: str) -> list[str]:
             m = _recording_filename_re.match(filename)
             if m:
                 rec_type, rec_direction = m.group(1), m.group(2)
-                if (
-                    len(code) == 1
-                    and rec_type == code
-                    or (
-                        len(code) == 2
-                        and rec_type == code[0]
-                        and rec_direction == code[1]
-                    )
+                if (len(code) == 1 and rec_type == code) or (
+                    len(code) == 2 and rec_type == code[0] and rec_direction == code[1]
                 ):
                     matching.append(filename)
     return matching

@@ -1,48 +1,50 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2086
 set -euo pipefail
 
-# keep option set if KEEP set
-keep=${KEEP:+--keep $KEEP}
+args=("${ADDRESS}" --destination /recordings)
+
+# keep option if KEEP set
+[[ -n "${KEEP:-}" ]] && args+=(--keep "$KEEP")
 
 # grouping option if GROUPING set
-grouping=${GROUPING:+--grouping $GROUPING}
+[[ -n "${GROUPING:-}" ]] && args+=(--grouping "$GROUPING")
 
-# download priority option set if PRIORITY set
-priority=${PRIORITY:+--priority $PRIORITY}
+# download priority option if PRIORITY set
+[[ -n "${PRIORITY:-}" ]] && args+=(--priority "$PRIORITY")
 
-# disk usage option set if USAGE set
-disk_usage=${MAX_USED_DISK:+--max-used-disk $MAX_USED_DISK}
+# disk usage option if MAX_USED_DISK set
+[[ -n "${MAX_USED_DISK:-}" ]] && args+=(--max-used-disk "$MAX_USED_DISK")
 
-# timeout set if TIMEOUT set
-timeout=${TIMEOUT:+--timeout $TIMEOUT}
+# timeout if TIMEOUT set
+[[ -n "${TIMEOUT:-}" ]] && args+=(--timeout "$TIMEOUT")
 
 # as many verbose options as the value in VERBOSE
-verbose=${VERBOSE:+$(if [[ $VERBOSE -gt 0 ]]; then for _ in $(seq 1 $VERBOSE); do echo --verbose; done; fi)}
+if [[ -n "${VERBOSE:-}" && "$VERBOSE" -gt 0 ]]; then
+    for _ in $(seq 1 "$VERBOSE"); do args+=(--verbose); done
+fi
 
 # quiet option if QUIET set to anything
-quiet="${QUIET:+--quiet}"
+[[ -n "${QUIET:-}" ]] && args+=(--quiet)
 
 # cron option if CRON set to anything
-cron="${CRON:+--cron}"
+[[ -n "${CRON:-}" ]] && args+=(--cron)
 
 # dry-run option if DRY_RUN set to anything
-dry_run="${DRY_RUN:+--dry-run}"
+[[ -n "${DRY_RUN:-}" ]] && args+=(--dry-run)
 
 # retry-failed-after option if RETRY_FAILED_AFTER set
-retry_failed_after=${RETRY_FAILED_AFTER:+--retry-failed-after $RETRY_FAILED_AFTER}
+[[ -n "${RETRY_FAILED_AFTER:-}" ]] && args+=(--retry-failed-after "$RETRY_FAILED_AFTER")
 
 # skip-metadata option if SKIP_METADATA set
-skip_metadata=${SKIP_METADATA:+--skip-metadata $SKIP_METADATA}
+[[ -n "${SKIP_METADATA:-}" ]] && args+=(--skip-metadata "$SKIP_METADATA")
 
 # include option if INCLUDE set
-include=${INCLUDE:+--include $INCLUDE}
+[[ -n "${INCLUDE:-}" ]] && args+=(--include "$INCLUDE")
 
 # exclude option if EXCLUDE set
-exclude=${EXCLUDE:+--exclude $EXCLUDE}
+[[ -n "${EXCLUDE:-}" ]] && args+=(--exclude "$EXCLUDE")
 
 # session key option if AFFINITY_KEY set
-affinity_key="${AFFINITY_KEY:+--affinity-key $AFFINITY_KEY}"
+[[ -n "${AFFINITY_KEY:-}" ]] && args+=(--affinity-key "$AFFINITY_KEY")
 
-/blackvuesync.py ${ADDRESS} --destination /recordings ${keep} ${grouping} ${priority} ${disk_usage} ${timeout} ${verbose} \
-    ${quiet} ${cron} ${dry_run} ${affinity_key} ${retry_failed_after} ${skip_metadata} ${include} ${exclude}
+/blackvuesync.py "${args[@]}"
