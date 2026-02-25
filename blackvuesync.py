@@ -119,6 +119,33 @@ VALID_METADATA_TYPES = frozenset("t3g")
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 # valid recording type and direction characters
+#
+# reference:
+# - https://support.blackvue.com.au/hc/en-us/articles/13301776266895-Video-File-Naming
+# N: Normal
+# E: Event
+# P: Parking motion detection
+# M: Manual
+# I: Parking impact
+# O: Overspeed
+# A: Hard acceleration
+# T: Hard cornering
+# B: Hard braking
+# R: Geofence-enter (Fleet)
+# X: Geofence-exit (Fleet)
+# G: Geofence-pass (Fleet)
+# D: Drowsiness (DMS)
+# L: Distraction (DMS)
+# Y: Seatbelt not detected (DMS)
+# F: Driver undetected (DMS)
+#
+# F: Front camera
+# R: Rear camera
+# I: Interior camera
+# O: Optional camera
+#
+# L or S: upload flag, Substream or Live
+#
 RECORDING_TYPES = "NEPMIOATBRXGDLYF"
 RECORDING_DIRECTIONS = "FRIO"
 
@@ -216,33 +243,6 @@ class Recording:
 
 
 # dashcam recording filename regular expression
-#
-# references:
-# - https://support.blackvue.com.au/hc/en-us/articles/13301776266895-Video-File-Naming
-# N: Normal
-# E: Event
-# P: Parking motion detection
-# M: Manual
-# I: Parking impact
-# O: Overspeed
-# A: Hard acceleration
-# T: Hard cornering
-# B: Hard braking
-# R: Geofence-enter (Fleet)
-# X: Geofence-exit (Fleet)
-# G: Geofence-pass (Fleet)
-# D: Drowsiness (DMS)
-# L: Distraction (DMS)
-# Y: Seatbelt not detected (DMS)
-# F: Driver undetected (DMS)
-#
-# F: Front camera
-# R: Rear camera
-# I: Interior camera
-# O: Optional camera
-#
-# L or S: upload flag, Substream or Live
-
 filename_re = re.compile(
     rf"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
