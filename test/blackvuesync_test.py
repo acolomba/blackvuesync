@@ -707,7 +707,7 @@ def test_parse_filter(value: str, expected: tuple[str, ...]) -> None:
 
 @pytest.mark.parametrize(
     "value",
-    ["ZZ", "PX", "ABC", "pf", "1F"],
+    ["Z", "ZZ", "PX", "ABC", "pf", "1F"],
 )
 def test_parse_filter_invalid(value: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
