@@ -697,6 +697,8 @@ def test_parse_skip_metadata_invalid(value: str) -> None:
         ("P,NF", ("P", "NF")),
         ("N", ("N",)),
         ("NF,NR,NI,NO", ("NF", "NR", "NI", "NO")),
+        ("", ()),
+        ("  ", ()),
     ],
 )
 def test_parse_filter(value: str, expected: tuple[str, ...]) -> None:
@@ -705,7 +707,7 @@ def test_parse_filter(value: str, expected: tuple[str, ...]) -> None:
 
 @pytest.mark.parametrize(
     "value",
-    ["ZZ", "PX", "ABC", "", "P,", ",P", "P,,N", "pf", "1F"],
+    ["ZZ", "PX", "ABC", "pf", "1F"],
 )
 def test_parse_filter_invalid(value: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
@@ -789,6 +791,16 @@ class TestApplyRecordingFilters:
         recordings = [_recording("N", "F")]
         result = blackvuesync.apply_recording_filters(recordings, ("P",), None)
         assert result == []
+
+    def test_empty_include_returns_all(self) -> None:
+        recordings = [_recording("N", "F"), _recording("P", "R")]
+        result = blackvuesync.apply_recording_filters(recordings, (), None)
+        assert result == recordings
+
+    def test_empty_exclude_returns_all(self) -> None:
+        recordings = [_recording("N", "F"), _recording("P", "R")]
+        result = blackvuesync.apply_recording_filters(recordings, None, ())
+        assert result == recordings
 
 
 def test_download_file_streams_response_in_chunks(

@@ -164,7 +164,9 @@ def parse_skip_metadata(value: str) -> set[str]:
 
 def parse_filter(value: str) -> tuple[str, ...]:
     """parses and validates a comma-separated filter of recording type/direction codes"""
-    codes = [c.strip() for c in value.split(",")]
+    codes = [c.strip() for c in value.split(",") if c.strip()]
+    if not codes:
+        return ()
     for code in codes:
         if len(code) == 1:
             if code not in RECORDING_TYPES:
@@ -773,9 +775,9 @@ def apply_recording_filters(
 ) -> list[Recording]:
     """returns recordings filtered by include/exclude codes"""
     result = recordings
-    if include is not None:
+    if include is not None and include:
         result = [r for r in result if any(_matches_filter(r, c) for c in include)]
-    if exclude is not None:
+    if exclude is not None and exclude:
         result = [r for r in result if not any(_matches_filter(r, c) for c in exclude)]
     return result
 
