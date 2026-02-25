@@ -21,7 +21,7 @@ from __future__ import annotations
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "2.2.0a3"
+__version__ = "2.2.0a4"
 
 import argparse
 import contextlib
@@ -118,6 +118,37 @@ VALID_METADATA_TYPES = frozenset("t3g")
 # download chunk size in bytes
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
+# valid recording type and direction characters
+#
+# reference:
+# - https://support.blackvue.com.au/hc/en-us/articles/13301776266895-Video-File-Naming
+# N: Normal
+# E: Event
+# P: Parking motion detection
+# M: Manual
+# I: Parking impact
+# O: Overspeed
+# A: Hard acceleration
+# T: Hard cornering
+# B: Hard braking
+# R: Geofence-enter (Fleet)
+# X: Geofence-exit (Fleet)
+# G: Geofence-pass (Fleet)
+# D: Drowsiness (DMS)
+# L: Distraction (DMS)
+# Y: Seatbelt not detected (DMS)
+# F: Driver undetected (DMS)
+#
+# F: Front camera
+# R: Rear camera
+# I: Interior camera
+# O: Optional camera
+#
+# L or S: upload flag, Substream or Live
+#
+RECORDING_TYPES = "NEPMIOATBRXGDLYF"
+RECORDING_DIRECTIONS = "FRIO"
+
 
 def parse_skip_metadata(value: str) -> set[str]:
     """parses and validates the --skip-metadata argument"""
@@ -129,6 +160,37 @@ def parse_skip_metadata(value: str) -> set[str]:
             f" '{', '.join(sorted(invalid))}' (valid: t, 3, g)"
         )
     return types
+
+
+def parse_filter(value: str) -> tuple[str, ...]:
+    """parses and validates a comma-separated filter of recording type/direction codes"""
+    codes = [c.strip() for c in value.split(",") if c.strip()]
+    if not codes:
+        return ()
+    for code in codes:
+        if len(code) == 1:
+            if code not in RECORDING_TYPES:
+                raise argparse.ArgumentTypeError(
+                    f"invalid filter code '{code}': unknown recording type"
+                    f" (valid: {', '.join(RECORDING_TYPES)})"
+                )
+        elif len(code) == 2:
+            if code[0] not in RECORDING_TYPES:
+                raise argparse.ArgumentTypeError(
+                    f"invalid filter code '{code}': unknown recording type"
+                    f" '{code[0]}' (valid: {', '.join(RECORDING_TYPES)})"
+                )
+            if code[1] not in RECORDING_DIRECTIONS:
+                raise argparse.ArgumentTypeError(
+                    f"invalid filter code '{code}': unknown direction"
+                    f" '{code[1]}' (valid: {', '.join(RECORDING_DIRECTIONS)})"
+                )
+        else:
+            raise argparse.ArgumentTypeError(
+                f"invalid filter code '{code}': must be 1 or 2 characters"
+                " (type, or type + direction)"
+            )
+    return tuple(codes)
 
 
 def parse_duration(
@@ -183,37 +245,11 @@ class Recording:
 
 
 # dashcam recording filename regular expression
-#
-# references:
-# - https://support.blackvue.com.au/hc/en-us/articles/13301776266895-Video-File-Naming
-# N: Normal
-# E: Event
-# P: Parking motion detection
-# M: Manual
-# I: Parking impact
-# O: Overspeed
-# A: Hard acceleration
-# T: Hard cornering
-# B: Hard braking
-# R: Geofence-enter (Fleet)
-# X: Geofence-exit (Fleet)
-# G: Geofence-pass (Fleet)
-# D: Drowsiness (DMS)
-# L: Distraction (DMS)
-# Y: Seatbelt not detected (DMS)
-# F: Driver undetected (DMS)
-#
-# F: Front camera
-# R: Rear camera
-# I: Interior camera
-# O: Optional camera
-#
-# L or S: upload flag, Substream or Live
 filename_re = re.compile(
-    r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
+    rf"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
     _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPMIOATBRXGDLYF])
-    (?P<direction>[FRIO])
+    _(?P<type>[{RECORDING_TYPES}])
+    (?P<direction>[{RECORDING_DIRECTIONS}])
     (?P<upload>[LS]?)
     \.(?P<extension>mp4)""",
     re.VERBOSE,
@@ -725,15 +761,25 @@ def get_current_recordings(recordings: list[Recording]) -> list[Recording]:
     )
 
 
-def get_filtered_recordings(
-    recordings: list[Recording], recording_filter: tuple[str, ...] | None
+def _matches_filter(recording: Recording, code: str) -> bool:
+    """checks if a recording matches a single filter code"""
+    if len(code) == 1:
+        return recording.type == code
+    return f"{recording.type}{recording.direction}" == code
+
+
+def apply_recording_filters(
+    recordings: list[Recording],
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
 ) -> list[Recording]:
-    """returns recordings filtered by recording_filter"""
-    return (
-        recordings
-        if recording_filter is None
-        else [x for x in recordings if f"{x.type}{x.direction}" in recording_filter]
-    )
+    """returns recordings filtered by include/exclude codes"""
+    result = recordings
+    if include is not None and include:
+        result = [r for r in result if any(_matches_filter(r, c) for c in include)]
+    if exclude is not None and exclude:
+        result = [r for r in result if not any(_matches_filter(r, c) for c in exclude)]
+    return result
 
 
 def ensure_destination(destination: str) -> None:
@@ -785,12 +831,13 @@ def prepare_destination(destination: str, grouping: str) -> None:
                 os.remove(outdated_filepath)
 
 
-def sync(
+def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     address: str,
     destination: str,
     grouping: str,
     download_priority: str,
-    recording_filter: tuple[str, ...] | None,
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
 ) -> None:
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
@@ -804,9 +851,9 @@ def sync(
     # figures out which recordings are current and should be downloaded
     current_dashcam_recordings = get_current_recordings(dashcam_recordings)
 
-    # filters recordings according to recording_filter tuple
-    current_dashcam_recordings = get_filtered_recordings(
-        current_dashcam_recordings, recording_filter
+    # filters recordings according to include/exclude options
+    current_dashcam_recordings = apply_recording_filters(
+        current_dashcam_recordings, include, exclude
     )
 
     # sorts the dashcam recordings so we download them according to some priority
@@ -935,11 +982,23 @@ def parse_args() -> argparse.Namespace:
         help="sets the recording download priority; date: downloads in chronological order from oldest to newest; rdate: downloads in chronological order from newest to oldest; type: prioritizes manual, event, normal and then parkingrecordings; defaults to date",
     )
     arg_parser.add_argument(
-        "-f",
-        "--filter",
+        "-i",
+        "--include",
         default=None,
-        help="downloads recordings filtered by event type and camera direction; e.g.: --filter PF PR downloads only Parking Front and Parking Rear recordings",
-        nargs="+",
+        type=parse_filter,
+        help="downloads only recordings matching the given codes; each code"
+        " is a recording type optionally followed by a camera direction;"
+        " e.g. --include P,NF downloads all Parking and Normal Front"
+        " recordings",
+    )
+    arg_parser.add_argument(
+        "-e",
+        "--exclude",
+        default=None,
+        type=parse_filter,
+        help="excludes recordings matching the given codes; takes priority"
+        " over --include; e.g. --include N,E --exclude NR downloads all"
+        " Normal and Event recordings except Normal Rear",
     )
     arg_parser.add_argument(
         "-u",
@@ -1060,7 +1119,14 @@ def main() -> int:
         lf_fd = lock(destination)
 
         try:
-            sync(args.address, destination, grouping, args.priority, args.filter)
+            sync(
+                args.address,
+                destination,
+                grouping,
+                args.priority,
+                args.include,
+                args.exclude,
+            )
         finally:
             # removes temporary files (if we synced successfully, these are temp files from lost recordings)
             clean_destination(destination, grouping)

@@ -128,8 +128,42 @@ Other options:
 * `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 * `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
 * `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
+* `--include`: Downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `--include P,NF` downloads all Parking recordings and Normal Front recordings. See the table below for valid codes.
+* `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
 * `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
+
+#### Recording type and direction codes
+
+Recording type codes:
+
+| Code | Type |
+| ---- | ---- |
+| N | Normal |
+| E | Event |
+| P | Parking |
+| M | Manual |
+| I | Impact |
+| O | Overspeed |
+| A | Acceleration |
+| T | Cornering |
+| B | Braking |
+| R | Geofence (R) |
+| X | Geofence (X) |
+| G | Geofence (G) |
+| D | DMS (D) |
+| L | DMS (L) |
+| Y | DMS (Y) |
+| F | DMS (F) |
+
+Direction codes:
+
+| Code | Direction |
+| ---- | --------- |
+| F | Front |
+| R | Rear |
+| I | Interior |
+| O | Optional |
 
 ### Unattended Usage
 
@@ -231,6 +265,8 @@ Other parameters:
 * `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
 * `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
 * `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
+* `INCLUDE`: If set, downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `P,NF` downloads all Parking recordings and Normal Front recordings. (Default: empty, meaning all recordings are downloaded.)
+* `EXCLUDE`: If set, excludes recordings matching the given codes, same format as `INCLUDE`. Takes priority over `INCLUDE`. For example, setting `INCLUDE=N` and `EXCLUDE=NR` downloads all Normal recordings except Normal Rear. (Default: empty.)
 * `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
 * `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
 * `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
