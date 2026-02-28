@@ -127,6 +127,7 @@ Other options:
 * `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
 * `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 * `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
+* `--retry-count`: Sets the number of download attempts per file before giving up. Transient network errors (connection resets, timeouts) trigger retries with exponential backoff. HTTP errors (e.g. server errors for corrupted files) are not retried. Defaults to `3`.
 * `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
 * `--include`: Downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `--include P,NF` downloads all Parking recordings and Normal Front recordings. See the table below for valid codes.
 * `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
@@ -263,6 +264,7 @@ Other parameters:
 * `MAX_USED_DISK`: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: `90`, i.e. 90%.)
 * `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
 * `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
+* `RETRY_COUNT`: If set, sets the number of download attempts per file before giving up. (Default: `3`.)
 * `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
 * `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
 * `INCLUDE`: If set, downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `P,NF` downloads all Parking recordings and Normal Front recordings. (Default: empty, meaning all recordings are downloaded.)
