@@ -89,6 +89,9 @@ dry_run = None  # pylint: disable=invalid-name
 # minimum elapsed time before retrying a failed download
 retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: disable=invalid-name  # fmt: skip
 
+# number of download attempts per file before giving up
+retry_count: int = 3  # pylint: disable=invalid-name
+
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
 
@@ -1024,6 +1027,13 @@ def parse_args() -> argparse.Namespace:
         help="waits at least the given duration before retrying a failed download; defaults to days, but can suffix with s, h, d, w for seconds, hours, days or weeks respectively; defaults to 1d",
     )
     arg_parser.add_argument(
+        "--retry-count",
+        metavar="N",
+        default=3,
+        type=int,
+        help="number of download attempts per file before giving up; defaults to 3",
+    )
+    arg_parser.add_argument(
         "--skip-metadata",
         metavar="TYPES",
         default=set(),
@@ -1065,7 +1075,7 @@ def parse_args() -> argparse.Namespace:
     return arg_parser.parse_args()
 
 
-def main() -> int:
+def main() -> int:  # pylint: disable=too-many-statements
     """run forrest run"""
     # dry-run is a global setting
     # pylint: disable=global-statement
@@ -1075,6 +1085,7 @@ def main() -> int:
     global socket_timeout
     global affinity_key
     global retry_failed_after
+    global retry_count
     global skip_metadata
 
     args = parse_args()
@@ -1108,6 +1119,10 @@ def main() -> int:
         retry_failed_after = parse_duration(
             args.retry_failed_after, label="RETRY_FAILED_AFTER"
         )
+
+        retry_count = args.retry_count
+        if retry_count < 1:
+            raise RuntimeError("RETRY_COUNT must be at least 1.")
 
         # prepares the local file destination
         destination = args.destination or os.getcwd()
