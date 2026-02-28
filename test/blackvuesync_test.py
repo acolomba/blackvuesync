@@ -6,9 +6,13 @@ import errno
 import fcntl
 import glob
 import os
+import socket
 import tempfile
 import time
+import unittest.mock
+import urllib.error
 import urllib.request
+from typing import Any
 
 import pytest
 
@@ -992,3 +996,215 @@ def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert blackvuesync.main() == 1
     assert unlock_calls == []
+
+
+class TestDownloadRetry:
+    """tests for download retry logic."""
+
+    def test_retry_succeeds_after_transient_urlerror(self) -> None:
+        """verifies that a transient URLError is retried and succeeds."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 3
+
+                call_count = 0
+
+                def mock_urlopen(_request: Any, **_kwargs: Any) -> Any:
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count == 1:
+                        raise urllib.error.URLError("Connection reset")
+                    # returns a mock response on 2nd attempt
+                    response = unittest.mock.MagicMock()
+                    response.__enter__ = lambda s: s
+                    response.__exit__ = unittest.mock.MagicMock(return_value=False)
+                    response.info.return_value = {"Content-Length": "4"}
+                    response.read.side_effect = [b"test", b""]
+                    return response
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen", side_effect=mock_urlopen
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is True
+                assert call_count == 2
+                assert os.path.exists(os.path.join(dest, filename))
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_retries_exhausted_no_failed_marker(self) -> None:
+        """verifies that exhausted transient retries do not create a .failed marker."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 3
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen",
+                        side_effect=urllib.error.URLError("Connection reset"),
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is False
+                marker = blackvuesync.get_failed_marker_filepath(dest, None, filename)
+                assert not os.path.exists(marker)
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_http_error_not_retried(self) -> None:
+        """verifies that HTTPError is not retried and creates a .failed marker."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+            call_count = 0
+
+            try:
+                blackvuesync.retry_count = 3
+
+                def mock_urlopen(_request: Any, **_kwargs: Any) -> Any:
+                    nonlocal call_count
+                    call_count += 1
+                    raise urllib.error.HTTPError(
+                        "http://x",
+                        500,
+                        "Server Error",
+                        None,  # type: ignore[arg-type]
+                        None,
+                    )
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen", side_effect=mock_urlopen
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is False
+                assert call_count == 1  # only one attempt
+                marker = blackvuesync.get_failed_marker_filepath(dest, None, filename)
+                assert os.path.exists(marker)
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_socket_timeout_retried_not_raised(self) -> None:
+        """verifies that socket.timeout during download is retried, not raised."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 2
+                call_count = 0
+
+                def mock_urlopen(_request: Any, **_kwargs: Any) -> Any:
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count == 1:
+                        raise socket.timeout("timed out")
+                    response = unittest.mock.MagicMock()
+                    response.__enter__ = lambda s: s
+                    response.__exit__ = unittest.mock.MagicMock(return_value=False)
+                    response.info.return_value = {"Content-Length": "4"}
+                    response.read.side_effect = [b"test", b""]
+                    return response
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen", side_effect=mock_urlopen
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is True
+                assert call_count == 2
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_retry_count_one_no_retries(self) -> None:
+        """verifies that --retry-count 1 means single attempt, no retries."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+            call_count = 0
+
+            try:
+                blackvuesync.retry_count = 1
+
+                def mock_urlopen(_request: Any, **_kwargs: Any) -> Any:
+                    nonlocal call_count
+                    call_count += 1
+                    raise urllib.error.URLError("Connection reset")
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen", side_effect=mock_urlopen
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is False
+                assert call_count == 1
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_retry_succeeds_on_third_attempt(self) -> None:
+        """verifies recovery after two consecutive transient errors."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 3
+                call_count = 0
+
+                def mock_urlopen(_request: Any, **_kwargs: Any) -> Any:
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count <= 2:
+                        raise urllib.error.URLError("Connection reset")
+                    response = unittest.mock.MagicMock()
+                    response.__enter__ = lambda s: s
+                    response.__exit__ = unittest.mock.MagicMock(return_value=False)
+                    response.info.return_value = {"Content-Length": "4"}
+                    response.read.side_effect = [b"test", b""]
+                    return response
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen", side_effect=mock_urlopen
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is True
+                assert call_count == 3
+            finally:
+                blackvuesync.retry_count = original_retry_count
