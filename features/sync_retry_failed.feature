@@ -27,3 +27,11 @@ Feature: Retry failed downloads
     Then blackvuesync exits with code 0
     Then all the recordings are downloaded
     Then no failure markers exist
+
+  Scenario: Transient download errors recover within a single sync run
+    Given recordings for the past "1d" of types "N", directions "F"
+    Given the first 2 mp4 recordings have 2 transient errors
+    When blackvuesync runs with retry-count "3"
+    Then blackvuesync exits with code 0
+    Then all the recordings are downloaded
+    Then no failure markers exist

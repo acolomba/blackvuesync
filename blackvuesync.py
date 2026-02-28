@@ -533,7 +533,7 @@ def download_file(
             )
             mark_download_failed(destination, group_name, filename)
             return False, None
-        except (urllib.error.URLError, socket.timeout) as e:
+        except (urllib.error.URLError, socket.timeout, http.client.HTTPException) as e:
             # transient error -- retry with exponential backoff
             if attempt < retry_count - 1:
                 backoff = 2**attempt
