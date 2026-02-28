@@ -465,7 +465,7 @@ def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
         group_filepath = os.path.join(destination, group_name)
@@ -493,53 +493,70 @@ def download_file(
     if os.path.exists(temp_filepath):
         logger.debug("Found incomplete download : %s", temp_filepath)
 
-    try:
-        url = urllib.parse.urljoin(base_url, f"Record/{filename}")
-
-        start = time.perf_counter()
+    for attempt in range(retry_count):
         try:
-            # request
-            request = urllib.request.Request(url)
-            if affinity_key:
-                request.add_header("X-Affinity-Key", affinity_key)
+            url = urllib.parse.urljoin(base_url, f"Record/{filename}")
 
-            # downloads file
-            with urllib.request.urlopen(request) as response:
-                headers = response.info()
-                size = headers.get("Content-Length")
+            start = time.perf_counter()
+            try:
+                # request
+                request = urllib.request.Request(url)
+                if affinity_key:
+                    request.add_header("X-Affinity-Key", affinity_key)
 
-                # writes response to temp file
-                with open(temp_filepath, "wb") as f:
-                    while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
-                        f.write(chunk)
-        finally:
-            end = time.perf_counter()
-            elapsed_s = end - start
+                # downloads file
+                with urllib.request.urlopen(request) as response:
+                    headers = response.info()
+                    size = headers.get("Content-Length")
 
-        os.rename(temp_filepath, destination_filepath)
+                    # writes response to temp file
+                    with open(temp_filepath, "wb") as f:
+                        while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                            f.write(chunk)
+            finally:
+                end = time.perf_counter()
+                elapsed_s = end - start
 
-        speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
-        speed_str = format_natural_speed(speed_bps)
-        logger.debug("Downloaded file : %s%s", filename, speed_str)
+            os.rename(temp_filepath, destination_filepath)
 
-        return True, speed_bps
-    except urllib.error.HTTPError as e:
-        # HTTP errors (e.g. 500 for corrupted recordings); marks as failed to suppress retries
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.", filename, e
-        )
-        mark_download_failed(destination, group_name, filename)
-        return False, None
-    except urllib.error.URLError as e:
-        # network-level errors (connection reset, etc.); does not mark as failed
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.", filename, e
-        )
-        return False, None
-    except socket.timeout as e:
-        raise UserWarning(
-            f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
-        ) from e
+            speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
+            speed_str = format_natural_speed(speed_bps)
+            logger.debug("Downloaded file : %s%s", filename, speed_str)
+
+            return True, speed_bps
+        except urllib.error.HTTPError as e:
+            # permanent error -- no retry, mark as failed
+            cron_logger.warning(
+                "Could not download file : %s; error : %s; ignoring.",
+                filename,
+                e,
+            )
+            mark_download_failed(destination, group_name, filename)
+            return False, None
+        except (urllib.error.URLError, socket.timeout) as e:
+            # transient error -- retry with exponential backoff
+            if attempt < retry_count - 1:
+                backoff = 2**attempt
+                logger.debug(
+                    "Transient error downloading %s : %s; retrying in %ds (%d/%d)",
+                    filename,
+                    e,
+                    backoff,
+                    attempt + 1,
+                    retry_count,
+                )
+                time.sleep(backoff)
+            else:
+                cron_logger.warning(
+                    "Could not download file : %s; error : %s;"
+                    " giving up after %d attempts.",
+                    filename,
+                    e,
+                    retry_count,
+                )
+                return False, None
+
+    return False, None  # unreachable, but satisfies type checker
 
 
 def download_recording(base_url: str, recording: Recording, destination: str) -> None:
