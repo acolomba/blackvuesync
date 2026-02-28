@@ -56,6 +56,24 @@ def transient_download_errors(context: Context, count: int, fail_count: int) -> 
     response.raise_for_status()
 
 
+@given("all mp4 recordings have {fail_count:d} transient errors")
+def all_transient_download_errors(context: Context, fail_count: int) -> None:
+    """configures all mp4 recordings to fail transiently."""
+    if not hasattr(context, "expected_recordings"):
+        raise RuntimeError(
+            "Cannot configure transient errors: no recordings configured yet."
+        )
+
+    mp4_files = [f for f in context.expected_recordings if f.endswith(".mp4")]
+
+    url = f"{context.mock_dashcam_url}/mock/downloads/transient-errors"
+    headers = {"X-Affinity-Key": context.scenario_token}
+    data = {"filenames": mp4_files, "fail_count": fail_count}
+
+    response = requests.post(url, json=data, headers=headers, timeout=10)
+    response.raise_for_status()
+
+
 @when("download errors are cleared")
 def clear_download_errors(context: Context) -> None:
     """clears all configured download errors."""

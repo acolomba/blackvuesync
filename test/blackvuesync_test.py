@@ -1085,12 +1085,12 @@ class TestDownloadRetry:
                         side_effect=urllib.error.URLError("Connection reset"),
                     ),
                     unittest.mock.patch("time.sleep"),
+                    pytest.raises(blackvuesync.TransientDownloadError),
                 ):
-                    downloaded, _ = blackvuesync.download_file(
+                    blackvuesync.download_file(
                         "http://127.0.0.1:0", filename, dest, None
                     )
 
-                assert downloaded is False
                 marker = blackvuesync.get_failed_marker_filepath(dest, None, filename)
                 assert not os.path.exists(marker)
             finally:
@@ -1191,12 +1191,12 @@ class TestDownloadRetry:
                         "urllib.request.urlopen", side_effect=mock_urlopen
                     ),
                     unittest.mock.patch("time.sleep"),
+                    pytest.raises(blackvuesync.TransientDownloadError),
                 ):
-                    downloaded, _ = blackvuesync.download_file(
+                    blackvuesync.download_file(
                         "http://127.0.0.1:0", filename, dest, None
                     )
 
-                assert downloaded is False
                 assert call_count == 1
             finally:
                 blackvuesync.retry_count = original_retry_count
@@ -1276,3 +1276,227 @@ class TestDownloadRetry:
                 assert not os.path.exists(marker)
             finally:
                 blackvuesync.retry_count = original_retry_count
+
+    def test_connection_reset_error_retried(self) -> None:
+        """verifies that ConnectionResetError (an OSError) triggers retry."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 2
+                call_count = 0
+
+                def mock_urlopen(_request: Any, **_kwargs: Any) -> Any:
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count == 1:
+                        raise ConnectionResetError("Connection reset by peer")
+                    response = unittest.mock.MagicMock()
+                    response.__enter__ = lambda s: s
+                    response.__exit__ = unittest.mock.MagicMock(return_value=False)
+                    response.info.return_value = {"Content-Length": "4"}
+                    response.read.side_effect = [b"test", b""]
+                    return response
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen", side_effect=mock_urlopen
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                ):
+                    downloaded, _ = blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert downloaded is True
+                assert call_count == 2
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_transient_download_error_raised_on_exhaustion(self) -> None:
+        """verifies that TransientDownloadError is raised when retries are exhausted."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 2
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen",
+                        side_effect=urllib.error.URLError("Connection reset"),
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                    pytest.raises(
+                        blackvuesync.TransientDownloadError,
+                        match="giving up after 2 attempts",
+                    ),
+                ):
+                    blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_temp_file_removed_after_exhausted_retries(self) -> None:
+        """verifies that partial temp file is removed when retries are exhausted."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            temp_filepath = os.path.join(dest, f".{filename}")
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 2
+
+                # creates a partial temp file to simulate interrupted download
+                with open(temp_filepath, "wb") as f:
+                    f.write(b"partial")
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen",
+                        side_effect=urllib.error.URLError("Connection reset"),
+                    ),
+                    unittest.mock.patch("time.sleep"),
+                    pytest.raises(blackvuesync.TransientDownloadError),
+                ):
+                    blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                assert not os.path.exists(temp_filepath)
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+    def test_backoff_sleep_values(self) -> None:
+        """verifies that exponential backoff sleeps with correct values."""
+        with tempfile.TemporaryDirectory() as dest:
+            filename = "20181029_131513_NF.mp4"
+            original_retry_count = blackvuesync.retry_count
+
+            try:
+                blackvuesync.retry_count = 3
+
+                with (
+                    unittest.mock.patch(
+                        "urllib.request.urlopen",
+                        side_effect=urllib.error.URLError("Connection reset"),
+                    ),
+                    unittest.mock.patch("time.sleep") as mock_sleep,
+                    pytest.raises(blackvuesync.TransientDownloadError),
+                ):
+                    blackvuesync.download_file(
+                        "http://127.0.0.1:0", filename, dest, None
+                    )
+
+                # with retry_count=3: sleeps after attempt 0 (2^0=1) and attempt 1 (2^1=2)
+                assert mock_sleep.call_args_list == [
+                    unittest.mock.call(1),
+                    unittest.mock.call(2),
+                ]
+            finally:
+                blackvuesync.retry_count = original_retry_count
+
+
+class TestCircuitBreaker:
+    """tests for circuit breaker in sync()."""
+
+    def test_consecutive_transient_failures_raise_user_warning(self) -> None:
+        """verifies that 3 consecutive transient recording failures abort with UserWarning."""
+        recordings = [
+            blackvuesync.Recording(
+                f"2018102{i}_131513_NF.mp4",
+                f"2018102{i}_131513",
+                None,
+                datetime.datetime(2018, 10, 20 + i, 13, 15, 13),
+                "N",
+                "F",
+            )
+            for i in range(4)
+        ]
+
+        with (
+            unittest.mock.patch(
+                "blackvuesync.prepare_destination",
+            ),
+            unittest.mock.patch(
+                "blackvuesync.get_dashcam_filenames",
+                return_value=[r.filename for r in recordings],
+            ),
+            unittest.mock.patch(
+                "blackvuesync.to_recording",
+                side_effect=recordings,
+            ),
+            unittest.mock.patch(
+                "blackvuesync.get_current_recordings",
+                return_value=recordings,
+            ),
+            unittest.mock.patch(
+                "blackvuesync.apply_recording_filters",
+                return_value=recordings,
+            ),
+            unittest.mock.patch(
+                "blackvuesync.sort_recordings",
+            ),
+            unittest.mock.patch(
+                "blackvuesync.download_recording",
+                side_effect=blackvuesync.TransientDownloadError("transient"),
+            ),
+            pytest.raises(UserWarning, match="3 consecutive recordings"),
+        ):
+            blackvuesync.sync("10.0.0.1", "/tmp/dest", "none", "date", None, None)
+
+    def test_transient_failure_resets_on_success(self) -> None:
+        """verifies that a successful download resets the consecutive failure counter."""
+        recordings = [
+            blackvuesync.Recording(
+                f"2018102{i}_131513_NF.mp4",
+                f"2018102{i}_131513",
+                None,
+                datetime.datetime(2018, 10, 20 + i, 13, 15, 13),
+                "N",
+                "F",
+            )
+            for i in range(5)
+        ]
+
+        call_count = 0
+
+        def mock_download(
+            _base_url: str, _recording: blackvuesync.Recording, _dest: str
+        ) -> None:
+            nonlocal call_count
+            call_count += 1
+            # fails on recordings 0, 1, succeeds on 2, fails on 3, 4
+            if call_count in (1, 2, 4, 5):
+                raise blackvuesync.TransientDownloadError("transient")
+
+        with (
+            unittest.mock.patch("blackvuesync.prepare_destination"),
+            unittest.mock.patch(
+                "blackvuesync.get_dashcam_filenames",
+                return_value=[r.filename for r in recordings],
+            ),
+            unittest.mock.patch(
+                "blackvuesync.to_recording",
+                side_effect=recordings,
+            ),
+            unittest.mock.patch(
+                "blackvuesync.get_current_recordings",
+                return_value=recordings,
+            ),
+            unittest.mock.patch(
+                "blackvuesync.apply_recording_filters",
+                return_value=recordings,
+            ),
+            unittest.mock.patch("blackvuesync.sort_recordings"),
+            unittest.mock.patch(
+                "blackvuesync.download_recording",
+                side_effect=mock_download,
+            ),
+        ):
+            # should not raise: pattern is fail, fail, success, fail, fail (never 3 consecutive)
+            blackvuesync.sync("10.0.0.1", "/tmp/dest", "none", "date", None, None)
+            assert call_count == 5

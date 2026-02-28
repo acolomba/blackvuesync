@@ -35,3 +35,9 @@ Feature: Retry failed downloads
     Then blackvuesync exits with code 0
     Then all the recordings are downloaded
     Then no failure markers exist
+
+  Scenario: Circuit breaker aborts after consecutive transient failures
+    Given recordings for the past "1d" of types "N", directions "F"
+    Given all mp4 recordings have 3 transient errors
+    When blackvuesync runs with retry-count "3"
+    Then blackvuesync exits with code 1

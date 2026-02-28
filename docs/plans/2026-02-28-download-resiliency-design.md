@@ -43,8 +43,9 @@ integer (>= 1). A value of 1 means no retries (single attempt).
 The HTTP request + streaming block is wrapped in a retry loop:
 
 - `HTTPError` breaks out immediately -- no retry, creates `.failed` marker.
-- `URLError` and `socket.timeout` trigger exponential backoff (1s, 2s, 4s) and
-  retry.
+- `URLError` and `socket.timeout` trigger exponential backoff (1s, 2s) and
+  retry. With the default `--retry-count 3`, two sleeps occur before the third
+  attempt.
 - The temp dotfile is not cleaned up between retries, so partial downloads can
   resume.
 - `socket.timeout` no longer raises `UserWarning` from `download_file()`.

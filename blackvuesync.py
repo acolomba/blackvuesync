@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-lines
 """
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 https://github.com/acolomba/blackvuesync
@@ -235,6 +236,10 @@ def calc_cutoff_date(keep: str) -> datetime.date:
     return today - parse_duration(keep, label="KEEP", allowed_units="dw")
 
 
+class TransientDownloadError(Exception):
+    """raised when a file download fails after exhausting all transient retries."""
+
+
 @dataclass(frozen=True)
 class Recording:
     """represents a recording from the dashcam; the dashcam serves the list of video recording filenames (front and rear)"""
@@ -464,7 +469,11 @@ def remove_download_failed_marker(
 def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
-    """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
+    """downloads a file from the dashcam to the destination directory; returns whether data was transferred.
+
+    retries transient errors with exponential backoff up to retry_count attempts.
+    raises TransientDownloadError if all transient retries are exhausted.
+    """
     # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
@@ -525,7 +534,7 @@ def download_file(
 
             return True, speed_bps
         except urllib.error.HTTPError as e:
-            # permanent error -- no retry, mark as failed
+            # permanent error -- not retried, marks as failed
             cron_logger.warning(
                 "Could not download file : %s; error : %s; ignoring.",
                 filename,
@@ -533,8 +542,13 @@ def download_file(
             )
             mark_download_failed(destination, group_name, filename)
             return False, None
-        except (urllib.error.URLError, socket.timeout, http.client.HTTPException) as e:
-            # transient error -- retry with exponential backoff
+        except (
+            urllib.error.URLError,
+            socket.timeout,
+            OSError,
+            http.client.HTTPException,
+        ) as e:
+            # transient error -- retries with exponential backoff
             if attempt < retry_count - 1:
                 backoff = 2**attempt
                 logger.debug(
@@ -554,9 +568,15 @@ def download_file(
                     e,
                     retry_count,
                 )
-                return False, None
+                # removes partial temp file to avoid stale incomplete downloads
+                if os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
+                raise TransientDownloadError(
+                    f"Could not download file : {filename}; error : {e};"
+                    f" giving up after {retry_count} attempts."
+                ) from e
 
-    return False, None  # unreachable, but satisfies type checker
+    raise AssertionError("unreachable: retry loop should always return")
 
 
 def download_recording(base_url: str, recording: Recording, destination: str) -> None:
@@ -879,8 +899,20 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     # sorts the dashcam recordings so we download them according to some priority
     sort_recordings(current_dashcam_recordings, download_priority)
 
+    consecutive_transient_failures = 0
+
     for recording in current_dashcam_recordings:
-        download_recording(base_url, recording, destination)
+        try:
+            download_recording(base_url, recording, destination)
+            consecutive_transient_failures = 0
+        except TransientDownloadError as exc:
+            consecutive_transient_failures += 1
+            if consecutive_transient_failures >= 3:
+                raise UserWarning(
+                    "Dashcam appears unreachable:"
+                    f" {consecutive_transient_failures} consecutive recordings"
+                    " failed with transient errors"
+                ) from exc
 
 
 def is_empty_directory(dirpath: str) -> bool:
