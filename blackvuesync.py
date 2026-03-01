@@ -466,6 +466,38 @@ def remove_download_failed_marker(
         )
 
 
+def _fetch_file(
+    base_url: str,
+    filename: str,
+    temp_filepath: str,
+    destination_filepath: str,
+) -> tuple[bool, int | None]:
+    """fetches a file from the dashcam via HTTP, writes it to disk, and returns download speed."""
+    url = urllib.parse.urljoin(base_url, f"Record/{filename}")
+
+    start = time.perf_counter()
+    try:
+        request = urllib.request.Request(url)
+        if affinity_key:
+            request.add_header("X-Affinity-Key", affinity_key)
+
+        with urllib.request.urlopen(request) as response:
+            size = response.info().get("Content-Length")
+
+            with open(temp_filepath, "wb") as f:
+                while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                    f.write(chunk)
+    finally:
+        elapsed_s = time.perf_counter() - start
+
+    os.rename(temp_filepath, destination_filepath)
+
+    speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
+    logger.debug("Downloaded file : %s%s", filename, format_natural_speed(speed_bps))
+
+    return True, speed_bps
+
+
 def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
@@ -474,7 +506,6 @@ def download_file(
     retries transient errors with exponential backoff up to retry_count attempts.
     raises TransientDownloadError if all transient retries are exhausted.
     """
-    # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
         group_filepath = os.path.join(destination, group_name)
@@ -504,35 +535,7 @@ def download_file(
 
     for attempt in range(retry_count):
         try:
-            url = urllib.parse.urljoin(base_url, f"Record/{filename}")
-
-            start = time.perf_counter()
-            try:
-                # request
-                request = urllib.request.Request(url)
-                if affinity_key:
-                    request.add_header("X-Affinity-Key", affinity_key)
-
-                # downloads file
-                with urllib.request.urlopen(request) as response:
-                    headers = response.info()
-                    size = headers.get("Content-Length")
-
-                    # writes response to temp file
-                    with open(temp_filepath, "wb") as f:
-                        while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
-                            f.write(chunk)
-            finally:
-                end = time.perf_counter()
-                elapsed_s = end - start
-
-            os.rename(temp_filepath, destination_filepath)
-
-            speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
-            speed_str = format_natural_speed(speed_bps)
-            logger.debug("Downloaded file : %s%s", filename, speed_str)
-
-            return True, speed_bps
+            return _fetch_file(base_url, filename, temp_filepath, destination_filepath)
         except urllib.error.HTTPError as e:
             # permanent error -- not retried, marks as failed
             cron_logger.warning(
@@ -542,12 +545,7 @@ def download_file(
             )
             mark_download_failed(destination, group_name, filename)
             return False, None
-        except (
-            urllib.error.URLError,
-            socket.timeout,
-            OSError,
-            http.client.HTTPException,
-        ) as e:
+        except (OSError, http.client.HTTPException) as e:
             # transient error -- retries with exponential backoff
             if attempt < retry_count - 1:
                 backoff = 2**attempt
