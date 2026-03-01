@@ -272,9 +272,10 @@ def _execute_docker(
     logger.debug("setting docker container timezone to: %s", host_tz)
     container.with_env("TZ", host_tz)
 
-    # sets RUN_ONCE=1 only if not in cron mode
+    # sets RUN_ONCE=1 and clears CRON (defaulted in Dockerfile) when not in cron mode
     if not cron:
         container.with_env("RUN_ONCE", "1")
+        container.with_env("CRON", "")
 
     # configures optional parameters
     if grouping:
