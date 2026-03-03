@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-lines
 """
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 https://github.com/acolomba/blackvuesync
@@ -88,6 +89,9 @@ dry_run = None  # pylint: disable=invalid-name
 
 # minimum elapsed time before retrying a failed download
 retry_failed_after: datetime.timedelta = datetime.timedelta(days=1)  # pylint: disable=invalid-name  # fmt: skip
+
+# number of download attempts per file before giving up
+retry_count: int = 3  # pylint: disable=invalid-name
 
 # affinity key reserved for test isolation
 affinity_key: str | None = None  # pylint: disable=invalid-name
@@ -230,6 +234,10 @@ def parse_duration(
 def calc_cutoff_date(keep: str) -> datetime.date:
     """given a retention period, calculates the date before which files should be deleted"""
     return today - parse_duration(keep, label="KEEP", allowed_units="dw")
+
+
+class TransientDownloadError(Exception):
+    """raised when a file download fails after exhausting all transient retries."""
 
 
 @dataclass(frozen=True)
@@ -458,11 +466,46 @@ def remove_download_failed_marker(
         )
 
 
+def _fetch_file(
+    base_url: str,
+    filename: str,
+    temp_filepath: str,
+    destination_filepath: str,
+) -> tuple[bool, int | None]:
+    """fetches a file from the dashcam via HTTP, writes it to disk, and returns download speed."""
+    url = urllib.parse.urljoin(base_url, f"Record/{filename}")
+
+    start = time.perf_counter()
+    try:
+        request = urllib.request.Request(url)
+        if affinity_key:
+            request.add_header("X-Affinity-Key", affinity_key)
+
+        with urllib.request.urlopen(request) as response:
+            size = response.info().get("Content-Length")
+
+            with open(temp_filepath, "wb") as f:
+                while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                    f.write(chunk)
+    finally:
+        elapsed_s = time.perf_counter() - start
+
+    os.rename(temp_filepath, destination_filepath)
+
+    speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
+    logger.debug("Downloaded file : %s%s", filename, format_natural_speed(speed_bps))
+
+    return True, speed_bps
+
+
 def download_file(
     base_url: str, filename: str, destination: str, group_name: str | None
 ) -> tuple[bool, int | None]:
-    """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
-    # pylint: disable=too-many-locals
+    """downloads a file from the dashcam to the destination directory; returns whether data was transferred.
+
+    retries transient errors with exponential backoff up to retry_count attempts.
+    raises TransientDownloadError if all transient retries are exhausted.
+    """
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
         group_filepath = os.path.join(destination, group_name)
@@ -490,53 +533,48 @@ def download_file(
     if os.path.exists(temp_filepath):
         logger.debug("Found incomplete download : %s", temp_filepath)
 
-    try:
-        url = urllib.parse.urljoin(base_url, f"Record/{filename}")
-
-        start = time.perf_counter()
+    for attempt in range(retry_count):
         try:
-            # request
-            request = urllib.request.Request(url)
-            if affinity_key:
-                request.add_header("X-Affinity-Key", affinity_key)
+            return _fetch_file(base_url, filename, temp_filepath, destination_filepath)
+        except urllib.error.HTTPError as e:
+            # permanent error -- not retried, marks as failed
+            cron_logger.warning(
+                "Could not download file : %s; error : %s; ignoring.",
+                filename,
+                e,
+            )
+            mark_download_failed(destination, group_name, filename)
+            return False, None
+        except (OSError, http.client.HTTPException) as e:
+            # transient error -- retries with exponential backoff
+            if attempt < retry_count - 1:
+                backoff = 2**attempt
+                logger.debug(
+                    "Transient error downloading %s : %s; retrying in %ds (%d/%d)",
+                    filename,
+                    e,
+                    backoff,
+                    attempt + 1,
+                    retry_count,
+                )
+                time.sleep(backoff)
+            else:
+                cron_logger.warning(
+                    "Could not download file : %s; error : %s;"
+                    " giving up after %d attempts.",
+                    filename,
+                    e,
+                    retry_count,
+                )
+                # removes partial temp file to avoid stale incomplete downloads
+                if os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
+                raise TransientDownloadError(
+                    f"Could not download file : {filename}; error : {e};"
+                    f" giving up after {retry_count} attempts."
+                ) from e
 
-            # downloads file
-            with urllib.request.urlopen(request) as response:
-                headers = response.info()
-                size = headers.get("Content-Length")
-
-                # writes response to temp file
-                with open(temp_filepath, "wb") as f:
-                    while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
-                        f.write(chunk)
-        finally:
-            end = time.perf_counter()
-            elapsed_s = end - start
-
-        os.rename(temp_filepath, destination_filepath)
-
-        speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
-        speed_str = format_natural_speed(speed_bps)
-        logger.debug("Downloaded file : %s%s", filename, speed_str)
-
-        return True, speed_bps
-    except urllib.error.HTTPError as e:
-        # HTTP errors (e.g. 500 for corrupted recordings); marks as failed to suppress retries
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.", filename, e
-        )
-        mark_download_failed(destination, group_name, filename)
-        return False, None
-    except urllib.error.URLError as e:
-        # network-level errors (connection reset, etc.); does not mark as failed
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.", filename, e
-        )
-        return False, None
-    except socket.timeout as e:
-        raise UserWarning(
-            f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
-        ) from e
+    raise AssertionError("unreachable: retry loop should always return")
 
 
 def download_recording(base_url: str, recording: Recording, destination: str) -> None:
@@ -859,8 +897,20 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     # sorts the dashcam recordings so we download them according to some priority
     sort_recordings(current_dashcam_recordings, download_priority)
 
+    consecutive_transient_failures = 0
+
     for recording in current_dashcam_recordings:
-        download_recording(base_url, recording, destination)
+        try:
+            download_recording(base_url, recording, destination)
+            consecutive_transient_failures = 0
+        except TransientDownloadError as exc:
+            consecutive_transient_failures += 1
+            if consecutive_transient_failures >= 3:
+                raise UserWarning(
+                    "Dashcam appears unreachable:"
+                    f" {consecutive_transient_failures} consecutive recordings"
+                    " failed with transient errors"
+                ) from exc
 
 
 def is_empty_directory(dirpath: str) -> bool:
@@ -1024,6 +1074,13 @@ def parse_args() -> argparse.Namespace:
         help="waits at least the given duration before retrying a failed download; defaults to days, but can suffix with s, h, d, w for seconds, hours, days or weeks respectively; defaults to 1d",
     )
     arg_parser.add_argument(
+        "--retry-count",
+        metavar="N",
+        default=3,
+        type=int,
+        help="number of download attempts per file before giving up; defaults to 3",
+    )
+    arg_parser.add_argument(
         "--skip-metadata",
         metavar="TYPES",
         default=set(),
@@ -1065,7 +1122,7 @@ def parse_args() -> argparse.Namespace:
     return arg_parser.parse_args()
 
 
-def main() -> int:
+def main() -> int:  # pylint: disable=too-many-statements
     """run forrest run"""
     # dry-run is a global setting
     # pylint: disable=global-statement
@@ -1075,6 +1132,7 @@ def main() -> int:
     global socket_timeout
     global affinity_key
     global retry_failed_after
+    global retry_count
     global skip_metadata
 
     args = parse_args()
@@ -1108,6 +1166,10 @@ def main() -> int:
         retry_failed_after = parse_duration(
             args.retry_failed_after, label="RETRY_FAILED_AFTER"
         )
+
+        retry_count = args.retry_count
+        if retry_count < 1:
+            raise RuntimeError("RETRY_COUNT must be at least 1.")
 
         # prepares the local file destination
         destination = args.destination or os.getcwd()

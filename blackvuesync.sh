@@ -35,6 +35,9 @@ fi
 # retry-failed-after option if RETRY_FAILED_AFTER set
 [ -n "${RETRY_FAILED_AFTER:-}" ] && set -- "$@" --retry-failed-after "$RETRY_FAILED_AFTER"
 
+# retry-count option if RETRY_COUNT set
+[ -n "${RETRY_COUNT:-}" ] && set -- "$@" --retry-count "$RETRY_COUNT"
+
 # skip-metadata option if SKIP_METADATA set
 [ -n "${SKIP_METADATA:-}" ] && set -- "$@" --skip-metadata "$SKIP_METADATA"
 

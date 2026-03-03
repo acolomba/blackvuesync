@@ -8,6 +8,7 @@ import re
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,10 @@ class MockDashcam:
         self._sessions_lock = threading.RLock()
         self._recordings_by_session: defaultdict[str, list[str]] = defaultdict(list)
         self._download_errors_by_session: defaultdict[str, set[str]] = defaultdict(set)
+        # tracks transient download errors: {affinity_key: {filename: remaining_failures}}
+        self._transient_errors_by_session: defaultdict[str, dict[str, int]] = (
+            defaultdict(dict)
+        )
 
         # sets up routes
         self._setup_routes()
@@ -122,6 +127,23 @@ class MockDashcam:
         """thread-safe write access to session-specific download errors"""
         with self._sessions_lock:
             self._download_errors_by_session[affinity_key] = filenames
+
+    def _get_transient_errors(self, affinity_key: str) -> dict[str, int]:
+        """thread-safe read access to session-specific transient errors"""
+        with self._sessions_lock:
+            return self._transient_errors_by_session[affinity_key].copy()
+
+    def _set_transient_errors(self, affinity_key: str, errors: dict[str, int]) -> None:
+        """thread-safe write access to session-specific transient errors"""
+        with self._sessions_lock:
+            self._transient_errors_by_session[affinity_key] = errors
+
+    def _decrement_transient_error(self, affinity_key: str, filename: str) -> None:
+        """thread-safe decrement of remaining failures for a transient error"""
+        with self._sessions_lock:
+            errors = self._transient_errors_by_session[affinity_key]
+            if filename in errors and errors[filename] > 0:
+                errors[filename] -= 1
 
     def _setup_routes(self) -> None:
         """sets up flask routes"""
@@ -161,11 +183,27 @@ class MockDashcam:
                 logger.debug("Response: 404 Not Found (not in session recordings)")
                 return flask.abort(404)
 
-            # checks if file is configured to fail
+            # checks if file is configured to fail permanently
             download_errors = self._get_download_errors(affinity_key)
             if filename in download_errors:
                 logger.debug("Response: 500 Internal Server Error (configured error)")
                 flask.abort(500)
+
+            # checks if file has transient errors remaining
+            transient_errors = self._get_transient_errors(affinity_key)
+            if filename in transient_errors and transient_errors[filename] > 0:
+                self._decrement_transient_error(affinity_key, filename)
+                logger.debug(
+                    "Response: connection drop (transient error, %d remaining)",
+                    transient_errors[filename],
+                )
+
+                # sends partial response then abruptly closes connection
+                def generate() -> Generator[bytes]:
+                    yield b"partial"
+                    raise ConnectionError("simulated network drop")
+
+                return flask.Response(generate(), mimetype="application/octet-stream")
 
             if recording := to_recording(filename):
                 # uses the mock file with the same extension
@@ -267,6 +305,34 @@ class MockDashcam:
             logger.debug("Response body: {'status': 'cleared'}")
             return {"status": "cleared"}, 200
 
+        @self.app.route("/mock/downloads/transient-errors", methods=["POST"])
+        def set_transient_errors() -> tuple[dict[str, Any], int]:
+            """configures files to fail transiently N times then succeed."""
+            data = flask.request.get_json() or {}
+            logger.debug("POST /mock/downloads/transient-errors")
+            logger.debug("Request body: %s", data)
+            affinity_key = self._get_affinity_key()
+
+            # format: {"filenames": ["file1.mp4", "file2.mp4"], "fail_count": 2}
+            filenames = data.get("filenames", [])
+            fail_count = data.get("fail_count", 1)
+            errors = {f: fail_count for f in filenames}
+            self._set_transient_errors(affinity_key, errors)
+
+            response = {"status": "configured", "count": len(filenames)}
+            logger.debug("Response body: %s", response)
+
+            return response, 201
+
+        @self.app.route("/mock/downloads/transient-errors", methods=["DELETE"])
+        def clear_transient_errors_route() -> tuple[dict[str, str], int]:
+            """clears transient errors for the session."""
+            logger.debug("DELETE /mock/downloads/transient-errors")
+            affinity_key = self._get_affinity_key()
+            self._set_transient_errors(affinity_key, {})
+            logger.debug("Response body: {'status': 'cleared'}")
+            return {"status": "cleared"}, 200
+
     def start(self) -> None:
         """starts the flask server in a background thread"""
         if self.server_thread is not None:
@@ -331,6 +397,8 @@ class MockDashcam:
             if affinity_key:
                 self._recordings_by_session[affinity_key] = []
                 self._download_errors_by_session[affinity_key] = set()
+                self._transient_errors_by_session[affinity_key] = {}
             else:
                 self._recordings_by_session.clear()
                 self._download_errors_by_session.clear()
+                self._transient_errors_by_session.clear()
