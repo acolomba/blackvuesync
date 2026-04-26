@@ -16,7 +16,18 @@ This project is on GitHub: <https://github.com/acolomba/blackvuesync>
 
 The project uses `pyproject.toml` for dependency management. Development dependencies (black, Flask, pre-commit, pytest) are defined as optional dependencies.
 
-### Setup
+A session-start hook creates the virtual environment and installs dependencies automatically.
+
+### Command Execution
+
+- Use the project virtual environment binaries directly.
+- For Python commands, use `venv/bin/python`.
+- For package installs, use `venv/bin/pip`.
+- For unit tests, use `venv/bin/pytest`.
+- For functional tests, use `venv/bin/behave`.
+- Avoid relying on shell activation persistence between commands.
+
+### Manual Setup
 
 Create a virtual environment and install development dependencies:
 

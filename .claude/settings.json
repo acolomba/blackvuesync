@@ -17,6 +17,7 @@
   "permissions": {
     "allow": [
       "Bash(behave:*)",
+      "Bash(pytest:*)",
       "Bash(gh:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",

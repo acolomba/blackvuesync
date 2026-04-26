@@ -37,6 +37,43 @@ def download_errors(context: Context, count: int) -> None:
     context.failed_recordings = set(failed_filenames)
 
 
+@given("the first {count:d} mp4 recordings have {fail_count:d} transient errors")
+def transient_download_errors(context: Context, count: int, fail_count: int) -> None:
+    """configures the first N mp4 recordings to fail transiently."""
+    if not hasattr(context, "expected_recordings"):
+        raise RuntimeError(
+            "Cannot configure transient errors: no recordings configured yet."
+        )
+
+    mp4_files = [f for f in context.expected_recordings if f.endswith(".mp4")]
+    failed_filenames = mp4_files[:count]
+
+    url = f"{context.mock_dashcam_url}/mock/downloads/transient-errors"
+    headers = {"X-Affinity-Key": context.scenario_token}
+    data = {"filenames": failed_filenames, "fail_count": fail_count}
+
+    response = requests.post(url, json=data, headers=headers, timeout=10)
+    response.raise_for_status()
+
+
+@given("all mp4 recordings have {fail_count:d} transient errors")
+def all_transient_download_errors(context: Context, fail_count: int) -> None:
+    """configures all mp4 recordings to fail transiently."""
+    if not hasattr(context, "expected_recordings"):
+        raise RuntimeError(
+            "Cannot configure transient errors: no recordings configured yet."
+        )
+
+    mp4_files = [f for f in context.expected_recordings if f.endswith(".mp4")]
+
+    url = f"{context.mock_dashcam_url}/mock/downloads/transient-errors"
+    headers = {"X-Affinity-Key": context.scenario_token}
+    data = {"filenames": mp4_files, "fail_count": fail_count}
+
+    response = requests.post(url, json=data, headers=headers, timeout=10)
+    response.raise_for_status()
+
+
 @when("download errors are cleared")
 def clear_download_errors(context: Context) -> None:
     """clears all configured download errors."""
@@ -56,6 +93,18 @@ def run_blackvuesync_with_retry_failed_after(context: Context, duration: str) ->
         str(context.dest_dir),
         context.scenario_token,
         retry_failed_after=duration,
+    )
+
+
+@when('blackvuesync runs with retry-count "{count:d}"')
+def run_blackvuesync_with_retry_count(context: Context, count: int) -> None:
+    """executes blackvuesync with a specific retry count."""
+    execute_blackvuesync(
+        context,
+        context.mock_dashcam_address,
+        str(context.dest_dir),
+        context.scenario_token,
+        retry_count=count,
     )
 
 

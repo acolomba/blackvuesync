@@ -32,6 +32,7 @@ def execute_blackvuesync(
     dry_run: bool = False,
     retry_failed_after: str | None = None,
     skip_metadata: str | None = None,
+    retry_count: int | None = None,
 ) -> None:
     """executes blackvuesync with specified parameters and stores results in context."""
     implementation = context.config.userdata.get("implementation", "direct")
@@ -55,6 +56,7 @@ def execute_blackvuesync(
             dry_run,
             retry_failed_after,
             skip_metadata,
+            retry_count,
         )
     else:
         _execute_direct(
@@ -75,6 +77,7 @@ def execute_blackvuesync(
             dry_run,
             retry_failed_after,
             skip_metadata,
+            retry_count,
         )
 
 
@@ -96,6 +99,7 @@ def _execute_direct(
     dry_run: bool = False,
     retry_failed_after: str | None = None,
     skip_metadata: str | None = None,
+    retry_count: int | None = None,
 ) -> None:
     """executes blackvuesync directly via python."""
     # locates blackvuesync.py
@@ -169,6 +173,9 @@ def _execute_direct(
     if skip_metadata:
         cmd.extend(["--skip-metadata", skip_metadata])
 
+    if retry_count is not None:
+        cmd.extend(["--retry-count", str(retry_count)])
+
     logger.info("Running (direct): %s", cmd)
 
     # prepares environment for coverage collection
@@ -227,6 +234,7 @@ def _execute_docker(
     dry_run: bool = False,
     retry_failed_after: str | None = None,
     skip_metadata: str | None = None,
+    retry_count: int | None = None,
 ) -> None:
     """executes blackvuesync via docker container."""
     # uses address as-is (should be mock dashcam container name on docker network)
@@ -264,9 +272,10 @@ def _execute_docker(
     logger.debug("setting docker container timezone to: %s", host_tz)
     container.with_env("TZ", host_tz)
 
-    # sets RUN_ONCE=1 only if not in cron mode
+    # sets RUN_ONCE=1 and clears CRON (defaulted in Dockerfile) when not in cron mode
     if not cron:
         container.with_env("RUN_ONCE", "1")
+        container.with_env("CRON", "")
 
     # configures optional parameters
     if grouping:
@@ -307,6 +316,9 @@ def _execute_docker(
 
     if skip_metadata:
         container.with_env("SKIP_METADATA", skip_metadata)
+
+    if retry_count is not None:
+        container.with_env("RETRY_COUNT", str(retry_count))
 
     logger.info("Starting docker container with image: %s", context.docker_image.tag)
 
