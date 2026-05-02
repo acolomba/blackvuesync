@@ -51,6 +51,9 @@ services:
       # logged.
       QUIET: ''
 
+      # Sets log output format. Supported values are "text" and "json".
+      LOG_FORMAT: text
+
       # Makes it so downloads of normal recordings and unexpected error
       # conditions are logged. Can be set to '' to disable.
       CRON: 1
