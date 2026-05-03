@@ -26,6 +26,9 @@ fi
 # quiet option if QUIET set to anything
 [ -n "${QUIET:-}" ] && set -- "$@" --quiet
 
+# log format option if LOG_FORMAT set
+[ -n "${LOG_FORMAT:-}" ] && set -- "$@" --log-format "$LOG_FORMAT"
+
 # cron option if CRON set to anything
 [ -n "${CRON:-}" ] && set -- "$@" --cron
 

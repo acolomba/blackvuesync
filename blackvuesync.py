@@ -30,6 +30,7 @@ import errno
 import fcntl
 import glob
 import http.client
+import json
 import logging
 import os
 import re
@@ -46,7 +47,56 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 # logging
-logging.basicConfig(format="%(asctime)s: %(levelname)s %(message)s")
+TEXT_LOG_FORMAT = "%(asctime)s: %(levelname)s %(message)s"
+LOG_FORMATS = ("text", "json")
+LOG_RECORD_RESERVED_FIELDS = frozenset(logging.makeLogRecord({}).__dict__) | {
+    "asctime",
+    "message",
+}
+
+
+class StructuredLogFormatter(logging.Formatter):
+    """formats log records as newline-delimited JSON."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_record: dict[str, object] = {
+            "timestamp": datetime.datetime.fromtimestamp(
+                record.created, datetime.timezone.utc
+            )
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        for key, value in record.__dict__.items():
+            if key not in LOG_RECORD_RESERVED_FIELDS and not key.startswith("_"):
+                log_record[key] = value
+
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info)
+
+        if record.stack_info:
+            log_record["stack_info"] = self.formatStack(record.stack_info)
+
+        return json.dumps(log_record, default=str, separators=(",", ":"))
+
+
+def configure_logging(log_format: str) -> None:
+    """sets up logging output format."""
+    if log_format == "json":
+        formatter: logging.Formatter = StructuredLogFormatter()
+    elif log_format == "text":
+        formatter = logging.Formatter(TEXT_LOG_FORMAT)
+    else:
+        raise RuntimeError(f"unknown log format : {log_format}")
+
+    for handler in logging.root.handlers:
+        handler.setFormatter(formatter)
+
+
+logging.basicConfig(format=TEXT_LOG_FORMAT)
 
 # root logger
 logger = logging.getLogger()
@@ -471,16 +521,35 @@ def download_file(
     destination_filepath = get_filepath(destination, group_name, filename)
 
     if os.path.exists(destination_filepath):
-        logger.debug("Ignoring already downloaded file : %s", filename)
+        logger.debug(
+            "Ignoring already downloaded file : %s",
+            filename,
+            extra={
+                "event": "file_already_downloaded",
+                "recording_filename": filename,
+                "destination_path": destination_filepath,
+            },
+        )
         return False, None
 
     if dry_run:
-        logger.debug("DRY RUN Would download file : %s", filename)
+        logger.debug(
+            "DRY RUN Would download file : %s",
+            filename,
+            extra={"event": "file_download_dry_run", "recording_filename": filename},
+        )
         return True, None
 
     # skips downloads with a recent failure marker to avoid repeated retries
     if is_download_blocked_by_failure(destination, group_name, filename):
-        logger.debug("Skipping recently failed download : %s", filename)
+        logger.debug(
+            "Skipping recently failed download : %s",
+            filename,
+            extra={
+                "event": "file_download_recently_failed",
+                "recording_filename": filename,
+            },
+        )
         return False, None
 
     # clears any prior failure marker now that we've decided to retry
@@ -488,7 +557,15 @@ def download_file(
 
     temp_filepath = os.path.join(destination, f".{filename}")
     if os.path.exists(temp_filepath):
-        logger.debug("Found incomplete download : %s", temp_filepath)
+        logger.debug(
+            "Found incomplete download : %s",
+            temp_filepath,
+            extra={
+                "event": "incomplete_download_found",
+                "recording_filename": filename,
+                "temp_path": temp_filepath,
+            },
+        )
 
     try:
         url = urllib.parse.urljoin(base_url, f"Record/{filename}")
@@ -517,20 +594,50 @@ def download_file(
 
         speed_bps = int(10.0 * float(size) / elapsed_s) if size else None
         speed_str = format_natural_speed(speed_bps)
-        logger.debug("Downloaded file : %s%s", filename, speed_str)
+        logger.debug(
+            "Downloaded file : %s%s",
+            filename,
+            speed_str,
+            extra={
+                "event": "file_downloaded",
+                "recording_filename": filename,
+                "destination_path": destination_filepath,
+                "content_length_bytes": int(size) if size else None,
+                "elapsed_seconds": elapsed_s,
+                "speed_bps": speed_bps,
+            },
+        )
 
         return True, speed_bps
     except urllib.error.HTTPError as e:
         # HTTP errors (e.g. 500 for corrupted recordings); marks as failed to suppress retries
         cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.", filename, e
+            "Could not download file : %s; error : %s; ignoring.",
+            filename,
+            e,
+            extra={
+                "event": "file_download_failed",
+                "recording_filename": filename,
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "failure_marker_created": True,
+            },
         )
         mark_download_failed(destination, group_name, filename)
         return False, None
     except urllib.error.URLError as e:
         # network-level errors (connection reset, etc.); does not mark as failed
         cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.", filename, e
+            "Could not download file : %s; error : %s; ignoring.",
+            filename,
+            e,
+            extra={
+                "event": "file_download_failed",
+                "recording_filename": filename,
+                "error_type": type(e).__name__,
+                "error": str(e),
+                "failure_marker_created": False,
+            },
         )
         return False, None
     except socket.timeout as e:
@@ -572,7 +679,13 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
         any_downloaded |= downloaded
     else:
         logger.debug(
-            "Skipping thumbnail : %s (--skip-metadata)", recording.base_filename
+            "Skipping thumbnail : %s (--skip-metadata)",
+            recording.base_filename,
+            extra={
+                "event": "metadata_skipped",
+                "metadata_type": "thumbnail",
+                "recording_base_filename": recording.base_filename,
+            },
         )
 
     # downloads the accelerometer data
@@ -584,7 +697,13 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
         any_downloaded |= downloaded
     else:
         logger.debug(
-            "Skipping accelerometer : %s (--skip-metadata)", recording.base_filename
+            "Skipping accelerometer : %s (--skip-metadata)",
+            recording.base_filename,
+            extra={
+                "event": "metadata_skipped",
+                "metadata_type": "accelerometer",
+                "recording_base_filename": recording.base_filename,
+            },
         )
 
     # downloads the gps data
@@ -595,7 +714,15 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
         )
         any_downloaded |= downloaded
     else:
-        logger.debug("Skipping gps : %s (--skip-metadata)", recording.base_filename)
+        logger.debug(
+            "Skipping gps : %s (--skip-metadata)",
+            recording.base_filename,
+            extra={
+                "event": "metadata_skipped",
+                "metadata_type": "gps",
+                "recording_base_filename": recording.base_filename,
+            },
+        )
 
     # logs if any part of a recording was downloaded (or would have been)
     if any_downloaded:
@@ -610,6 +737,14 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
                 recording.type,
                 recording.direction,
                 speed_str,
+                extra={
+                    "event": "recording_downloaded",
+                    "recording_base_filename": recording.base_filename,
+                    "recording_type": recording.type,
+                    "recording_direction": recording.direction,
+                    "recording_group_name": recording.group_name,
+                    "speed_bps": speed_bps,
+                },
             )
         else:
             recording_logger.info(
@@ -617,6 +752,13 @@ def download_recording(base_url: str, recording: Recording, destination: str) ->
                 recording.base_filename,
                 recording.type,
                 recording.direction,
+                extra={
+                    "event": "recording_download_dry_run",
+                    "recording_base_filename": recording.base_filename,
+                    "recording_type": recording.type,
+                    "recording_direction": recording.direction,
+                    "recording_group_name": recording.group_name,
+                },
             )
 
 
@@ -811,11 +953,22 @@ def prepare_destination(destination: str, grouping: str) -> None:
                 logger.info(
                     "DRY RUN Would remove outdated recording : %s",
                     outdated_recording.base_filename,
+                    extra={
+                        "event": "outdated_recording_remove_dry_run",
+                        "recording_base_filename": outdated_recording.base_filename,
+                        "recording_group_name": outdated_recording.group_name,
+                    },
                 )
                 continue
 
             logger.info(
-                "Removing outdated recording : %s", outdated_recording.base_filename
+                "Removing outdated recording : %s",
+                outdated_recording.base_filename,
+                extra={
+                    "event": "outdated_recording_removed",
+                    "recording_base_filename": outdated_recording.base_filename,
+                    "recording_group_name": outdated_recording.group_name,
+                },
             )
 
             outdated_recording_glob = (
@@ -1042,6 +1195,12 @@ def parse_args() -> argparse.Namespace:
         help="quiets down output messages; overrides verbosity options",
     )
     arg_parser.add_argument(
+        "--log-format",
+        default="text",
+        choices=LOG_FORMATS,
+        help="sets log output format; defaults to text",
+    )
+    arg_parser.add_argument(
         "--cron",
         action="store_true",
         help="cron mode, only logs normal recordings at default verbosity",
@@ -1079,17 +1238,28 @@ def main() -> int:
 
     args = parse_args()
 
+    configure_logging(args.log_format)
+    set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
+
     dry_run = args.dry_run
     affinity_key = args.affinity_key
     skip_metadata = args.skip_metadata
     if skip_metadata:
-        logger.info("Skipping metadata types : %s", ", ".join(sorted(skip_metadata)))
+        logger.info(
+            "Skipping metadata types : %s",
+            ", ".join(sorted(skip_metadata)),
+            extra={
+                "event": "skip_metadata_configured",
+                "metadata_types": sorted(skip_metadata),
+            },
+        )
     if dry_run:
-        logger.info("DRY RUN No action will be taken.")
+        logger.info(
+            "DRY RUN No action will be taken.",
+            extra={"event": "dry_run_enabled"},
+        )
 
     max_disk_used_percent = args.max_used_disk
-
-    set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 
     # sets socket timeout
     socket_timeout = args.timeout
@@ -1103,7 +1273,14 @@ def main() -> int:
     try:
         if args.keep:
             cutoff_date = calc_cutoff_date(args.keep)
-            logger.info("Recording cutoff date : %s", cutoff_date)
+            logger.info(
+                "Recording cutoff date : %s",
+                cutoff_date,
+                extra={
+                    "event": "recording_cutoff_configured",
+                    "cutoff_date": cutoff_date,
+                },
+            )
 
         retry_failed_after = parse_duration(
             args.retry_failed_after, label="RETRY_FAILED_AFTER"
@@ -1131,13 +1308,34 @@ def main() -> int:
             # removes temporary files (if we synced successfully, these are temp files from lost recordings)
             clean_destination(destination, grouping)
     except UserWarning as e:
-        logger.warning(e.args[0])
+        logger.warning(
+            e.args[0],
+            extra={
+                "event": "sync_warning",
+                "error_type": type(e).__name__,
+                "error": str(e),
+            },
+        )
         return 0 if args.cron else 1
     except RuntimeError as e:
-        logger.error(e.args[0])
+        logger.error(
+            e.args[0],
+            extra={
+                "event": "sync_error",
+                "error_type": type(e).__name__,
+                "error": str(e),
+            },
+        )
         return 2
     except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.exception(e)
+        logger.exception(
+            e,
+            extra={
+                "event": "sync_unexpected_error",
+                "error_type": type(e).__name__,
+                "error": str(e),
+            },
+        )
         return 3
     finally:
         if lf_fd is not None:

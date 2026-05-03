@@ -28,6 +28,7 @@ ENV ADDRESS="" \
     TIMEOUT="" \
     VERBOSE=0 \
     QUIET="" \
+    LOG_FORMAT="" \
     CRON=1 \
     DRY_RUN="" \
     RUN_ONCE="" \

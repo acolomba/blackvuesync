@@ -141,6 +141,7 @@ directory = "coverage_report"
 [tool.pylint.messages_control]
 disable = [
     "line-too-long",  # handled by black/ruff
+    "too-many-lines",  # C0302
 ]
 
 [tool.pylint.design]

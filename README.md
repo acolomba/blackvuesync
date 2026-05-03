@@ -132,6 +132,7 @@ Other options:
 * `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
 * `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
+* `--log-format`: Sets log output format. Supported values are `text` and `json`; defaults to `text`.
 
 #### Recording type and direction codes
 
@@ -268,6 +269,7 @@ Other parameters:
 * `INCLUDE`: If set, downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `P,NF` downloads all Parking recordings and Normal Front recordings. (Default: empty, meaning all recordings are downloaded.)
 * `EXCLUDE`: If set, excludes recordings matching the given codes, same format as `INCLUDE`. Takes priority over `INCLUDE`. For example, setting `INCLUDE=N` and `EXCLUDE=NR` downloads all Normal recordings except Normal Rear. (Default: empty.)
 * `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
+* `LOG_FORMAT`: If set, changes log output format. Supported values are `text` and `json`. (Default: empty, meaning `text`.)
 * `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
 * `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
 * `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty. Not supported in Docker Compose.)

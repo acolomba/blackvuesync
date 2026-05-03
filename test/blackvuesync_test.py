@@ -5,6 +5,8 @@ import datetime
 import errno
 import fcntl
 import glob
+import json
+import logging
 import os
 import tempfile
 import time
@@ -872,6 +874,38 @@ def test_lock_closes_fd_when_lock_acquisition_fails(
     assert close_calls == [opened_fd]
 
 
+def test_structured_log_formatter_outputs_json_with_extra_fields() -> None:
+    """verifies structured logs include standard and extra fields."""
+    formatter = blackvuesync.StructuredLogFormatter()
+    record = logging.LogRecord(
+        "blackvuesync",
+        logging.INFO,
+        __file__,
+        1,
+        "Downloaded recording : %s",
+        ("20181029_131513",),
+        None,
+    )
+    record.__dict__.update(
+        {
+            "event": "recording_downloaded",
+            "recording_base_filename": "20181029_131513",
+            "recording_type": "N",
+        }
+    )
+
+    output = json.loads(formatter.format(record))
+
+    assert output["level"] == "INFO"
+    assert output["logger"] == "blackvuesync"
+    assert output["message"] == "Downloaded recording : 20181029_131513"
+    assert output["event"] == "recording_downloaded"
+    assert output["recording_base_filename"] == "20181029_131513"
+    assert output["recording_type"] == "N"
+    assert "timestamp" in output
+    assert "args" not in output
+
+
 def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     """verifies main unlocks the lock file descriptor when it is zero."""
     unlock_calls: list[int] = []
@@ -890,6 +924,7 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
         skip_metadata=set(),
         verbose=0,
         quiet=False,
+        log_format="text",
         cron=False,
         dry_run=False,
         affinity_key=None,
@@ -972,6 +1007,7 @@ def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> 
         skip_metadata=set(),
         verbose=0,
         quiet=False,
+        log_format="text",
         cron=False,
         dry_run=False,
         affinity_key=None,
