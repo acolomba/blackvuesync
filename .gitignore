@@ -6,7 +6,9 @@
 # testing
 /.pytest_cache
 /tmp
-
+# While running, lock file and .prom metric files may be created.
+.blackvuesync.lock
+*.prom
 # coverage
 .coverage
 .coverage.*

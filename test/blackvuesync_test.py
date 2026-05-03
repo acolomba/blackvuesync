@@ -906,6 +906,310 @@ def test_structured_log_formatter_outputs_json_with_extra_fields() -> None:
     assert "args" not in output
 
 
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("http://pushgateway:9091", "http://pushgateway:9091"),
+        ("https://pushgateway.example.net/", "https://pushgateway.example.net"),
+    ],
+)
+def test_parse_pushgateway_url(value: str, expected: str) -> None:
+    assert blackvuesync.parse_pushgateway_url(value) == expected
+
+
+@pytest.mark.parametrize("value", ["pushgateway:9091", "ftp://example.net", "http://"])
+def test_parse_pushgateway_url_invalid(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        blackvuesync.parse_pushgateway_url(value)
+
+
+def test_sync_metrics_records_downloads_and_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies the metrics model tracks last-run counts and last success time."""
+    monkeypatch.setattr(blackvuesync, "dry_run", False)
+    metrics = blackvuesync.SyncMetrics(
+        run_start_monotonic=time.perf_counter(),
+        run_start_timestamp=time.time(),
+    )
+
+    metrics.record_file_download(6)
+    metrics.record_file_download_failure("http")
+    metrics.record_file_download_failure("bogus")
+    metrics.record_run_failure("timeout")
+    metrics.record_destination_disk_usage(25, 100)
+    metrics.finalize(exit_code=2, sync_success=False)
+
+    assert metrics.files_downloaded_last_run == 1
+    assert metrics.bytes_downloaded_last_run == 6
+    assert metrics.last_successful_file_pull_timestamp_seconds is not None
+    assert metrics.file_download_failures_last_run == {
+        "disk": 0,
+        "http": 1,
+        "network": 0,
+        "timeout": 0,
+        "unknown": 1,
+    }
+    assert metrics.last_run_failures == {
+        "disk": 0,
+        "http": 0,
+        "network": 0,
+        "timeout": 1,
+        "unknown": 0,
+    }
+    assert metrics.destination_disk_used_ratio == 0.25
+    assert metrics.last_run_exit_code == 2
+    assert metrics.last_run_success == 0
+
+
+def test_sync_metrics_dry_run_does_not_update_last_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies dry-run downloads do not update persisted last-success state."""
+    monkeypatch.setattr(blackvuesync, "dry_run", True)
+    metrics = blackvuesync.SyncMetrics(
+        run_start_monotonic=time.perf_counter(),
+        run_start_timestamp=time.time(),
+        last_successful_file_pull_timestamp_seconds=123.0,
+    )
+
+    metrics.record_file_download(6)
+
+    assert metrics.files_downloaded_last_run == 1
+    assert metrics.last_successful_file_pull_timestamp_seconds == 123.0
+
+
+def test_metrics_state_round_trip() -> None:
+    """verifies metrics state persists the last successful file pull timestamp."""
+    with tempfile.TemporaryDirectory() as destination:
+        state_file = os.path.join(destination, "metrics-state.json")
+        metrics = blackvuesync.SyncMetrics(
+            run_start_monotonic=time.perf_counter(),
+            run_start_timestamp=time.time(),
+            last_successful_file_pull_timestamp_seconds=123.0,
+        )
+
+        blackvuesync.save_metrics_state(state_file, metrics)
+
+        assert blackvuesync.load_metrics_state(state_file) == 123.0
+
+
+def test_metrics_state_missing_or_corrupt_returns_none() -> None:
+    """verifies invalid metrics state does not fail a run."""
+    with tempfile.TemporaryDirectory() as destination:
+        missing_state_file = os.path.join(destination, "missing.json")
+        corrupt_state_file = os.path.join(destination, "corrupt.json")
+
+        with open(corrupt_state_file, "w", encoding="utf-8") as f:
+            f.write("{")
+
+        assert blackvuesync.load_metrics_state(missing_state_file) is None
+        assert blackvuesync.load_metrics_state(corrupt_state_file) is None
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [
+        (UserWarning("Dashcam unavailable : <urlopen error timed out>"), "timeout"),
+        (UserWarning("Dashcam unavailable : host unreachable"), "network"),
+        (RuntimeError("Not enough disk space left"), "disk"),
+        (
+            RuntimeError("Error response from : http://dashcam ; status code : 500"),
+            "http",
+        ),
+        (RuntimeError("other failure"), "unknown"),
+    ],
+)
+def test_classify_run_failure(error: BaseException, expected: str) -> None:
+    assert blackvuesync.classify_run_failure(error) == expected
+
+
+def test_render_metrics_uses_last_run_gauges() -> None:
+    """verifies rendered metrics use last-run gauge names and stable labels."""
+    metrics = blackvuesync.SyncMetrics(
+        run_start_monotonic=time.perf_counter(),
+        run_start_timestamp=time.time(),
+        last_successful_file_pull_timestamp_seconds=123.0,
+    )
+    metrics.record_file_download_failure("network")
+    metrics.record_run_failure("network")
+    metrics.files_downloaded_last_run = 2
+    metrics.bytes_downloaded_last_run = 12
+    metrics.finalize(exit_code=0, sync_success=True)
+
+    output = blackvuesync.render_metrics(metrics)
+
+    assert "# TYPE blackvuesync_files_downloaded_last_run gauge" in output
+    assert 'blackvuesync_file_download_failures_last_run{reason="network"} 1' in output
+    assert 'blackvuesync_last_run_failure{reason="network"} 1' in output
+    assert "blackvuesync_file_download_failures_total" not in output
+    assert "blackvuesync_last_run_success 1" in output
+    assert "blackvuesync_last_run_exit_code 0" in output
+    assert "blackvuesync_last_successful_file_pull_timestamp_seconds 123.0" in output
+
+
+def test_write_metrics_file_replaces_target() -> None:
+    """verifies metrics file writes replace the target file."""
+    with tempfile.TemporaryDirectory() as destination:
+        metrics_file = os.path.join(destination, "blackvuesync.prom")
+
+        blackvuesync.write_metrics_file(metrics_file, "first\n")
+        blackvuesync.write_metrics_file(metrics_file, "second\n")
+
+        with open(metrics_file, encoding="utf-8") as f:
+            assert f.read() == "second\n"
+
+
+def test_pushgateway_metrics_url_quotes_grouping_values() -> None:
+    """verifies Pushgateway grouping values are path-escaped."""
+    assert (
+        blackvuesync.get_pushgateway_metrics_url(
+            "http://pushgateway:9091/", "blackvue sync", "dash/cam"
+        )
+        == "http://pushgateway:9091/metrics/job/blackvue%20sync/instance/dash%2Fcam"
+    )
+
+
+def test_push_metrics_uses_put_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """verifies Pushgateway delivery uses PUT and text exposition content type."""
+    requests: list[urllib.request.Request] = []
+    timeouts: list[float] = []
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        requests.append(request)
+        timeouts.append(timeout)
+        return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    blackvuesync.push_metrics(
+        "http://pushgateway:9091",
+        "blackvuesync",
+        "dashcam",
+        "metric 1\n",
+        1.5,
+    )
+
+    assert len(requests) == 1
+    assert requests[0].full_url == (
+        "http://pushgateway:9091/metrics/job/blackvuesync/instance/dashcam"
+    )
+    assert requests[0].get_method() == "PUT"
+    assert requests[0].data == b"metric 1\n"
+    assert requests[0].get_header("Content-type") == (
+        "text/plain; version=0.0.4; charset=utf-8"
+    )
+    assert timeouts == [1.5]
+
+
+def test_main_writes_metrics_for_cron_unavailable_dashcam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies cron exit success is distinct from sync success in metrics."""
+    with tempfile.TemporaryDirectory() as destination:
+        metrics_file = os.path.join(destination, "blackvuesync.prom")
+        args = argparse.Namespace(
+            address="127.0.0.1",
+            destination=destination,
+            grouping="none",
+            keep=None,
+            priority="date",
+            include=None,
+            exclude=None,
+            max_used_disk=90,
+            timeout=1.0,
+            retry_failed_after="1d",
+            skip_metadata=set(),
+            verbose=0,
+            quiet=False,
+            log_format="text",
+            metrics_file=metrics_file,
+            metrics_pushgateway_url=None,
+            metrics_job="blackvuesync",
+            metrics_instance=None,
+            metrics_state_file=None,
+            cron=True,
+            dry_run=False,
+            affinity_key=None,
+        )
+
+        def get_dashcam_filenames_raises(_base_url: str) -> list[str]:
+            raise UserWarning("Dashcam unavailable")
+
+        monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
+        monkeypatch.setattr(
+            blackvuesync, "get_dashcam_filenames", get_dashcam_filenames_raises
+        )
+
+        assert blackvuesync.main() == 0
+
+        with open(metrics_file, encoding="utf-8") as f:
+            output = f.read()
+
+        assert "blackvuesync_last_run_success 0" in output
+        assert "blackvuesync_last_run_exit_code 0" in output
+        assert 'blackvuesync_last_run_failure{reason="network"} 1' in output
+
+
+def test_main_writes_timeout_run_failure_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies index timeouts are visible as run-level timeout failures."""
+    with tempfile.TemporaryDirectory() as destination:
+        metrics_file = os.path.join(destination, "blackvuesync.prom")
+        args = argparse.Namespace(
+            address="127.0.0.1",
+            destination=destination,
+            grouping="none",
+            keep=None,
+            priority="date",
+            include=None,
+            exclude=None,
+            max_used_disk=90,
+            timeout=1.0,
+            retry_failed_after="1d",
+            skip_metadata=set(),
+            verbose=0,
+            quiet=False,
+            log_format="text",
+            metrics_file=metrics_file,
+            metrics_pushgateway_url=None,
+            metrics_job="blackvuesync",
+            metrics_instance=None,
+            metrics_state_file=None,
+            cron=False,
+            dry_run=False,
+            affinity_key=None,
+        )
+
+        def get_dashcam_filenames_raises(_base_url: str) -> list[str]:
+            raise UserWarning("Dashcam unavailable : <urlopen error timed out>")
+
+        monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
+        monkeypatch.setattr(
+            blackvuesync, "get_dashcam_filenames", get_dashcam_filenames_raises
+        )
+
+        assert blackvuesync.main() == 1
+
+        with open(metrics_file, encoding="utf-8") as f:
+            output = f.read()
+
+        assert "blackvuesync_last_run_success 0" in output
+        assert "blackvuesync_last_run_exit_code 1" in output
+        assert 'blackvuesync_last_run_failure{reason="timeout"} 1' in output
+        assert (
+            'blackvuesync_file_download_failures_last_run{reason="timeout"} 0' in output
+        )
+
+
 def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     """verifies main unlocks the lock file descriptor when it is zero."""
     unlock_calls: list[int] = []
@@ -925,6 +1229,11 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
         verbose=0,
         quiet=False,
         log_format="text",
+        metrics_file=None,
+        metrics_pushgateway_url=None,
+        metrics_job="blackvuesync",
+        metrics_instance=None,
+        metrics_state_file=None,
         cron=False,
         dry_run=False,
         affinity_key=None,
@@ -936,7 +1245,13 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         blackvuesync,
         "sync",
-        lambda _address, _destination, _grouping, _priority, _include, _exclude: None,
+        lambda _address,
+        _destination,
+        _grouping,
+        _priority,
+        _include,
+        _exclude,
+        _metrics: None,
     )
     monkeypatch.setattr(
         blackvuesync, "clean_destination", lambda _destination, _grouping: None
@@ -1008,6 +1323,11 @@ def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> 
         verbose=0,
         quiet=False,
         log_format="text",
+        metrics_file=None,
+        metrics_pushgateway_url=None,
+        metrics_job="blackvuesync",
+        metrics_instance=None,
+        metrics_state_file=None,
         cron=False,
         dry_run=False,
         affinity_key=None,

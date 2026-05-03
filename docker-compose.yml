@@ -54,6 +54,19 @@ services:
       # Sets log output format. Supported values are "text" and "json".
       LOG_FORMAT: text
 
+      # If set, writes Prometheus text format metrics to this path.
+      METRICS_FILE: ''
+
+      # If set, pushes Prometheus text format metrics to this Pushgateway URL.
+      METRICS_PUSHGATEWAY_URL: ''
+
+      # Pushgateway grouping key values.
+      METRICS_JOB: blackvuesync
+      METRICS_INSTANCE: ''
+
+      # If set, stores cross-run metrics state at this path.
+      METRICS_STATE_FILE: ''
+
       # Makes it so downloads of normal recordings and unexpected error
       # conditions are logged. Can be set to '' to disable.
       CRON: 1
