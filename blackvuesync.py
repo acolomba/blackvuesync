@@ -153,7 +153,7 @@ def metrics_enabled(args: argparse.Namespace) -> bool:
 
 
 @dataclass
-class SyncMetrics:
+class SyncMetrics:  # pylint: disable=too-many-instance-attributes
     """tracks metrics for a single sync run."""
 
     run_start_monotonic: float
@@ -335,9 +335,11 @@ def render_metrics(metrics: SyncMetrics) -> str:
             [
                 _format_prometheus_sample(
                     "blackvuesync_last_run_exit_code",
-                    metrics.last_run_exit_code
-                    if metrics.last_run_exit_code is not None
-                    else 0,
+                    (
+                        metrics.last_run_exit_code
+                        if metrics.last_run_exit_code is not None
+                        else 0
+                    ),
                 )
             ],
         ),
@@ -931,7 +933,7 @@ def download_file(
     metrics: SyncMetrics | None = None,
 ) -> tuple[bool, int | None]:
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
         group_filepath = os.path.join(destination, group_name)
@@ -1697,7 +1699,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """run forrest run"""
     # dry-run is a global setting
-    # pylint: disable=global-statement
+    # pylint: disable=global-statement,too-many-branches,too-many-statements
     global dry_run
     global max_disk_used_percent
     global cutoff_date

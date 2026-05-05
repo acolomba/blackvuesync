@@ -1242,17 +1242,11 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
     monkeypatch.setattr(blackvuesync, "ensure_destination", lambda _destination: None)
     monkeypatch.setattr(blackvuesync, "lock", lambda _destination: 0)
-    monkeypatch.setattr(
-        blackvuesync,
-        "sync",
-        lambda _address,
-        _destination,
-        _grouping,
-        _priority,
-        _include,
-        _exclude,
-        _metrics: None,
-    )
+
+    def sync_noop(*_args: object) -> None:
+        pass
+
+    monkeypatch.setattr(blackvuesync, "sync", sync_noop)
     monkeypatch.setattr(
         blackvuesync, "clean_destination", lambda _destination, _grouping: None
     )
