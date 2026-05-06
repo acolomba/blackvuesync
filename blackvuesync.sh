@@ -29,6 +29,21 @@ fi
 # log format option if LOG_FORMAT set
 [ -n "${LOG_FORMAT:-}" ] && set -- "$@" --log-format "$LOG_FORMAT"
 
+# metrics file option if METRICS_FILE set
+[ -n "${METRICS_FILE:-}" ] && set -- "$@" --metrics-file "$METRICS_FILE"
+
+# metrics pushgateway option if METRICS_PUSHGATEWAY_URL set
+[ -n "${METRICS_PUSHGATEWAY_URL:-}" ] && set -- "$@" --metrics-pushgateway-url "$METRICS_PUSHGATEWAY_URL"
+
+# metrics job option if METRICS_JOB set
+[ -n "${METRICS_JOB:-}" ] && set -- "$@" --metrics-job "$METRICS_JOB"
+
+# metrics instance option if METRICS_INSTANCE set
+[ -n "${METRICS_INSTANCE:-}" ] && set -- "$@" --metrics-instance "$METRICS_INSTANCE"
+
+# metrics state file option if METRICS_STATE_FILE set
+[ -n "${METRICS_STATE_FILE:-}" ] && set -- "$@" --metrics-state-file "$METRICS_STATE_FILE"
+
 # cron option if CRON set to anything
 [ -n "${CRON:-}" ] && set -- "$@" --cron
 

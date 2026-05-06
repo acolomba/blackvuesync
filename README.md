@@ -133,6 +133,11 @@ Other options:
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
 * `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
 * `--log-format`: Sets log output format. Supported values are `text` and `json`; defaults to `text`.
+* `--metrics-file`: Writes Prometheus text format metrics to the given path.
+* `--metrics-pushgateway-url`: Pushes Prometheus text format metrics to the given Pushgateway URL.
+* `--metrics-job`: Sets the Pushgateway job grouping value. Defaults to `blackvuesync`.
+* `--metrics-instance`: Sets the Pushgateway instance grouping value. Defaults to the dashcam address.
+* `--metrics-state-file`: Persists cross-run metrics state at the given path. Defaults to `.blackvuesync.metrics-state.json` under the destination when metrics are enabled.
 
 #### Recording type and direction codes
 
@@ -183,6 +188,41 @@ The `--cron` option changes the logging level with the assumption that the outpu
 Note that if the dashcam is unreachable for whatever reason, in `--cron` mode no output is generated, since this is an expected condition whenever the dashcam is away from the local network.
 
 If cron jobs overlap, the script recognizes that another instance is currently running via a lock file on the destination directory. For the lock to work correctly, the destination directory must be on a local filesystem relative to the script.
+
+#### Prometheus metrics
+
+BlackVueSync can emit Prometheus text format metrics at the end of each run.
+For a host or Docker setup, write a metrics file that can be collected by
+node_exporter's textfile collector:
+
+```sh
+blackvuesync dashcam.example.net --destination /data/dashcam --cron --metrics-file /var/lib/node_exporter/textfile_collector/blackvuesync.prom
+```
+
+For Kubernetes CronJob-style deployments, push the same metrics payload to a
+Pushgateway:
+
+```sh
+blackvuesync dashcam.example.net --destination /data/dashcam --cron --metrics-pushgateway-url http://pushgateway.monitoring.svc:9091
+```
+
+Metrics are opt-in. When enabled, BlackVueSync persists the last successful file
+pull timestamp in `.blackvuesync.metrics-state.json` under the destination
+unless `--metrics-state-file` is set. Metrics delivery failures are logged as
+warnings and do not replace the sync exit result.
+Run-level failures such as dashcam index timeouts are exposed through
+`blackvuesync_last_run_failure{reason="..."}`. Per-file failures are exposed
+through `blackvuesync_file_download_failures_last_run{reason="..."}`.
+
+Useful alert expressions include:
+
+```promql
+blackvuesync_last_run_success == 0
+blackvuesync_last_run_failure{reason=~"network|timeout"} == 1
+time() - blackvuesync_last_run_timestamp_seconds > 3600
+time() - blackvuesync_last_successful_file_pull_timestamp_seconds > 86400
+sum(max_over_time(blackvuesync_file_download_failures_last_run[1h])) > 0
+```
 
 #### NAS
 
@@ -270,6 +310,11 @@ Other parameters:
 * `EXCLUDE`: If set, excludes recordings matching the given codes, same format as `INCLUDE`. Takes priority over `INCLUDE`. For example, setting `INCLUDE=N` and `EXCLUDE=NR` downloads all Normal recordings except Normal Rear. (Default: empty.)
 * `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
 * `LOG_FORMAT`: If set, changes log output format. Supported values are `text` and `json`. (Default: empty, meaning `text`.)
+* `METRICS_FILE`: If set, writes Prometheus text format metrics to this path. (Default: empty.)
+* `METRICS_PUSHGATEWAY_URL`: If set, pushes Prometheus text format metrics to this Pushgateway URL. (Default: empty.)
+* `METRICS_JOB`: Sets the Pushgateway job grouping value. (Default: `blackvuesync`.)
+* `METRICS_INSTANCE`: Sets the Pushgateway instance grouping value. (Default: empty, meaning the dashcam address.)
+* `METRICS_STATE_FILE`: If set, stores cross-run metrics state at this path. (Default: empty, meaning `.blackvuesync.metrics-state.json` under the destination when metrics are enabled.)
 * `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
 * `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
 * `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty. Not supported in Docker Compose.)
