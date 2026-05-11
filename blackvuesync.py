@@ -787,7 +787,7 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
         return get_filenames(file_lines)
     except urllib.error.URLError as e:
         if isinstance(e.reason, OSError) and (
-            isinstance(e.reason, TimeoutError)
+            isinstance(e.reason, (TimeoutError, socket.timeout))
             or e.reason.errno in dashcam_unavailable_errno_codes
         ):
             raise UserWarning(f"Dashcam unavailable : {e}") from e
