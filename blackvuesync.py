@@ -766,25 +766,46 @@ def get_filenames(file_lines: list[str]) -> list[str]:
     return filenames
 
 
+def _build_request(url: str) -> urllib.request.Request:
+    """builds a GET request, adding the affinity header when configured"""
+    request = urllib.request.Request(url)
+    if affinity_key:
+        request.add_header("X-Affinity-Key", affinity_key)
+    return request
+
+
+def is_legacy_camera(base_url: str) -> bool:
+    """returns True for older cameras that lack the /accessible endpoint (pre-V1.009)"""
+    url = urllib.parse.urljoin(base_url, "accessible")
+    try:
+        with urllib.request.urlopen(_build_request(url)) as response:
+            return bool(response.getcode() != 200)
+    except urllib.error.HTTPError:
+        return True
+
+
+def get_filenames_from_json(data: dict[str, list[dict[str, str]]]) -> list[str]:
+    """extracts the recording filenames from the dashcam /vodList JSON response"""
+    return [entry["filename"] for entry in data["filelist"]]
+
+
 def get_dashcam_filenames(base_url: str) -> list[str]:
     """gets the recording filenames from the dashcam"""
     try:
-        url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
-        request = urllib.request.Request(url)
-        if affinity_key:
-            request.add_header("X-Affinity-Key", affinity_key)
+        if is_legacy_camera(base_url):
+            return get_dashcam_filenames_legacy(base_url)
 
-        with urllib.request.urlopen(request) as response:
+        url = urllib.parse.urljoin(base_url, "vodList")
+        with urllib.request.urlopen(_build_request(url)) as response:
             response_status_code = response.getcode()
             if response_status_code != 200:
                 raise RuntimeError(
                     f"Error response from : {base_url} ; status code : {response_status_code}"
                 )
 
-            charset = response.info().get_param("charset", "UTF-8")
-            file_lines = [x.decode(charset) for x in response.readlines()]
+            data = json.load(response)
 
-        return get_filenames(file_lines)
+        return get_filenames_from_json(data)
     except urllib.error.URLError as e:
         if isinstance(e.reason, OSError) and (
             isinstance(e.reason, (TimeoutError, socket.timeout))
@@ -803,6 +824,22 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
         raise UserWarning(
             f"Dashcam disconnected without a response; address : {base_url}; error : {e}"
         ) from e
+
+
+def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
+    """gets recording filenames from an older dashcam via the blackvue_vod.cgi index"""
+    url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
+    with urllib.request.urlopen(_build_request(url)) as response:
+        response_status_code = response.getcode()
+        if response_status_code != 200:
+            raise RuntimeError(
+                f"Error response from : {base_url} ; status code : {response_status_code}"
+            )
+
+        charset = response.info().get_param("charset", "UTF-8")
+        file_lines = [x.decode(charset) for x in response.readlines()]
+
+    return get_filenames(file_lines)
 
 
 def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str | None:
