@@ -90,6 +90,7 @@ class MockDashcam:
         self._sessions_lock = threading.RLock()
         self._recordings_by_session: defaultdict[str, list[str]] = defaultdict(list)
         self._download_errors_by_session: defaultdict[str, set[str]] = defaultdict(set)
+        self._legacy_api_by_session: defaultdict[str, bool] = defaultdict(bool)
 
         # sets up routes
         self._setup_routes()
@@ -123,6 +124,16 @@ class MockDashcam:
         with self._sessions_lock:
             self._download_errors_by_session[affinity_key] = filenames
 
+    def _get_legacy_api(self, affinity_key: str) -> bool:
+        """thread-safe read access to the session-specific legacy-api flag"""
+        with self._sessions_lock:
+            return self._legacy_api_by_session[affinity_key]
+
+    def _set_legacy_api(self, affinity_key: str, legacy_api: bool) -> None:
+        """thread-safe write access to the session-specific legacy-api flag"""
+        with self._sessions_lock:
+            self._legacy_api_by_session[affinity_key] = legacy_api
+
     def _setup_routes(self) -> None:
         """sets up flask routes"""
 
@@ -131,11 +142,36 @@ class MockDashcam:
             """health check endpoint for server startup verification"""
             return {"status": "ok"}, 200
 
+        @self.app.route("/accessible", methods=["GET"])
+        def accessible() -> flask.Response | tuple[dict[str, str], int]:
+            """reports the new-style API is reachable; absent on legacy firmware"""
+            logger.debug("GET /accessible")
+            affinity_key = self._get_affinity_key()
+            if self._get_legacy_api(affinity_key):
+                return flask.abort(404)
+            return {"accessible": "OK", "message": "Access possible."}, 200
+
+        @self.app.route("/vodList", methods=["GET"])
+        def vod_list() -> flask.Response | tuple[dict[str, Any], int]:
+            """returns the index of recordings as JSON (new style)"""
+            logger.debug("GET /vodList")
+            affinity_key = self._get_affinity_key()
+            if self._get_legacy_api(affinity_key):
+                return flask.abort(404)
+            recordings = self._get_recordings(affinity_key)
+            filelist = [{"filename": filename} for filename in recordings]
+            response = {"filelist": filelist}
+            logger.debug("Response body: %s", response)
+            return response, 200
+
         @self.app.route("/blackvue_vod.cgi", methods=["GET"])
-        def vod() -> str:
+        def vod() -> flask.Response | str:
             """returns the index of recordings"""
             logger.debug("GET /blackvue_vod.cgi")
             affinity_key = self._get_affinity_key()
+            if not self._get_legacy_api(affinity_key):
+                # firmware V1.009+ deprecated this endpoint
+                return flask.Response("mp4 only", status=415, mimetype="text/plain")
 
             # format: n:/Record/filename.ext,s:1000000
             # we'll use a fixed size for simplicity
@@ -258,6 +294,22 @@ class MockDashcam:
 
             return response, 201
 
+        @self.app.route("/mock/legacy-api", methods=["POST"])
+        def set_legacy_api() -> tuple[dict[str, Any], int]:
+            """configures whether the session serves the legacy blackvue_vod.cgi index"""
+            data = flask.request.get_json() or {}
+            logger.debug("POST /mock/legacy-api")
+            logger.debug("Request body: %s", data)
+            affinity_key = self._get_affinity_key()
+
+            legacy_api = bool(data.get("legacy_api", False))
+            self._set_legacy_api(affinity_key, legacy_api)
+
+            response = {"status": "configured", "legacy_api": legacy_api}
+            logger.debug("Response body: %s", response)
+
+            return response, 201
+
         @self.app.route("/mock/downloads/errors", methods=["DELETE"])
         def clear_download_errors_route() -> tuple[dict[str, str], int]:
             """clears download errors for the session"""
@@ -326,11 +378,13 @@ class MockDashcam:
         self.server_thread = None
 
     def clear_session(self, affinity_key: str | None = None) -> None:
-        """clears all session state (recordings, download errors) for cleanup"""
+        """clears all session state for the session or globally"""
         with self._sessions_lock:
             if affinity_key:
                 self._recordings_by_session[affinity_key] = []
                 self._download_errors_by_session[affinity_key] = set()
+                self._legacy_api_by_session[affinity_key] = False
             else:
                 self._recordings_by_session.clear()
                 self._download_errors_by_session.clear()
+                self._legacy_api_by_session.clear()
