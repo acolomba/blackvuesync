@@ -111,3 +111,14 @@ def dashcam_recordings_same_as_downloaded(
 def dashcam_recordings_same_as_downloaded_past(context: Context, period: str) -> None:
     """configures mock dashcam with recordings matching downloaded recordings (shortcut for 'between' with 0d end)."""
     dashcam_recordings_same_as_downloaded(context, period, "0d")
+
+
+@given("the dashcam is legacy: {legacy_api}")
+def dashcam_legacy_api(context: Context, legacy_api: str) -> None:
+    """configures whether the mock dashcam serves the legacy blackvue_vod.cgi index."""
+    url = f"{context.mock_dashcam_url}/mock/legacy-api"
+    headers = {"X-Affinity-Key": context.scenario_token}
+    data = {"legacy_api": legacy_api.lower() == "true"}
+
+    response = requests.post(url, json=data, headers=headers, timeout=10)
+    response.raise_for_status()

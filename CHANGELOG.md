@@ -8,6 +8,7 @@
 * Stream recording downloads in chunks to avoid buffering full files in memory.
 * Close the lock file descriptor when lock acquisition fails and distinguish lock contention from other OS errors.
 * Ensure lock descriptor `0` is always unlocked on exit.
+* Support BlackVue firmware V1.009+ cameras, which serve the recording index as JSON from `/vodList` instead of the legacy `blackvue_vod.cgi` endpoint. Older cameras continue to work unchanged. (#87)
 
 ## 2.1.1
 
