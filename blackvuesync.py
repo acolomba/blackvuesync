@@ -784,11 +784,6 @@ def is_legacy_camera(base_url: str) -> bool:
         return True
 
 
-def get_filenames_from_json(data: dict[str, list[dict[str, str]]]) -> list[str]:
-    """extracts the recording filenames from the dashcam /vodList JSON response"""
-    return [entry["filename"] for entry in data["filelist"]]
-
-
 def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
     """gets recording filenames from an older dashcam via the blackvue_vod.cgi index"""
     url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
@@ -821,7 +816,7 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
 
             data = json.load(response)
 
-        return get_filenames_from_json(data)
+        return [entry["filename"] for entry in data["filelist"]]
     except urllib.error.URLError as e:
         if isinstance(e.reason, OSError) and (
             isinstance(e.reason, (TimeoutError, socket.timeout))
