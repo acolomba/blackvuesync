@@ -21,11 +21,9 @@ endpoints. Behave drives integration coverage; pytest is unchanged.
 
 ## Background
 
-Findings were established by decompiling the official BlackVue Android app
-(v4.25, the version released for V1.009) and confirmed against a live V1.009
-camera in issue #87:
+Findings were confirmed against a live V1.009 camera in issue #87:
 
-- The app probes `GET /accessible` to detect the new firmware. It returns
+- The camera exposes `GET /accessible` for firmware detection. It returns
   `200 {"accessible":"OK","message":"Access possible."}` on V1.009 and does not
   exist (404) on older firmware.
 - The recording index moved from `GET /blackvue_vod.cgi` (plaintext lines
@@ -33,14 +31,14 @@ camera in issue #87:
   `{"filelist":[{"filename":"20260702_141045_PF.mp4"}, ...]}`. Note the live
   response carries only `filename` -- no `size`.
 - On V1.009 the old `blackvue_vod.cgi` returns HTTP 415 with body `mp4 only`.
-- File downloads are unchanged: the app still fetches `GET /Record/<filename>`,
-  and direct file access confirmed working on V1.009.
+- File downloads are unchanged: recordings remain available at
+  `GET /Record/<filename>`, and direct file access confirmed working on V1.009.
 
 ## Naming
 
 The current style is *the* style and carries no special name. The old style is
-"legacy", expressed as a binary yes/no. No identifier mirrors the decompiled
-app's internal wording (avoid "restful"). The endpoint URL literals
+"legacy", expressed as a binary yes/no. Do not use the name "restful". The
+endpoint URL literals
 `/accessible` and `/vodList` are kept verbatim only because they are the actual
 firmware wire endpoints, not names chosen here.
 
