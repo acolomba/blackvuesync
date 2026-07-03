@@ -789,6 +789,22 @@ def get_filenames_from_json(data: dict[str, list[dict[str, str]]]) -> list[str]:
     return [entry["filename"] for entry in data["filelist"]]
 
 
+def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
+    """gets recording filenames from an older dashcam via the blackvue_vod.cgi index"""
+    url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
+    with urllib.request.urlopen(_build_request(url)) as response:
+        response_status_code = response.getcode()
+        if response_status_code != 200:
+            raise RuntimeError(
+                f"Error response from : {base_url} ; status code : {response_status_code}"
+            )
+
+        charset = response.info().get_param("charset", "UTF-8")
+        file_lines = [x.decode(charset) for x in response.readlines()]
+
+    return get_filenames(file_lines)
+
+
 def get_dashcam_filenames(base_url: str) -> list[str]:
     """gets the recording filenames from the dashcam"""
     try:
@@ -824,22 +840,6 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
         raise UserWarning(
             f"Dashcam disconnected without a response; address : {base_url}; error : {e}"
         ) from e
-
-
-def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
-    """gets recording filenames from an older dashcam via the blackvue_vod.cgi index"""
-    url = urllib.parse.urljoin(base_url, "blackvue_vod.cgi")
-    with urllib.request.urlopen(_build_request(url)) as response:
-        response_status_code = response.getcode()
-        if response_status_code != 200:
-            raise RuntimeError(
-                f"Error response from : {base_url} ; status code : {response_status_code}"
-            )
-
-        charset = response.info().get_param("charset", "UTF-8")
-        file_lines = [x.decode(charset) for x in response.readlines()]
-
-    return get_filenames(file_lines)
 
 
 def get_group_name(recording_datetime: datetime.datetime, grouping: str) -> str | None:
