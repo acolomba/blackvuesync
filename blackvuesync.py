@@ -1180,6 +1180,20 @@ def download_metadata_file(
         with urllib.request.urlopen(request) as response:
             data = json.load(response)
 
+        if not isinstance(data, dict):
+            cron_logger.warning(
+                "Could not download file : %s; unexpected metadata response; ignoring.",
+                metadata_filename,
+                extra={
+                    "event": "file_download_failed",
+                    "recording_filename": metadata_filename,
+                    "error": "response is not a JSON object",
+                },
+            )
+            if metrics:
+                metrics.record_file_download_failure("metadata")
+            return False, None
+
         if data.get("resultcode") != "BC_ERR_OK":
             cron_logger.warning(
                 "Could not download file : %s; metadata result : %s; ignoring.",
@@ -1191,6 +1205,8 @@ def download_metadata_file(
                     "error": str(data.get("resultcode")),
                 },
             )
+            if metrics:
+                metrics.record_file_download_failure("metadata")
             return False, None
 
         # the payload sits at the top level, or nested under "metadata"
@@ -1208,6 +1224,8 @@ def download_metadata_file(
                     "error": "missing metadata payload",
                 },
             )
+            if metrics:
+                metrics.record_file_download_failure("metadata")
             return False, None
 
         content = base64.b64decode(encoded)
@@ -1278,6 +1296,8 @@ def download_metadata_file(
                 "error": str(e),
             },
         )
+        if metrics:
+            metrics.record_file_download_failure("metadata")
         return False, None
 
 
