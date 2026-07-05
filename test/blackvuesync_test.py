@@ -946,6 +946,7 @@ def test_sync_metrics_records_downloads_and_failures(
     assert metrics.file_download_failures_last_run == {
         "disk": 0,
         "http": 1,
+        "metadata": 0,
         "network": 0,
         "timeout": 0,
         "unknown": 1,
@@ -953,6 +954,7 @@ def test_sync_metrics_records_downloads_and_failures(
     assert metrics.last_run_failures == {
         "disk": 0,
         "http": 0,
+        "metadata": 0,
         "network": 0,
         "timeout": 1,
         "unknown": 0,

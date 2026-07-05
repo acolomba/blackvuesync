@@ -130,7 +130,7 @@ def flush_logs() -> None:
 
 METRICS_DEFAULT_JOB = "blackvuesync"
 METRICS_DEFAULT_STATE_FILENAME = ".blackvuesync.metrics-state.json"
-METRIC_FAILURE_REASONS = ("http", "network", "timeout", "disk", "unknown")
+METRIC_FAILURE_REASONS = ("http", "network", "timeout", "disk", "metadata", "unknown")
 
 
 def parse_pushgateway_url(value: str) -> str:
@@ -1213,7 +1213,7 @@ def download_metadata_file(
         encoded = data.get(metadata_type)
         if encoded is None and isinstance(data.get("metadata"), dict):
             encoded = data["metadata"].get(metadata_type)
-        if not encoded:
+        if not isinstance(encoded, str) or not encoded:
             cron_logger.warning(
                 "Metadata response missing %s data : %s; ignoring.",
                 metadata_type,
