@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import datetime
 import logging
 import re
@@ -134,6 +135,30 @@ class MockDashcam:
         with self._sessions_lock:
             self._legacy_api_by_session[affinity_key] = legacy_api
 
+    def _serve_recording_file(self, affinity_key: str, filename: str) -> flask.Response:
+        """serves the mock file for a recording, or aborts 404/500 as configured"""
+        recordings = self._get_recordings(affinity_key)
+        if filename not in recordings:
+            logger.debug("Response: 404 Not Found (not in session recordings)")
+            return flask.abort(404)
+
+        download_errors = self._get_download_errors(affinity_key)
+        if filename in download_errors:
+            logger.debug("Response: 500 Internal Server Error (configured error)")
+            flask.abort(500)
+
+        if recording := to_recording(filename):
+            files_dir = Path(__file__).parent / "files"
+            filepath = files_dir / f"mock.{recording.extension}"
+            if filepath.exists():
+                logger.debug(
+                    "Response: %s (%s bytes)", filepath.name, filepath.stat().st_size
+                )
+                return flask.send_file(filepath)
+
+        logger.debug("Response: 404 Not Found")
+        return flask.abort(404)
+
     def _setup_routes(self) -> None:
         """sets up flask routes"""
 
@@ -190,34 +215,53 @@ class MockDashcam:
             """serves any file associated to recordings"""
             logger.debug("GET /Record/%s", filename)
             affinity_key = self._get_affinity_key()
+            return self._serve_recording_file(affinity_key, filename)
 
-            # validates that filename exists in session-specific recordings
-            recordings = self._get_recordings(affinity_key)
-            if filename not in recordings:
-                logger.debug("Response: 404 Not Found (not in session recordings)")
+        @self.app.route("/vodMetadata", methods=["POST"])
+        def vod_metadata() -> flask.Response | tuple[dict[str, Any], int]:
+            """returns base64-encoded thumbnail/gps metadata (new style)"""
+            logger.debug("POST /vodMetadata")
+            affinity_key = self._get_affinity_key()
+            if self._get_legacy_api(affinity_key):
                 return flask.abort(404)
 
-            # checks if file is configured to fail
-            download_errors = self._get_download_errors(affinity_key)
-            if filename in download_errors:
-                logger.debug("Response: 500 Internal Server Error (configured error)")
-                flask.abort(500)
+            data = flask.request.get_json() or {}
+            logger.debug("Request body: %s", data)
+            video_filename = data.get("file")
+            types = data.get("types", [])
+            metadata_type = types[0] if types else None
 
-            if recording := to_recording(filename):
-                # uses the mock file with the same extension
-                files_dir = Path(__file__).parent / "files"
-                filepath = files_dir / f"mock.{recording.extension}"
+            recordings = self._get_recordings(affinity_key)
+            extension_map = {"thumbnail": "thm", "gps": "gps"}
+            extension = (
+                extension_map.get(metadata_type)
+                if isinstance(metadata_type, str)
+                else None
+            )
+            if video_filename not in recordings or extension is None:
+                return {"resultcode": "BC_ERR_NG"}, 200
 
-                if filepath.exists():
-                    logger.debug(
-                        "Response: %s (%s bytes)",
-                        filepath.name,
-                        filepath.stat().st_size,
-                    )
-                    return flask.send_file(filepath)
+            files_dir = Path(__file__).parent / "files"
+            encoded = base64.b64encode(
+                (files_dir / f"mock.{extension}").read_bytes()
+            ).decode("ascii")
 
-            logger.debug("Response: 404 Not Found")
-            return flask.abort(404)
+            # thumbnail sits at the top level; gps is nested under "metadata"
+            if metadata_type == "gps":
+                return {"resultcode": "BC_ERR_OK", "metadata": {"gps": encoded}}, 200
+            return {"resultcode": "BC_ERR_OK", "thumbnail": encoded}, 200
+
+        @self.app.route("/<filename>", methods=["GET"])
+        def root_record(filename: str) -> flask.Response:
+            """serves videos from the root on V1.009; rejects non-mp4 with 'mp4 only'"""
+            logger.debug("GET /%s", filename)
+            affinity_key = self._get_affinity_key()
+            if self._get_legacy_api(affinity_key):
+                # legacy firmware serves downloads only under /Record/
+                return flask.abort(404)
+            if not filename.endswith(".mp4"):
+                return flask.Response("mp4 only", status=415, mimetype="text/plain")
+            return self._serve_recording_file(affinity_key, filename)
 
         @self.app.route("/mock/recordings", methods=["POST"])
         def create_recordings() -> tuple[dict[str, Any], int]:
