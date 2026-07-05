@@ -6,7 +6,10 @@ from behave import given, then
 from behave.runner import Context
 from hamcrest import assert_that, empty, has_items
 
-from features.lib.recordings import create_recording_files
+from features.lib.recordings import (
+    create_recording_files,
+    filter_available_metadata_filenames,
+)
 
 # recording filename pattern - matches BlackVue recording filenames
 # format: YYYYMMDD_HHMMSS_TD.ext where T=type, D=direction, ext=mp4/thm/3gf/gps
@@ -103,8 +106,10 @@ def assert_all_recordings_downloaded(context: Context) -> None:
         if f.is_file() and recording_filename_re.match(f.name)
     }
 
-    # gets expected recordings, filtering out skipped metadata extensions
-    expected_recordings = set(context.expected_recordings)
+    # gets expected recordings, dropping metadata the camera can't serve
+    expected_recordings = filter_available_metadata_filenames(
+        context.expected_recordings, context.legacy_api
+    )
 
     skip_extensions: set[str] = set()
     if "t" in context.skip_metadata:

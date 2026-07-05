@@ -207,6 +207,9 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     # skip_metadata defaults to empty; steps that set --skip-metadata will populate it
     context.skip_metadata = set()
 
+    # legacy_api defaults to False (current firmware); the legacy step overrides it
+    context.legacy_api = False
+
     # logs directory
     context.log_dir = context.scenario_dir / "logs"
     context.log_dir.mkdir(parents=True, exist_ok=True)

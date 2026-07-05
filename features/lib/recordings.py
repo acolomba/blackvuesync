@@ -197,6 +197,19 @@ def get_mock_file_for_extension(mock_dir: Path, extension: str) -> Path:
     return mock_dir / f"mock.{extension}"
 
 
+def filter_available_metadata_filenames(
+    filenames: list[str] | set[str], legacy: bool
+) -> set[str]:
+    """returns the filenames a camera actually serves.
+
+    V1.009+ (non-legacy) cameras have no accelerometer endpoint, so .3gf files
+    are never retrievable there.
+    """
+    if legacy:
+        return set(filenames)
+    return {filename for filename in filenames if not filename.endswith(".3gf")}
+
+
 def create_recording_files(
     dest_dir: Path,
     recording_types: str,

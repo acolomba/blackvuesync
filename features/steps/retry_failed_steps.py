@@ -8,6 +8,7 @@ from behave import given, then, when
 from behave.runner import Context
 from hamcrest import assert_that, empty, has_items
 
+from features.lib.recordings import filter_available_metadata_filenames
 from features.steps.blackvuesync_steps import execute_blackvuesync
 
 # recording filename pattern
@@ -72,7 +73,10 @@ def assert_successful_recordings_downloaded(context: Context) -> None:
         raise RuntimeError("No expected recordings configured.")
 
     failed: set[str] = getattr(context, "failed_recordings", set())
-    successful = {f for f in context.expected_recordings if f not in failed}
+    available = filter_available_metadata_filenames(
+        context.expected_recordings, context.legacy_api
+    )
+    successful = {f for f in available if f not in failed}
 
     downloaded = {
         f.name
