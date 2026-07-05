@@ -212,9 +212,12 @@ class MockDashcam:
 
         @self.app.route("/Record/<filename>", methods=["GET"])
         def record(filename: str) -> flask.Response:
-            """serves any file associated to recordings"""
+            """serves any file associated to recordings (legacy firmware only)"""
             logger.debug("GET /Record/%s", filename)
             affinity_key = self._get_affinity_key()
+            if not self._get_legacy_api(affinity_key):
+                # firmware V1.009+ moved downloads to the root
+                return flask.abort(400)
             return self._serve_recording_file(affinity_key, filename)
 
         @self.app.route("/vodMetadata", methods=["POST"])

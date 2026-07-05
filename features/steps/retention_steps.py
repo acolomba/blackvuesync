@@ -6,7 +6,10 @@ from behave import then, when
 from behave.runner import Context
 from hamcrest import assert_that, empty, has_items
 
-from features.lib.recordings import filter_recording_filenames_by_period
+from features.lib.recordings import (
+    filter_available_metadata_filenames,
+    filter_recording_filenames_by_period,
+)
 from features.steps.blackvuesync_steps import execute_blackvuesync
 
 # recording filename pattern - matches BlackVue recording filenames
@@ -39,11 +42,13 @@ def assert_recordings_between_downloaded(
             "Cannot verify recordings: test scenario is missing 'Given recordings...' step. Expected recordings were never configured."
         )
 
-    # filters expected recordings to those within the period
-    expected_in_period = set(
+    # filters expected recordings to those within the period, dropping metadata the
+    # camera can't serve (V1.009+ has no accelerometer endpoint)
+    expected_in_period = filter_available_metadata_filenames(
         filter_recording_filenames_by_period(
             context.expected_recordings, period_start, period_end
-        )
+        ),
+        context.legacy_api,
     )
 
     # gets all recording files in destination
