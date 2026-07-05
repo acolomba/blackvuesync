@@ -159,7 +159,9 @@ conventions (lowercase, present tense, "the dashcam").
 ## Out of scope
 
 - No change to the download path; `/Record/<filename>` is confirmed unchanged on
-  V1.009.
+  V1.009. **Superseded:** issue #87 later showed downloads *did* change on
+  V1.009 (video at the server root, metadata via `/vodMetadata`). See
+  `2026-07-05-firmware-v1009-download-metadata.md`.
 - No auth/HTTPS handling changes. The app probes HTTP then HTTPS; blackvuesync
   targets HTTP as today.
 - The `size` field is not consumed (it is absent from live `/vodList` anyway);
