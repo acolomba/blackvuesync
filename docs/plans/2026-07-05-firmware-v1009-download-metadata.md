@@ -41,12 +41,13 @@ behavior:
   ```text
   POST /vodMetadata   Content-Type: application/json
   {"file": "20260704_102813_IF.mp4", "types": ["thumbnail"]}
-  -> {"resultcode": "BC_ERR_OK", "thumbnail": "<base64>"}
+  -> {"metadata": {"thumbnail": "<base64>"}}
   ```
 
-  and the same with `"types": ["gps"]` (whether the `gps` payload sits flat or
-  nested under a `metadata` object is unconfirmed; see below). The base64
-  payload decodes to the same bytes the legacy `.thm` / `.gps` files contained.
+  and the same with `"types": ["gps"]` -> `{"metadata": {"gps": "<base64>"}}`.
+  Both payloads sit under a nested `metadata` object and there is no
+  `resultcode` field (the app's known protocol). The base64 payload decodes to
+  the same bytes the legacy `.thm` / `.gps` files contained.
 - **The accelerometer `.3gf` has no metadata type.** Only `thumbnail` and `gps`
   are retrievable through `/vodMetadata`; there is no `.3gf` counterpart. On
   V1.009 the accelerometer data is unavailable and is skipped.
@@ -96,18 +97,18 @@ New and changed units:
   - Builds the JSON request `{"file": video_filename, "types": [metadata_type]}`
     with `Content-Type: application/json` (and the affinity header when set),
     where `metadata_type` is `"thumbnail"` or `"gps"`.
-  - Parses the response, requires `resultcode == "BC_ERR_OK"`, base64-decodes the
-    payload for the requested type, and writes it to `metadata_filename`.
-  - Any non-OK `resultcode`, missing/empty payload, or malformed response is
+  - Parses the response, reads the base64 payload from the nested
+    `metadata` object (`response["metadata"][metadata_type]`), decodes it, and
+    writes it to `metadata_filename`.
+  - A missing `metadata` object, missing/empty payload, or malformed response is
     logged, marked failed (throttling retries like a failed metadata `GET`'s
     404 today), and treated as a non-fatal skip, so a metadata hiccup never
     aborts the video sync.
 - Add `import base64`.
 
-The exact JSON key the payload sits under for `gps` (flat vs. nested under a
-`metadata` object) is confirmed during implementation against the mock and, where
-possible, the live camera; the parser handles the documented shape and degrades
-gracefully on anything else.
+The response shape follows the app's known protocol: both `thumbnail` and `gps`
+sit under a nested `metadata` object, and the camera-direct endpoint carries no
+`resultcode`.
 
 ## Mock dashcam server (`features/mock_dashcam/server.py`)
 
@@ -119,13 +120,10 @@ side to mirror V1.009 downloads:
   non-legacy side a root `GET` of a non-`.mp4` name returns `415 mp4 only`, for
   fidelity and to guard against accidental plain metadata-file fetches.
 - `POST /vodMetadata` -- when not legacy, accepts `{"file", "types":[type]}` and
-  returns `{"resultcode": "BC_ERR_OK", "thumbnail": "<base64>"}` for `thumbnail`
-  and `{"resultcode": "BC_ERR_OK", "metadata": {"gps": "<base64>"}}` for `gps`,
-  sourced from the same fixture bytes the legacy metadata files serve. The
-  flat/nested split is a deliberate mock choice (the live shape for `gps` is
-  unconfirmed -- see Risks) so both payload locations the client parser accepts
-  are exercised. Returns a non-OK `resultcode` for an unknown file so the
-  tolerant path is exercised.
+  returns `{"metadata": {"<type>": "<base64>"}}` (nested for both `thumbnail`
+  and `gps`, no `resultcode`, matching the app's known protocol), sourced from
+  the same fixture bytes the legacy metadata files serve. Returns a body with no
+  `metadata` object for an unknown file so the tolerant path is exercised.
 - Legacy behavior (`/Record/<filename>`, plain `.thm`/`.gps`/`.3gf`) is
   unchanged.
 
@@ -161,12 +159,11 @@ exist with the expected bytes and that no `.3gf` is written.
 ## Risks and out of scope
 
 - **`/vodMetadata` is not browser-verifiable by the reporter** (a JSON `POST`
-  is not address-bar-testable), so it ships against the app's known protocol
-  without independent confirmation of the exact response shape. The safety net is
-  the tolerant, non-fatal metadata path: if the shape differs, thumbnail/GPS
-  quietly skip and the video sync -- the reporter's actual complaint -- still
-  succeeds. The shape can be corrected in a follow-up once observed on a live
-  camera.
+  is not address-bar-testable), so it ships against the app's known protocol:
+  `{"metadata": {"<type>": "<base64>"}}`, nested, no `resultcode`. The tolerant,
+  non-fatal metadata path remains the safety net: if a firmware revision
+  differs, thumbnail/GPS quietly skip and the video sync -- the reporter's
+  actual complaint -- still succeeds.
 - **Accelerometer `.3gf` is not recovered on V1.009.** No external retrieval path
   exists on that firmware (the data appears only embedded in the mp4, whose
   client-side extraction is out of scope for a stdlib-only tool).
