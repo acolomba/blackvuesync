@@ -920,17 +920,18 @@ def test_is_legacy_camera_legacy_on_http_error(
     assert blackvuesync.is_legacy_camera("http://dashcam/") is True
 
 
-def test_is_legacy_camera_legacy_on_dropped_connection(
+def test_is_legacy_camera_propagates_dropped_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """verifies a dropped connection during the /accessible probe selects the legacy api."""
+    """verifies a dropped connection during the /accessible probe propagates to the shared handler."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
         raise http.client.RemoteDisconnected("Remote end closed connection")
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    assert blackvuesync.is_legacy_camera("http://dashcam/") is True
+    with pytest.raises(http.client.RemoteDisconnected):
+        blackvuesync.is_legacy_camera("http://dashcam/")
 
 
 def test_is_legacy_camera_propagates_unavailable_dashcam(

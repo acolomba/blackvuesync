@@ -790,11 +790,7 @@ def is_legacy_camera(base_url: str) -> bool:
             probe_result = f"status code : {response.getcode()}"
     except urllib.error.HTTPError as e:
         # any http error means the camera answered but does not support the endpoint;
-        # connection-level errors (URLError) propagate to the shared unavailable handling
-        legacy = True
-        probe_result = str(e)
-    except (http.client.BadStatusLine, ConnectionResetError) as e:
-        # some older firmware may drop the connection instead of answering unknown endpoints
+        # connection-level failures propagate to the shared unavailable/disconnected handling
         legacy = True
         probe_result = str(e)
     logger.debug(
