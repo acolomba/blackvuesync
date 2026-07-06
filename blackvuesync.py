@@ -1223,8 +1223,6 @@ def download_metadata_file(
             )
             return False, None
 
-        # the firmware nests the payload under "metadata", keyed by type; unlike
-        # the cloud endpoint, this camera-direct response carries no resultcode
         metadata = data.get("metadata")
         if not isinstance(metadata, dict):
             _handle_download_failure(
