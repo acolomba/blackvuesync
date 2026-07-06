@@ -2,14 +2,13 @@
 
 ## 2.2.0
 
+* Support BlackVue firmware V1.009+ cameras.
 * Replace undocumented `--filter` with `--include` and `--exclude` options for filtering recordings by type and direction. Codes are comma-separated, direction is optional. (#61)
 * Add `--retry-failed-after` option to retry failed downloads after a configurable delay. (#58)
 * Add `--skip-metadata` option to skip downloading metadata files (thumbnails, accelerometer, GPS). (#14)
 * Stream recording downloads in chunks to avoid buffering full files in memory.
 * Close the lock file descriptor when lock acquisition fails and distinguish lock contention from other OS errors.
 * Ensure lock descriptor `0` is always unlocked on exit.
-* Support BlackVue firmware V1.009+ cameras, which serve the recording index as JSON from `/vodList` instead of the legacy `blackvue_vod.cgi` endpoint. Older cameras continue to work unchanged. (#87)
-* Download recordings from BlackVue firmware V1.009+ cameras, which serve videos from the root path and provide thumbnail and GPS data through a metadata endpoint. Accelerometer data is unavailable on that firmware. (#87)
 
 ## 2.1.1
 
