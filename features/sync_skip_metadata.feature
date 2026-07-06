@@ -17,6 +17,7 @@ Feature: Sync with skip-metadata option
     Then the destination contains no "thm" files
 
   Scenario: Sync recordings skipping only accelerometer files
+    Given the dashcam is legacy: true
     Given recordings for the past "1d" of types "N", directions "F"
     When blackvuesync runs with skip-metadata "3"
     Then blackvuesync exits with code 0

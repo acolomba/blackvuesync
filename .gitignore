@@ -22,3 +22,6 @@ __pycache__
 
 # mac
 .DS_Store
+
+# secrets
+/.claude/settings.local.json

@@ -21,9 +21,11 @@ from __future__ import annotations
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__version__ = "2.2.0a5"
+__version__ = "2.2.0a7"
 
 import argparse
+import base64
+import binascii
 import contextlib
 import datetime
 import errno
@@ -129,7 +131,7 @@ def flush_logs() -> None:
 
 METRICS_DEFAULT_JOB = "blackvuesync"
 METRICS_DEFAULT_STATE_FILENAME = ".blackvuesync.metrics-state.json"
-METRIC_FAILURE_REASONS = ("http", "network", "timeout", "disk", "unknown")
+METRIC_FAILURE_REASONS = ("http", "network", "timeout", "disk", "metadata", "unknown")
 
 
 def parse_pushgateway_url(value: str) -> str:
@@ -228,7 +230,11 @@ def classify_run_failure(error: BaseException) -> str:
         return "timeout"
     if "dashcam unavailable" in error_message or "network" in error_message:
         return "network"
-    if "http error" in error_message or "status code" in error_message:
+    if (
+        "http error" in error_message
+        or "status code" in error_message
+        or "recording list" in error_message
+    ):
         return "http"
     return "unknown"
 
@@ -775,13 +781,25 @@ def _build_request(url: str) -> urllib.request.Request:
 
 
 def is_legacy_camera(base_url: str) -> bool:
-    """returns True for older cameras that lack the /accessible endpoint (pre-V1.009)"""
+    """returns True when the /accessible probe does not answer 200; pre-V1.009
+    cameras lack the endpoint"""
     url = urllib.parse.urljoin(base_url, "accessible")
     try:
         with urllib.request.urlopen(_build_request(url)) as response:
-            return bool(response.getcode() != 200)
-    except urllib.error.HTTPError:
-        return True
+            legacy = bool(response.getcode() != 200)
+            probe_result = f"status code : {response.getcode()}"
+    except urllib.error.HTTPError as e:
+        # any http error means the camera answered but does not support the endpoint;
+        # connection-level failures propagate to the shared unavailable/disconnected handling
+        legacy = True
+        probe_result = str(e)
+    logger.debug(
+        "Detected camera firmware : %s; probe result : %s",
+        "legacy" if legacy else "V1.009+",
+        probe_result,
+        extra={"event": "firmware_detected", "legacy": legacy},
+    )
+    return legacy
 
 
 def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
@@ -800,11 +818,12 @@ def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
     return get_filenames(file_lines)
 
 
-def get_dashcam_filenames(base_url: str) -> list[str]:
-    """gets the recording filenames from the dashcam"""
+def get_dashcam_filenames(base_url: str) -> tuple[bool, list[str]]:
+    """gets whether the camera is legacy and its recording filenames"""
     try:
-        if is_legacy_camera(base_url):
-            return get_dashcam_filenames_legacy(base_url)
+        legacy = is_legacy_camera(base_url)
+        if legacy:
+            return legacy, get_dashcam_filenames_legacy(base_url)
 
         url = urllib.parse.urljoin(base_url, "vodList")
         with urllib.request.urlopen(_build_request(url)) as response:
@@ -814,9 +833,15 @@ def get_dashcam_filenames(base_url: str) -> list[str]:
                     f"Error response from : {base_url} ; status code : {response_status_code}"
                 )
 
-            data = json.load(response)
+            try:
+                data = json.load(response)
+                filenames = [entry["filename"] for entry in data["filelist"]]
+            except (ValueError, KeyError, TypeError) as e:
+                raise RuntimeError(
+                    f"Unexpected recording list from dashcam at address : {base_url}; error : {e!r}"
+                ) from e
 
-        return [entry["filename"] for entry in data["filelist"]]
+        return legacy, filenames
     except urllib.error.URLError as e:
         if isinstance(e.reason, OSError) and (
             isinstance(e.reason, (TimeoutError, socket.timeout))
@@ -957,15 +982,47 @@ def remove_download_failed_marker(
         )
 
 
+def _handle_download_failure(
+    filename: str,
+    error: object,
+    reason: str,
+    destination: str,
+    group_name: str | None,
+    metrics: SyncMetrics | None,
+    mark_failed: bool,
+) -> None:
+    """logs a failed file download, records its metric, and optionally marks it failed"""
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    extra: dict[str, object] = {
+        "event": "file_download_failed",
+        "recording_filename": filename,
+        "error": str(error),
+        "failure_marker_created": mark_failed,
+    }
+    if isinstance(error, Exception):
+        extra["error_type"] = type(error).__name__
+    cron_logger.warning(
+        "Could not download file : %s; error : %s; ignoring.",
+        filename,
+        error,
+        extra=extra,
+    )
+    if metrics:
+        metrics.record_file_download_failure(reason)
+    if mark_failed:
+        mark_download_failed(destination, group_name, filename)
+
+
 def download_file(
     base_url: str,
     filename: str,
     destination: str,
     group_name: str | None,
     metrics: SyncMetrics | None = None,
+    legacy: bool = False,
 ) -> tuple[bool, int | None]:
     """downloads a file from the dashcam to the destination directory; returns whether data was transferred"""
-    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-locals,too-many-statements
     # if we have a group name, we may not have ensured it exists yet
     if group_name:
         group_filepath = os.path.join(destination, group_name)
@@ -1021,7 +1078,10 @@ def download_file(
         )
 
     try:
-        url = urllib.parse.urljoin(base_url, f"Record/{filename}")
+        # V1.009+ serves videos from the root; legacy firmware under /Record/
+        url = urllib.parse.urljoin(
+            base_url, f"Record/{filename}" if legacy else filename
+        )
 
         start = time.perf_counter()
         try:
@@ -1068,38 +1128,15 @@ def download_file(
         return True, speed_bps
     except urllib.error.HTTPError as e:
         # HTTP errors (e.g. 500 for corrupted recordings); marks as failed to suppress retries
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.",
-            filename,
-            e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-                "failure_marker_created": True,
-            },
+        _handle_download_failure(
+            filename, e, "http", destination, group_name, metrics, mark_failed=True
         )
-        if metrics:
-            metrics.record_file_download_failure("http")
-        mark_download_failed(destination, group_name, filename)
         return False, None
     except urllib.error.URLError as e:
         # network-level errors (connection reset, etc.); does not mark as failed
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.",
-            filename,
-            e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-                "failure_marker_created": False,
-            },
+        _handle_download_failure(
+            filename, e, "network", destination, group_name, metrics, mark_failed=False
         )
-        if metrics:
-            metrics.record_file_download_failure("network")
         return False, None
     except socket.timeout as e:
         if metrics:
@@ -1109,14 +1146,182 @@ def download_file(
         ) from e
 
 
+def download_metadata_file(
+    base_url: str,
+    video_filename: str,
+    metadata_filename: str,
+    metadata_type: str,
+    destination: str,
+    group_name: str | None,
+    metrics: SyncMetrics | None = None,
+) -> tuple[bool, int | None]:
+    """downloads thumbnail or gps data via the /vodMetadata endpoint (V1.009+)"""
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-return-statements,too-many-locals,too-many-statements
+    if group_name:
+        ensure_destination(os.path.join(destination, group_name))
+
+    destination_filepath = get_filepath(destination, group_name, metadata_filename)
+    if os.path.exists(destination_filepath):
+        logger.debug(
+            "Ignoring already downloaded file : %s",
+            metadata_filename,
+            extra={
+                "event": "file_already_downloaded",
+                "recording_filename": metadata_filename,
+                "destination_path": destination_filepath,
+            },
+        )
+        return False, None
+
+    if dry_run:
+        logger.debug(
+            "DRY RUN Would download file : %s",
+            metadata_filename,
+            extra={
+                "event": "file_download_dry_run",
+                "recording_filename": metadata_filename,
+            },
+        )
+        return True, None
+
+    if is_download_blocked_by_failure(destination, group_name, metadata_filename):
+        logger.debug(
+            "Skipping recently failed download : %s",
+            metadata_filename,
+            extra={
+                "event": "file_download_recently_failed",
+                "recording_filename": metadata_filename,
+            },
+        )
+        return False, None
+
+    remove_download_failed_marker(destination, group_name, metadata_filename)
+
+    temp_filepath = os.path.join(destination, f".{metadata_filename}")
+    try:
+        url = urllib.parse.urljoin(base_url, "vodMetadata")
+        body = json.dumps({"file": video_filename, "types": [metadata_type]}).encode(
+            "utf-8"
+        )
+        request = urllib.request.Request(url, data=body, method="POST")
+        request.add_header("Content-Type", "application/json")
+        if affinity_key:
+            request.add_header("X-Affinity-Key", affinity_key)
+
+        with urllib.request.urlopen(request) as response:
+            data = json.load(response)
+
+        if not isinstance(data, dict):
+            _handle_download_failure(
+                metadata_filename,
+                "response is not a JSON object",
+                "metadata",
+                destination,
+                group_name,
+                metrics,
+                mark_failed=True,
+            )
+            return False, None
+
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
+            _handle_download_failure(
+                metadata_filename,
+                "response missing metadata object",
+                "metadata",
+                destination,
+                group_name,
+                metrics,
+                mark_failed=True,
+            )
+            return False, None
+
+        encoded = metadata.get(metadata_type)
+        if not isinstance(encoded, str) or not encoded:
+            _handle_download_failure(
+                metadata_filename,
+                f"missing {metadata_type} payload",
+                "metadata",
+                destination,
+                group_name,
+                metrics,
+                mark_failed=True,
+            )
+            return False, None
+
+        content = base64.b64decode(encoded, validate=True)
+        with open(temp_filepath, "wb") as f:
+            f.write(content)
+        os.rename(temp_filepath, destination_filepath)
+
+        logger.debug(
+            "Downloaded file : %s",
+            metadata_filename,
+            extra={
+                "event": "file_downloaded",
+                "recording_filename": metadata_filename,
+                "destination_path": destination_filepath,
+                "content_length_bytes": len(content),
+            },
+        )
+        if metrics:
+            metrics.record_file_download(len(content))
+        return True, None
+    except urllib.error.HTTPError as e:
+        # HTTP errors; marks as failed to suppress retries, like download_file
+        _handle_download_failure(
+            metadata_filename,
+            e,
+            "http",
+            destination,
+            group_name,
+            metrics,
+            mark_failed=True,
+        )
+        return False, None
+    except urllib.error.URLError as e:
+        # network-level errors; does not mark as failed
+        _handle_download_failure(
+            metadata_filename,
+            e,
+            "network",
+            destination,
+            group_name,
+            metrics,
+            mark_failed=False,
+        )
+        return False, None
+    except socket.timeout as e:
+        if metrics:
+            metrics.record_file_download_failure("timeout")
+        raise UserWarning(
+            f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
+        ) from e
+    except (json.JSONDecodeError, binascii.Error) as e:
+        # malformed JSON or base64; the camera answered, so marks failed like
+        # the other unusable responses
+        _handle_download_failure(
+            metadata_filename,
+            e,
+            "metadata",
+            destination,
+            group_name,
+            metrics,
+            mark_failed=True,
+        )
+        return False, None
+
+
 def download_recording(
     base_url: str,
     recording: Recording,
     destination: str,
     metrics: SyncMetrics | None = None,
+    legacy: bool = False,
 ) -> None:
     """downloads the set of recordings, including gps data, for the given filename from the dashcam to the destination
     directory"""
+    # pylint: disable=too-many-branches,too-many-locals
     # first checks that we have enough room left
     disk_usage = shutil.disk_usage(destination)
     if metrics:
@@ -1136,7 +1341,7 @@ def download_recording(
     # downloads the video recording
     filename = recording.filename
     downloaded, speed_bps = download_file(
-        base_url, filename, destination, recording.group_name, metrics
+        base_url, filename, destination, recording.group_name, metrics, legacy
     )
     any_downloaded |= downloaded
 
@@ -1145,9 +1350,25 @@ def download_recording(
         thm_filename = (
             f"{recording.base_filename}_{recording.type}{recording.direction}.thm"
         )
-        downloaded, _ = download_file(
-            base_url, thm_filename, destination, recording.group_name, metrics
-        )
+        if legacy:
+            downloaded, _ = download_file(
+                base_url,
+                thm_filename,
+                destination,
+                recording.group_name,
+                metrics,
+                legacy,
+            )
+        else:
+            downloaded, _ = download_metadata_file(
+                base_url,
+                recording.filename,
+                thm_filename,
+                "thumbnail",
+                destination,
+                recording.group_name,
+                metrics,
+            )
         any_downloaded |= downloaded
     else:
         logger.debug(
@@ -1160,16 +1381,32 @@ def download_recording(
             },
         )
 
-    # downloads the accelerometer data
-    if "3" not in skip_metadata:
-        tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
-        downloaded, _ = download_file(
-            base_url, tgf_filename, destination, recording.group_name, metrics
-        )
-        any_downloaded |= downloaded
+    # downloads the accelerometer data (legacy firmware only; V1.009+ has no endpoint)
+    if legacy:
+        if "3" not in skip_metadata:
+            tgf_filename = f"{recording.base_filename}_{recording.type}.3gf"
+            downloaded, _ = download_file(
+                base_url,
+                tgf_filename,
+                destination,
+                recording.group_name,
+                metrics,
+                legacy,
+            )
+            any_downloaded |= downloaded
+        else:
+            logger.debug(
+                "Skipping accelerometer : %s (--skip-metadata)",
+                recording.base_filename,
+                extra={
+                    "event": "metadata_skipped",
+                    "metadata_type": "accelerometer",
+                    "recording_base_filename": recording.base_filename,
+                },
+            )
     else:
         logger.debug(
-            "Skipping accelerometer : %s (--skip-metadata)",
+            "Skipping accelerometer : %s (unavailable on this firmware)",
             recording.base_filename,
             extra={
                 "event": "metadata_skipped",
@@ -1181,9 +1418,25 @@ def download_recording(
     # downloads the gps data
     if "g" not in skip_metadata:
         gps_filename = f"{recording.base_filename}_{recording.type}.gps"
-        downloaded, _ = download_file(
-            base_url, gps_filename, destination, recording.group_name, metrics
-        )
+        if legacy:
+            downloaded, _ = download_file(
+                base_url,
+                gps_filename,
+                destination,
+                recording.group_name,
+                metrics,
+                legacy,
+            )
+        else:
+            downloaded, _ = download_metadata_file(
+                base_url,
+                recording.filename,
+                gps_filename,
+                "gps",
+                destination,
+                recording.group_name,
+                metrics,
+            )
         any_downloaded |= downloaded
     else:
         logger.debug(
@@ -1469,7 +1722,7 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     prepare_destination(destination, grouping)
 
     base_url = f"http://{address}"
-    dashcam_filenames = get_dashcam_filenames(base_url)
+    legacy, dashcam_filenames = get_dashcam_filenames(base_url)
     dashcam_recordings = [
         r for x in dashcam_filenames if (r := to_recording(x, grouping)) is not None
     ]
@@ -1490,7 +1743,7 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     sort_recordings(current_dashcam_recordings, download_priority)
 
     for recording in current_dashcam_recordings:
-        download_recording(base_url, recording, destination, metrics)
+        download_recording(base_url, recording, destination, metrics, legacy)
 
 
 def is_empty_directory(dirpath: str) -> bool:

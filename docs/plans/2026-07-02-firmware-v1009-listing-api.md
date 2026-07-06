@@ -44,8 +44,11 @@ firmware wire endpoints, not names chosen here.
 
 ## `blackvuesync.py`
 
-`get_dashcam_filenames(base_url) -> list[str]` keeps its public contract. It is
-restructured to detect once, then branch:
+`get_dashcam_filenames(base_url) -> list[str]` keeps its public contract.
+**Superseded:** the download follow-up changed the return to
+`tuple[bool, list[str]]` so the legacy flag reaches the download path; see
+`2026-07-05-firmware-v1009-download-metadata.md`. It is restructured to detect
+once, then branch:
 
 ```python
 def get_dashcam_filenames(base_url):
@@ -85,7 +88,8 @@ New and changed units:
   `[f["filename"] for f in data["filelist"]]`, mirroring the existing
   `get_filenames`. A malformed response (missing `filelist`/`filename`) raises
   and is surfaced as an error rather than silently returning an empty list; a
-  valid camera always returns the documented shape.
+  valid camera always returns the documented shape. (Inlined during
+  implementation: the comprehension lives directly in `get_dashcam_filenames`.)
 - `_build_request(url)` -- small helper that builds a `urllib.request.Request`
   and conditionally adds the `X-Affinity-Key` header. Used by the three
   index-related requests (`/accessible`, `/vodList`, `blackvue_vod.cgi`) to
@@ -159,7 +163,9 @@ conventions (lowercase, present tense, "the dashcam").
 ## Out of scope
 
 - No change to the download path; `/Record/<filename>` is confirmed unchanged on
-  V1.009.
+  V1.009. **Superseded:** issue #87 later showed downloads *did* change on
+  V1.009 (video at the server root, metadata via `/vodMetadata`). See
+  `2026-07-05-firmware-v1009-download-metadata.md`.
 - No auth/HTTPS handling changes. The app probes HTTP then HTTPS; blackvuesync
   targets HTTP as today.
 - The `size` field is not consumed (it is absent from live `/vodList` anyway);

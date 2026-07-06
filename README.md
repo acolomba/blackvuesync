@@ -18,6 +18,9 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 
 ## Features
 
+> [!IMPORTANT]
+> As of version 2.2.0a7, supports the new API in BlackVue firmware V1.009+.
+
 * **Portable runtimes:**
   * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
   * A [docker image](#docker) that runs periodically via an internal cron job. Supports amd64 (Intel), arm64 (Apple Silicon, Raspberry Pi 4+) and armv7 (Raspberry Pi 2/3).

@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import email.message
 import errno
 import fcntl
 import glob
+import http.client
 import json
 import logging
 import os
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 import pytest
@@ -853,6 +856,310 @@ def test_download_file_streams_response_in_chunks(
             assert f.read() == b"abcdef"
 
 
+class _FakeUrlResponse:
+    """fake urlopen response with a fixed status code and body"""
+
+    def __init__(self, body: bytes = b"", status_code: int = 200) -> None:
+        self._body = body
+        self._status_code = status_code
+
+    def getcode(self) -> int:
+        return self._status_code
+
+    def read(self, _size: int = -1) -> bytes:
+        body, self._body = self._body, b""
+        return body
+
+    def __enter__(self) -> _FakeUrlResponse:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
+
+
+def _sync_metrics() -> blackvuesync.SyncMetrics:
+    """creates a metrics instance for download failure assertions"""
+    return blackvuesync.SyncMetrics(
+        run_start_monotonic=time.perf_counter(),
+        run_start_timestamp=time.time(),
+    )
+
+
+def _file_download_failures(reason: str) -> dict[str, int]:
+    """builds the expected file download failure counts with one failure of the given reason"""
+    return dict.fromkeys(blackvuesync.METRIC_FAILURE_REASONS, 0) | {reason: 1}
+
+
+def _http_error(url: str, status_code: int) -> urllib.error.HTTPError:
+    """creates an http error with empty headers for fake urlopen functions"""
+    return urllib.error.HTTPError(
+        url, status_code, "error", email.message.Message(), None
+    )
+
+
+def test_is_legacy_camera_current_on_ok_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a 200 response from the /accessible probe selects the current api."""
+    monkeypatch.setattr(urllib.request, "urlopen", lambda _request: _FakeUrlResponse())
+
+    assert blackvuesync.is_legacy_camera("http://dashcam/") is False
+
+
+@pytest.mark.parametrize("status_code", [404, 500, 503])
+def test_is_legacy_camera_legacy_on_http_error(
+    monkeypatch: pytest.MonkeyPatch, status_code: int
+) -> None:
+    """verifies any http error from the /accessible probe selects the legacy api."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/accessible", status_code)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    assert blackvuesync.is_legacy_camera("http://dashcam/") is True
+
+
+def test_is_legacy_camera_propagates_dropped_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a dropped connection during the /accessible probe propagates to the shared handler."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise http.client.RemoteDisconnected("Remote end closed connection")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(http.client.RemoteDisconnected):
+        blackvuesync.is_legacy_camera("http://dashcam/")
+
+
+def test_is_legacy_camera_propagates_unavailable_dashcam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies connection-level failures propagate instead of misdetecting the firmware."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise urllib.error.URLError(
+            ConnectionRefusedError(errno.ECONNREFUSED, "connection refused")
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(urllib.error.URLError):
+        blackvuesync.is_legacy_camera("http://dashcam/")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b"not json", b"{}", b'{"filelist": "unexpected"}', b'{"filelist": [{}]}'],
+)
+def test_get_dashcam_filenames_runtime_error_on_malformed_vodlist(
+    monkeypatch: pytest.MonkeyPatch, body: bytes
+) -> None:
+    """verifies malformed /vodList responses surface as clean runtime errors."""
+    monkeypatch.setattr(blackvuesync, "is_legacy_camera", lambda _base_url: False)
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda _request: _FakeUrlResponse(body)
+    )
+
+    with pytest.raises(RuntimeError):
+        blackvuesync.get_dashcam_filenames("http://dashcam/")
+
+
+def test_classify_run_failure_maps_malformed_recording_list_to_http() -> None:
+    """verifies malformed recording list errors classify as http run failures."""
+    error = RuntimeError(
+        "Unexpected recording list from dashcam at address : http://dashcam/;"
+        " error : KeyError('filelist')"
+    )
+
+    assert blackvuesync.classify_run_failure(error) == "http"
+
+
+def test_download_file_marks_failed_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies http download errors record the http metric and mark the file failed."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/20181029_131513_NF.mp4", 500)
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_file(
+            "http://dashcam/", "20181029_131513_NF.mp4", destination, None, metrics
+        )
+
+        assert (downloaded, speed) == (False, None)
+        assert metrics.file_download_failures_last_run == _file_download_failures(
+            "http"
+        )
+        assert os.path.exists(
+            os.path.join(destination, "20181029_131513_NF.mp4.failed")
+        )
+
+
+def test_download_file_no_marker_on_network_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies network download errors record the network metric without a failure marker."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise urllib.error.URLError(
+            ConnectionResetError(errno.ECONNRESET, "connection reset")
+        )
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_file(
+            "http://dashcam/", "20181029_131513_NF.mp4", destination, None, metrics
+        )
+
+        assert (downloaded, speed) == (False, None)
+        assert metrics.file_download_failures_last_run == _file_download_failures(
+            "network"
+        )
+        assert not glob.glob(os.path.join(destination, "*.failed"))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"[]",
+        b"{}",
+        b'{"metadata": {}}',
+        b'{"metadata": {"thumbnail": "aGVs!bG8="}}',
+        b"not json",
+    ],
+)
+def test_download_metadata_file_marks_failed_on_unusable_response(
+    monkeypatch: pytest.MonkeyPatch, body: bytes
+) -> None:
+    """verifies unusable /vodMetadata responses skip non-fatally, record the metadata metric, and mark the file failed."""
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(
+            urllib.request, "urlopen", lambda _request: _FakeUrlResponse(body)
+        )
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            None,
+            metrics,
+        )
+
+        assert (downloaded, speed) == (False, None)
+        assert metrics.file_download_failures_last_run == _file_download_failures(
+            "metadata"
+        )
+        assert not os.path.exists(os.path.join(destination, "20181029_131513_NF.thm"))
+        assert not os.path.exists(os.path.join(destination, ".20181029_131513_NF.thm"))
+        assert os.path.exists(
+            os.path.join(destination, "20181029_131513_NF.thm.failed")
+        )
+
+
+def test_download_metadata_file_marks_failed_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies http errors from /vodMetadata record the http metric and mark the file failed."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/vodMetadata", 500)
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            None,
+            metrics,
+        )
+
+        assert (downloaded, speed) == (False, None)
+        assert metrics.file_download_failures_last_run == _file_download_failures(
+            "http"
+        )
+        assert os.path.exists(
+            os.path.join(destination, "20181029_131513_NF.thm.failed")
+        )
+
+
+def test_download_metadata_file_no_marker_on_network_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies network errors from /vodMetadata record the network metric without a failure marker."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise urllib.error.URLError(
+            ConnectionResetError(errno.ECONNRESET, "connection reset")
+        )
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            None,
+            metrics,
+        )
+
+        assert (downloaded, speed) == (False, None)
+        assert metrics.file_download_failures_last_run == _file_download_failures(
+            "network"
+        )
+        assert not glob.glob(os.path.join(destination, "*.failed"))
+
+
+def test_download_metadata_file_dry_run_makes_no_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies dry-run metadata downloads issue no request and write nothing."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise AssertionError("dry run must not issue requests")
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(blackvuesync, "dry_run", True)
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            None,
+        )
+
+        assert (downloaded, speed) == (True, None)
+        assert not os.listdir(destination)
+
+
 def test_lock_closes_fd_when_lock_acquisition_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -946,6 +1253,7 @@ def test_sync_metrics_records_downloads_and_failures(
     assert metrics.file_download_failures_last_run == {
         "disk": 0,
         "http": 1,
+        "metadata": 0,
         "network": 0,
         "timeout": 0,
         "unknown": 1,
@@ -953,6 +1261,7 @@ def test_sync_metrics_records_downloads_and_failures(
     assert metrics.last_run_failures == {
         "disk": 0,
         "http": 0,
+        "metadata": 0,
         "network": 0,
         "timeout": 1,
         "unknown": 0,
