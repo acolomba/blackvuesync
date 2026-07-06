@@ -343,7 +343,9 @@ class MockDashcam:
 
         @self.app.route("/mock/legacy-api", methods=["POST"])
         def set_legacy_api() -> tuple[dict[str, Any], int]:
-            """configures whether the session serves the legacy blackvue_vod.cgi index"""
+            """configures whether the session behaves as a legacy camera
+            (blackvue_vod.cgi index, /Record/ downloads, plain metadata files)
+            or V1.009+"""
             data = flask.request.get_json() or {}
             logger.debug("POST /mock/legacy-api")
             logger.debug("Request body: %s", data)

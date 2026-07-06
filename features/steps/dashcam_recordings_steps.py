@@ -115,7 +115,7 @@ def dashcam_recordings_same_as_downloaded_past(context: Context, period: str) ->
 
 @given("the dashcam is legacy: {legacy_api}")
 def dashcam_legacy_api(context: Context, legacy_api: str) -> None:
-    """configures whether the mock dashcam serves the legacy blackvue_vod.cgi index."""
+    """configures whether the mock dashcam behaves as a legacy camera or V1.009+."""
     context.legacy_api = legacy_api.lower() == "true"
     url = f"{context.mock_dashcam_url}/mock/legacy-api"
     headers = {"X-Affinity-Key": context.scenario_token}

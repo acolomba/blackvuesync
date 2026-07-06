@@ -44,8 +44,9 @@ behavior:
   -> {"resultcode": "BC_ERR_OK", "thumbnail": "<base64>"}
   ```
 
-  and the same with `"types": ["gps"]`. The base64 payload decodes to the same
-  bytes the legacy `.thm` / `.gps` files contained.
+  and the same with `"types": ["gps"]` (whether the `gps` payload sits flat or
+  nested under a `metadata` object is unconfirmed; see below). The base64
+  payload decodes to the same bytes the legacy `.thm` / `.gps` files contained.
 - **The accelerometer `.3gf` has no metadata type.** Only `thumbnail` and `gps`
   are retrievable through `/vodMetadata`; there is no `.3gf` counterpart. On
   V1.009 the accelerometer data is unavailable and is skipped.
@@ -117,10 +118,13 @@ side to mirror V1.009 downloads:
   non-legacy side a root `GET` of a non-`.mp4` name returns `415 mp4 only`, for
   fidelity and to guard against accidental plain metadata-file fetches.
 - `POST /vodMetadata` -- when not legacy, accepts `{"file", "types":[type]}` and
-  returns `{"resultcode": "BC_ERR_OK", <type>: "<base64>"}` for `thumbnail` and
-  `gps`, sourced from the same fixture bytes the legacy metadata files serve.
-  Returns a non-OK `resultcode` for an unknown file so the tolerant path is
-  exercised.
+  returns `{"resultcode": "BC_ERR_OK", "thumbnail": "<base64>"}` for `thumbnail`
+  and `{"resultcode": "BC_ERR_OK", "metadata": {"gps": "<base64>"}}` for `gps`,
+  sourced from the same fixture bytes the legacy metadata files serve. The
+  flat/nested split is a deliberate mock choice (the live shape for `gps` is
+  unconfirmed -- see Risks) so both payload locations the client parser accepts
+  are exercised. Returns a non-OK `resultcode` for an unknown file so the
+  tolerant path is exercised.
 - Legacy behavior (`/Record/<filename>`, plain `.thm`/`.gps`/`.3gf`) is
   unchanged.
 
