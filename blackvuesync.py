@@ -1228,7 +1228,7 @@ def download_metadata_file(
                 metrics.record_file_download_failure("metadata")
             return False, None
 
-        content = base64.b64decode(encoded)
+        content = base64.b64decode(encoded, validate=True)
         with open(temp_filepath, "wb") as f:
             f.write(content)
         os.rename(temp_filepath, destination_filepath)
