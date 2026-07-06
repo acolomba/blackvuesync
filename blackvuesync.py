@@ -25,6 +25,7 @@ __version__ = "2.2.0a6"
 
 import argparse
 import base64
+import binascii
 import contextlib
 import datetime
 import errno
@@ -229,7 +230,11 @@ def classify_run_failure(error: BaseException) -> str:
         return "timeout"
     if "dashcam unavailable" in error_message or "network" in error_message:
         return "network"
-    if "http error" in error_message or "status code" in error_message:
+    if (
+        "http error" in error_message
+        or "status code" in error_message
+        or "recording list" in error_message
+    ):
         return "http"
     return "unknown"
 
@@ -776,13 +781,29 @@ def _build_request(url: str) -> urllib.request.Request:
 
 
 def is_legacy_camera(base_url: str) -> bool:
-    """returns True for older cameras that lack the /accessible endpoint (pre-V1.009)"""
+    """returns True when the /accessible probe does not answer 200; pre-V1.009
+    cameras lack the endpoint"""
     url = urllib.parse.urljoin(base_url, "accessible")
     try:
         with urllib.request.urlopen(_build_request(url)) as response:
-            return bool(response.getcode() != 200)
-    except urllib.error.HTTPError:
-        return True
+            legacy = bool(response.getcode() != 200)
+            probe_result = f"status code : {response.getcode()}"
+    except urllib.error.HTTPError as e:
+        # any http error means the camera answered but does not support the endpoint;
+        # connection-level errors (URLError) propagate to the shared unavailable handling
+        legacy = True
+        probe_result = str(e)
+    except (http.client.BadStatusLine, ConnectionResetError) as e:
+        # some older firmware may drop the connection instead of answering unknown endpoints
+        legacy = True
+        probe_result = str(e)
+    logger.debug(
+        "Detected camera firmware : %s; probe result : %s",
+        "legacy" if legacy else "V1.009+",
+        probe_result,
+        extra={"event": "firmware_detected", "legacy": legacy},
+    )
+    return legacy
 
 
 def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
@@ -816,9 +837,15 @@ def get_dashcam_filenames(base_url: str) -> tuple[bool, list[str]]:
                     f"Error response from : {base_url} ; status code : {response_status_code}"
                 )
 
-            data = json.load(response)
+            try:
+                data = json.load(response)
+                filenames = [entry["filename"] for entry in data["filelist"]]
+            except (ValueError, KeyError, TypeError) as e:
+                raise RuntimeError(
+                    f"Unexpected recording list from dashcam at address : {base_url}; error : {e!r}"
+                ) from e
 
-        return legacy, [entry["filename"] for entry in data["filelist"]]
+        return legacy, filenames
     except urllib.error.URLError as e:
         if isinstance(e.reason, OSError) and (
             isinstance(e.reason, (TimeoutError, socket.timeout))
@@ -959,6 +986,37 @@ def remove_download_failed_marker(
         )
 
 
+def _handle_download_failure(
+    filename: str,
+    error: object,
+    reason: str,
+    destination: str,
+    group_name: str | None,
+    metrics: SyncMetrics | None,
+    mark_failed: bool,
+) -> None:
+    """logs a failed file download, records its metric, and optionally marks it failed"""
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    extra: dict[str, object] = {
+        "event": "file_download_failed",
+        "recording_filename": filename,
+        "error": str(error),
+        "failure_marker_created": mark_failed,
+    }
+    if isinstance(error, Exception):
+        extra["error_type"] = type(error).__name__
+    cron_logger.warning(
+        "Could not download file : %s; error : %s; ignoring.",
+        filename,
+        error,
+        extra=extra,
+    )
+    if metrics:
+        metrics.record_file_download_failure(reason)
+    if mark_failed:
+        mark_download_failed(destination, group_name, filename)
+
+
 def download_file(
     base_url: str,
     filename: str,
@@ -1074,38 +1132,15 @@ def download_file(
         return True, speed_bps
     except urllib.error.HTTPError as e:
         # HTTP errors (e.g. 500 for corrupted recordings); marks as failed to suppress retries
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.",
-            filename,
-            e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-                "failure_marker_created": True,
-            },
+        _handle_download_failure(
+            filename, e, "http", destination, group_name, metrics, mark_failed=True
         )
-        if metrics:
-            metrics.record_file_download_failure("http")
-        mark_download_failed(destination, group_name, filename)
         return False, None
     except urllib.error.URLError as e:
         # network-level errors (connection reset, etc.); does not mark as failed
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.",
-            filename,
-            e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-                "failure_marker_created": False,
-            },
+        _handle_download_failure(
+            filename, e, "network", destination, group_name, metrics, mark_failed=False
         )
-        if metrics:
-            metrics.record_file_download_failure("network")
         return False, None
     except socket.timeout as e:
         if metrics:
@@ -1181,32 +1216,27 @@ def download_metadata_file(
             data = json.load(response)
 
         if not isinstance(data, dict):
-            cron_logger.warning(
-                "Could not download file : %s; unexpected metadata response; ignoring.",
+            _handle_download_failure(
                 metadata_filename,
-                extra={
-                    "event": "file_download_failed",
-                    "recording_filename": metadata_filename,
-                    "error": "response is not a JSON object",
-                },
+                "response is not a JSON object",
+                "metadata",
+                destination,
+                group_name,
+                metrics,
+                mark_failed=True,
             )
-            if metrics:
-                metrics.record_file_download_failure("metadata")
             return False, None
 
         if data.get("resultcode") != "BC_ERR_OK":
-            cron_logger.warning(
-                "Could not download file : %s; metadata result : %s; ignoring.",
+            _handle_download_failure(
                 metadata_filename,
-                data.get("resultcode"),
-                extra={
-                    "event": "file_download_failed",
-                    "recording_filename": metadata_filename,
-                    "error": str(data.get("resultcode")),
-                },
+                f"metadata result : {data.get('resultcode')}",
+                "metadata",
+                destination,
+                group_name,
+                metrics,
+                mark_failed=True,
             )
-            if metrics:
-                metrics.record_file_download_failure("metadata")
             return False, None
 
         # the payload sits at the top level, or nested under "metadata"
@@ -1214,18 +1244,15 @@ def download_metadata_file(
         if encoded is None and isinstance(data.get("metadata"), dict):
             encoded = data["metadata"].get(metadata_type)
         if not isinstance(encoded, str) or not encoded:
-            cron_logger.warning(
-                "Metadata response missing %s data : %s; ignoring.",
-                metadata_type,
+            _handle_download_failure(
                 metadata_filename,
-                extra={
-                    "event": "file_download_failed",
-                    "recording_filename": metadata_filename,
-                    "error": "missing metadata payload",
-                },
+                f"missing {metadata_type} payload",
+                "metadata",
+                destination,
+                group_name,
+                metrics,
+                mark_failed=True,
             )
-            if metrics:
-                metrics.record_file_download_failure("metadata")
             return False, None
 
         content = base64.b64decode(encoded, validate=True)
@@ -1247,35 +1274,28 @@ def download_metadata_file(
             metrics.record_file_download(len(content))
         return True, None
     except urllib.error.HTTPError as e:
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.",
+        # HTTP errors; marks as failed to suppress retries, like download_file
+        _handle_download_failure(
             metadata_filename,
             e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": metadata_filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-            },
+            "http",
+            destination,
+            group_name,
+            metrics,
+            mark_failed=True,
         )
-        if metrics:
-            metrics.record_file_download_failure("http")
-        mark_download_failed(destination, group_name, metadata_filename)
         return False, None
     except urllib.error.URLError as e:
-        cron_logger.warning(
-            "Could not download file : %s; error : %s; ignoring.",
+        # network-level errors; does not mark as failed
+        _handle_download_failure(
             metadata_filename,
             e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": metadata_filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-            },
+            "network",
+            destination,
+            group_name,
+            metrics,
+            mark_failed=False,
         )
-        if metrics:
-            metrics.record_file_download_failure("network")
         return False, None
     except socket.timeout as e:
         if metrics:
@@ -1283,21 +1303,18 @@ def download_metadata_file(
         raise UserWarning(
             f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
         ) from e
-    except ValueError as e:
-        # malformed JSON or base64; non-fatal, mirrors a failed metadata fetch
-        cron_logger.warning(
-            "Could not parse metadata response : %s; error : %s; ignoring.",
+    except (json.JSONDecodeError, binascii.Error) as e:
+        # malformed JSON or base64; the camera answered, so marks failed like
+        # the other unusable responses
+        _handle_download_failure(
             metadata_filename,
             e,
-            extra={
-                "event": "file_download_failed",
-                "recording_filename": metadata_filename,
-                "error_type": type(e).__name__,
-                "error": str(e),
-            },
+            "metadata",
+            destination,
+            group_name,
+            metrics,
+            mark_failed=True,
         )
-        if metrics:
-            metrics.record_file_download_failure("metadata")
         return False, None
 
 

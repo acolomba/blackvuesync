@@ -99,8 +99,9 @@ New and changed units:
   - Parses the response, requires `resultcode == "BC_ERR_OK"`, base64-decodes the
     payload for the requested type, and writes it to `metadata_filename`.
   - Any non-OK `resultcode`, missing/empty payload, or malformed response is
-    logged and treated as a non-fatal skip -- identical in spirit to a failed
-    metadata `GET` today, so a metadata hiccup never aborts the video sync.
+    logged, marked failed (throttling retries like a failed metadata `GET`'s
+    404 today), and treated as a non-fatal skip, so a metadata hiccup never
+    aborts the video sync.
 - Add `import base64`.
 
 The exact JSON key the payload sits under for `gps` (flat vs. nested under a
