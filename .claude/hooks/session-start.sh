@@ -23,6 +23,5 @@ fi
 pre-commit install
 pre-commit install --hook-type commit-msg
 
-# activates the venv for the session; expands the project dir at hook time
-# because CLAUDE_PROJECT_DIR is not set in the per-command shells
+# activates the venv for the session
 echo "source \"${CLAUDE_PROJECT_DIR:-$PWD}/venv/bin/activate\"" >> "$CLAUDE_ENV_FILE"
