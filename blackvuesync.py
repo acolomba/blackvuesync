@@ -1223,10 +1223,13 @@ def download_metadata_file(
             )
             return False, None
 
-        if data.get("resultcode") != "BC_ERR_OK":
+        # the firmware nests the payload under "metadata", keyed by type; unlike
+        # the cloud endpoint, this camera-direct response carries no resultcode
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
             _handle_download_failure(
                 metadata_filename,
-                f"metadata result : {data.get('resultcode')}",
+                "response missing metadata object",
                 "metadata",
                 destination,
                 group_name,
@@ -1235,10 +1238,7 @@ def download_metadata_file(
             )
             return False, None
 
-        # the payload sits at the top level, or nested under "metadata"
-        encoded = data.get(metadata_type)
-        if encoded is None and isinstance(data.get("metadata"), dict):
-            encoded = data["metadata"].get(metadata_type)
+        encoded = metadata.get(metadata_type)
         if not isinstance(encoded, str) or not encoded:
             _handle_download_failure(
                 metadata_filename,

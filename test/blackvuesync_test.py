@@ -1033,9 +1033,9 @@ def test_download_file_no_marker_on_network_error(
     "body",
     [
         b"[]",
-        b'{"resultcode": "BC_ERR_NG"}',
-        b'{"resultcode": "BC_ERR_OK"}',
-        b'{"resultcode": "BC_ERR_OK", "thumbnail": "aGVs!bG8="}',
+        b"{}",
+        b'{"metadata": {}}',
+        b'{"metadata": {"thumbnail": "aGVs!bG8="}}',
         b"not json",
     ],
 )

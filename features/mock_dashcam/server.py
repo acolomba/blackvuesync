@@ -242,17 +242,16 @@ class MockDashcam:
                 else None
             )
             if video_filename not in recordings or extension is None:
-                return {"resultcode": "BC_ERR_NG"}, 200
+                # a missing metadata object signals the error, mirroring the firmware
+                return {}, 200
 
             files_dir = Path(__file__).parent / "files"
             encoded = base64.b64encode(
                 (files_dir / f"mock.{extension}").read_bytes()
             ).decode("ascii")
 
-            # thumbnail sits at the top level; gps is nested under "metadata"
-            if metadata_type == "gps":
-                return {"resultcode": "BC_ERR_OK", "metadata": {"gps": encoded}}, 200
-            return {"resultcode": "BC_ERR_OK", "thumbnail": encoded}, 200
+            # the firmware nests the base64 payload under "metadata", keyed by type
+            return {"metadata": {metadata_type: encoded}}, 200
 
         @self.app.route("/<filename>", methods=["GET"])
         def root_record(filename: str) -> flask.Response:
