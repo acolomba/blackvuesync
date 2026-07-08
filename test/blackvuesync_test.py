@@ -1128,6 +1128,41 @@ def test_download_metadata_file_writes_decoded_payload(
         assert not glob.glob(os.path.join(destination, "*.failed"))
 
 
+def test_download_metadata_file_writes_decoded_payload_into_group_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a valid /vodMetadata response lands in the group directory with no temp dotfile left behind."""
+    content = b"thumbnail data"
+    encoded = base64.b64encode(content).decode("ascii")
+    body = json.dumps({"metadata": {"thumbnail": encoded}}).encode("utf-8")
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(
+            urllib.request, "urlopen", lambda _request: _FakeUrlResponse(body)
+        )
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            "2018-10-29",
+            metrics,
+        )
+
+        assert (downloaded, speed) == (True, None)
+        destination_filepath = os.path.join(
+            destination, "2018-10-29", "20181029_131513_NF.thm"
+        )
+        with open(destination_filepath, "rb") as f:
+            assert f.read() == content
+        assert not glob.glob(os.path.join(destination, ".*"))
+        assert not glob.glob(os.path.join(destination, "2018-10-29", ".*"))
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -1136,6 +1171,7 @@ def test_download_metadata_file_writes_decoded_payload(
         b'{"metadata": {}}',
         b'{"metadata": {"thumbnail": "aGVs!bG8="}}',
         b"not json",
+        b"\x80\x81\x82",
     ],
 )
 def test_download_metadata_file_marks_failed_on_unusable_response(

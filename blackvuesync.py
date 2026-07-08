@@ -25,7 +25,6 @@ __version__ = "2.2.0a7"
 
 import argparse
 import base64
-import binascii
 import contextlib
 import datetime
 import errno
@@ -1321,9 +1320,9 @@ def download_metadata_file(
         raise UserWarning(
             f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
         ) from e
-    except (json.JSONDecodeError, binascii.Error) as e:
-        # malformed JSON or base64; the camera answered, so marks failed like
-        # the other unusable responses
+    except ValueError as e:
+        # malformed json, encoding or base64; the camera answered, so marks
+        # failed like the other unusable responses
         _handle_download_failure(
             metadata_filename,
             e,
