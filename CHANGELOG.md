@@ -2,7 +2,7 @@
 
 ## 2.2.0
 
-* Support BlackVue firmware V1.009+ cameras.
+* Support BlackVue firmware V1.009+ cameras. (#87)
 * Replace undocumented `--filter` with `--include` and `--exclude` options for filtering recordings by type and direction. Codes are comma-separated, direction is optional. (#61)
 * Add `--retry-failed-after` option to retry failed downloads after a configurable delay. (#58)
 * Add `--skip-metadata` option to skip downloading metadata files (thumbnails, accelerometer, GPS). (#14)
