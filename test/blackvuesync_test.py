@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import email.message
 import errno
@@ -200,6 +201,26 @@ def test_to_recording(
     recording = blackvuesync.to_recording(filename, "none")
 
     assert expected_recording == recording
+
+
+def test_to_dashcam_recordings() -> None:
+    """verifies dashcam filenames convert to recordings."""
+    recordings = blackvuesync.to_dashcam_recordings(
+        ["20181029_131513_NF.mp4", "20181029_131513_NR.mp4"], "none"
+    )
+
+    assert [r.filename for r in recordings] == [
+        "20181029_131513_NF.mp4",
+        "20181029_131513_NR.mp4",
+    ]
+
+
+def test_to_dashcam_recordings_raises_on_unrecognized_filename() -> None:
+    """verifies an unrecognized filename in the dashcam recording list raises instead of being dropped."""
+    with pytest.raises(RuntimeError, match="recording list"):
+        blackvuesync.to_dashcam_recordings(
+            ["20181029_131513_NF.mp4", "bogus.txt"], "none"
+        )
 
 
 @pytest.mark.parametrize(
@@ -1026,6 +1047,42 @@ def test_download_file_no_marker_on_network_error(
         assert metrics.file_download_failures_last_run == _file_download_failures(
             "network"
         )
+        assert not glob.glob(os.path.join(destination, "*.failed"))
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_download_metadata_file_writes_decoded_payload(
+    monkeypatch: pytest.MonkeyPatch, wrapped: bool
+) -> None:
+    """verifies a valid /vodMetadata response, plain or line-wrapped, is decoded and written to the destination."""
+    content = b"thumbnail data"
+    encoded = base64.b64encode(content).decode("ascii")
+    if wrapped:
+        encoded = "\r\n".join(encoded[i : i + 4] for i in range(0, len(encoded), 4))
+    body = json.dumps({"metadata": {"thumbnail": encoded}}).encode("utf-8")
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(
+            urllib.request, "urlopen", lambda _request: _FakeUrlResponse(body)
+        )
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            None,
+            metrics,
+        )
+
+        assert (downloaded, speed) == (True, None)
+        destination_filepath = os.path.join(destination, "20181029_131513_NF.thm")
+        with open(destination_filepath, "rb") as f:
+            assert f.read() == content
+        assert not os.path.exists(os.path.join(destination, ".20181029_131513_NF.thm"))
         assert not glob.glob(os.path.join(destination, "*.failed"))
 
 

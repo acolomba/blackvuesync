@@ -17,16 +17,17 @@ recording_filename_re = re.compile(
 )
 
 
-@given("the first {count:d} mp4 recordings are configured to fail")
-def download_errors(context: Context, count: int) -> None:
-    """configures the first N mp4 recordings to return download errors."""
+def _configure_download_errors(context: Context, extension: str, count: int) -> None:
+    """configures the first N files with the given extension to return download errors."""
     if not hasattr(context, "expected_recordings"):
         raise RuntimeError(
             "Cannot configure download errors: no recordings configured yet."
         )
 
-    mp4_files = [f for f in context.expected_recordings if f.endswith(".mp4")]
-    failed_filenames = mp4_files[:count]
+    matching_files = [
+        f for f in context.expected_recordings if f.endswith(f".{extension}")
+    ]
+    failed_filenames = matching_files[:count]
 
     url = f"{context.mock_dashcam_url}/mock/downloads/errors"
     headers = {"X-Affinity-Key": context.scenario_token}
@@ -36,6 +37,18 @@ def download_errors(context: Context, count: int) -> None:
     response.raise_for_status()
 
     context.failed_recordings = set(failed_filenames)
+
+
+@given("the first {count:d} mp4 recordings are configured to fail")
+def download_errors(context: Context, count: int) -> None:
+    """configures the first N mp4 recordings to return download errors."""
+    _configure_download_errors(context, "mp4", count)
+
+
+@given('the first {count:d} "{extension}" metadata files are configured to fail')
+def download_errors_for_metadata(context: Context, count: int, extension: str) -> None:
+    """configures the first N metadata files with the given extension to return download errors."""
+    _configure_download_errors(context, extension, count)
 
 
 @when("download errors are cleared")

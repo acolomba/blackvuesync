@@ -8,6 +8,14 @@ Feature: Retry failed downloads
     Then the successful recordings are downloaded
     Then failure markers exist for the failed recordings
 
+  Scenario: Failed metadata downloads leave markers without failing the run
+    Given recordings for the past "1d" of types "N", directions "F"
+    Given the first 1 "thm" metadata files are configured to fail
+    When blackvuesync runs
+    Then blackvuesync exits with code 0
+    Then the successful recordings are downloaded
+    Then failure markers exist for the failed recordings
+
   Scenario: Failed downloads are skipped on next sync
     Given recordings for the past "1d" of types "N", directions "F"
     Given the first 2 mp4 recordings are configured to fail
