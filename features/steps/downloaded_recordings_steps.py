@@ -165,11 +165,15 @@ def assert_downloaded_recordings_exist(context: Context) -> None:
 
 @then('the destination contains no "{extension}" files')
 def assert_no_extension_files(context: Context, extension: str) -> None:
-    """verifies that no files with the given extension exist in the destination."""
+    """verifies that no files with the given extension exist in the destination,
+    including failure markers left by download attempts."""
     matching_files = [
         f.name
         for f in context.dest_dir.rglob("*")
-        if f.is_file() and f.name.endswith(f".{extension}")
+        if f.is_file()
+        and (
+            f.name.endswith(f".{extension}") or f.name.endswith(f".{extension}.failed")
+        )
     ]
     assert_that(
         matching_files,

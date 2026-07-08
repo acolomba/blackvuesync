@@ -58,9 +58,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Docker integration tests
+      - name: Run Docker integration tests (V1.009+ protocol)
         run: |
           behave -D implementation=docker -D image_name=${{ env.REGISTRY_IMAGE }}:test --no-capture --format progress
+
+      - name: Run Docker integration tests (legacy protocol)
+        run: |
+          behave -D implementation=docker -D image_name=${{ env.REGISTRY_IMAGE }}:test --no-capture --format progress -D legacy_api=true
 
   build:
     needs: [test]

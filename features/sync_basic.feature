@@ -5,6 +5,9 @@ Feature: Basic sync operations
     When blackvuesync runs
     Then blackvuesync exits with code 0
     Then all the recordings are downloaded
+    Then the downloaded "thm" files match the mock fixture
+    Then the downloaded "gps" files match the mock fixture
+    Then no failure markers exist
 
   Scenario: Sync when destination already has some recordings
     Given downloaded recordings between "2d" and "1d" ago of types "NE", directions "FR"

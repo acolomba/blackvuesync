@@ -42,9 +42,13 @@ jobs:
         run: |
           COVERAGE_FILE=.coverage.pytest pytest test/blackvuesync_test.py --cov=. --cov-report= -v
 
-      - name: Run integration tests with coverage
+      - name: Run integration tests with coverage (V1.009+ protocol)
         run: |
           behave --no-capture --format progress -D collect_coverage=true
+
+      - name: Run integration tests with coverage (legacy protocol)
+        run: |
+          behave --no-capture --format progress -D collect_coverage=true -D legacy_api=true
 
       - name: Combine coverage data
         run: |
