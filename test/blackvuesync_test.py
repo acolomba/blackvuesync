@@ -927,18 +927,60 @@ def test_is_legacy_camera_current_on_ok_response(
     assert blackvuesync.is_legacy_camera("http://dashcam/") is False
 
 
-@pytest.mark.parametrize("status_code", [404, 500, 503])
-def test_is_legacy_camera_legacy_on_http_error(
+def test_is_legacy_camera_legacy_on_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a 404 from the /accessible probe selects the legacy api."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/accessible", 404)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    assert blackvuesync.is_legacy_camera("http://dashcam/") is True
+
+
+@pytest.mark.parametrize("status_code", [401, 500, 503])
+def test_is_legacy_camera_raises_on_unexpected_http_error(
     monkeypatch: pytest.MonkeyPatch, status_code: int
 ) -> None:
-    """verifies any http error from the /accessible probe selects the legacy api."""
+    """verifies http errors other than 404 from the /accessible probe propagate instead of selecting an api."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
         raise _http_error("http://dashcam/accessible", status_code)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    assert blackvuesync.is_legacy_camera("http://dashcam/") is True
+    with pytest.raises(urllib.error.HTTPError):
+        blackvuesync.is_legacy_camera("http://dashcam/")
+
+
+def test_is_legacy_camera_raises_on_unexpected_status_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a non-200 success response from the /accessible probe fails instead of selecting an api."""
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda _request: _FakeUrlResponse(status_code=204),
+    )
+
+    with pytest.raises(RuntimeError, match="status code : 204"):
+        blackvuesync.is_legacy_camera("http://dashcam/")
+
+
+def test_get_dashcam_filenames_runtime_error_on_probe_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies an unexpected probe response fails the run like any recording-list error."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/accessible", 500)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="Cannot obtain list of recordings"):
+        blackvuesync.get_dashcam_filenames("http://dashcam/")
 
 
 def test_is_legacy_camera_propagates_dropped_connection(

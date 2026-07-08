@@ -796,16 +796,23 @@ def _build_request(url: str) -> urllib.request.Request:
 
 
 def is_legacy_camera(base_url: str) -> bool:
-    """returns True when the /accessible probe does not answer 200; pre-V1.009
-    cameras lack the endpoint"""
+    """returns True when the /accessible probe answers 404, since pre-V1.009 cameras lack the
+    endpoint; any other error fails the run like a recording-list failure"""
     url = urllib.parse.urljoin(base_url, "accessible")
     try:
         with urllib.request.urlopen(_build_request(url)) as response:
-            legacy = bool(response.getcode() != 200)
-            probe_result = f"status code : {response.getcode()}"
+            response_status_code = response.getcode()
+            if response_status_code != 200:
+                raise RuntimeError(
+                    f"Error response from : {base_url} ; status code : {response_status_code}"
+                )
+            legacy = False
+            probe_result = f"status code : {response_status_code}"
     except urllib.error.HTTPError as e:
-        # any http error means the camera answered but does not support the endpoint;
-        # connection-level failures propagate to the shared unavailable/disconnected handling
+        # a 404 means the camera answered but lacks the endpoint, i.e. legacy firmware;
+        # other http errors and connection-level failures propagate to the shared handling
+        if e.code != 404:
+            raise
         legacy = True
         probe_result = str(e)
     logger.debug(
