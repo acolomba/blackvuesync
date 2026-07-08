@@ -69,16 +69,14 @@ def generate_recording_filenames(
     # calculates number of days to generate (inclusive range)
     day_range = (end_date - start_date).days + 1
 
-    # parses recording types
-    recording_types = list(recording_types_str) if recording_types_str else []
+    # parses recording types, tolerating comma-separated codes
+    recording_types = list(recording_types_str.replace(",", ""))
 
-    # parses recording directions
-    recording_directions = (
-        list(recording_directions_str) if recording_directions_str else []
-    )
+    # parses recording directions, tolerating comma-separated codes
+    recording_directions = list(recording_directions_str.replace(",", ""))
 
-    # parses other flags
-    recording_others = list(recording_others_str) if recording_others_str else []
+    # parses other flags, tolerating comma-separated codes
+    recording_others = list(recording_others_str.replace(",", ""))
 
     # generates 5-10 recordings per day for each type
     random.seed(42)  # deterministic generation

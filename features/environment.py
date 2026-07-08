@@ -10,6 +10,7 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.image import DockerImage
 from testcontainers.core.network import Network
 
+from features.lib.dashcam import set_legacy_api
 from features.lib.docker import get_docker_image
 from features.mock_dashcam import MockDashcam
 
@@ -146,7 +147,8 @@ def after_all(context: Context) -> None:
         and implementation == "direct"
         and hasattr(context, "test_run_dir")
     ):
-        _combine_coverage(context.test_run_dir)
+        legacy_api = context.config.userdata.getbool("legacy_api", False)
+        _combine_coverage(context.test_run_dir, "legacy" if legacy_api else "v1009")
 
     # stops mock dashcam (threaded or containerized)
     if hasattr(context, "mock_dashcam"):
@@ -172,8 +174,12 @@ def after_all(context: Context) -> None:
         handler.flush()
 
 
-def _combine_coverage(test_run_dir: Path) -> None:
-    """copies all coverage files from scenario directories to project root."""
+def _combine_coverage(test_run_dir: Path, mode: str) -> None:
+    """copies all coverage files from scenario directories to project root.
+
+    the mode discriminates the destination filenames so that consecutive runs
+    against different protocols accumulate instead of overwriting each other.
+    """
     # finds all .coverage files in scenario directories
     coverage_files = list(test_run_dir.glob("*/coverage/.coverage*"))
 
@@ -186,7 +192,7 @@ def _combine_coverage(test_run_dir: Path) -> None:
     # copies all coverage files to project root for combining
     project_root = Path(__file__).parent.parent
     for i, coverage_file in enumerate(coverage_files):
-        dest = project_root / f".coverage.behave.{i}"
+        dest = project_root / f".coverage.behave.{mode}.{i}"
         shutil.copy2(coverage_file, dest)
         logger.info("copied %s to %s", coverage_file, dest)
 
@@ -207,15 +213,21 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     # skip_metadata defaults to empty; steps that set --skip-metadata will populate it
     context.skip_metadata = set()
 
-    # legacy_api defaults to False (current firmware); the legacy step overrides it
-    context.legacy_api = False
-
     # logs directory
     context.log_dir = context.scenario_dir / "logs"
     context.log_dir.mkdir(parents=True, exist_ok=True)
 
     # generates scenario affinity token (unique id for this scenario)
     context.scenario_token = f"{scenario_name}_{uuid.uuid4()}"
+
+    # legacy_api defaults to the launcher-level protocol mode; the legacy step overrides it
+    context.legacy_api = context.config.userdata.getbool("legacy_api", False)
+    if context.legacy_api:
+        set_legacy_api(context.mock_dashcam_url, context.scenario_token, True)
+
+    # scenarios tagged @legacy exercise protocol features absent on V1.009+
+    if "legacy" in scenario.effective_tags and not context.legacy_api:
+        scenario.skip("legacy protocol only")
 
 
 def after_scenario(context: Context, scenario: Scenario) -> None:

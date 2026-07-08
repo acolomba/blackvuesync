@@ -19,7 +19,7 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 ## Features
 
 > [!IMPORTANT]
-> As of version 2.2.0a7, supports the new API in BlackVue firmware V1.009+.
+> As of version 2.2.0, supports the new API in BlackVue firmware V1.009+.
 
 * **Portable runtimes:**
   * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
@@ -130,7 +130,7 @@ Other options:
 * `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
 * `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 * `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
-* `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
+* `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
 * `--include`: Downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `--include P,NF` downloads all Parking recordings and Normal Front recordings. See the table below for valid codes.
 * `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
 * `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
@@ -308,7 +308,7 @@ Other parameters:
 * `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
 * `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
 * `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
-* `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`), `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
+* `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
 * `INCLUDE`: If set, downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `P,NF` downloads all Parking recordings and Normal Front recordings. (Default: empty, meaning all recordings are downloaded.)
 * `EXCLUDE`: If set, excludes recordings matching the given codes, same format as `INCLUDE`. Takes priority over `INCLUDE`. For example, setting `INCLUDE=N` and `EXCLUDE=NR` downloads all Normal recordings except Normal Rear. (Default: empty.)
 * `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
@@ -327,3 +327,7 @@ Other parameters:
 This project is licensed under the MIT License - see the [COPYING](COPYING) file for details
 
 Copyright 2018-2026 [Alessandro Colomba](https://github.com/acolomba)
+
+## Footnotes
+
+[^1]: In firmware V1.009+, accelerometer data is embedded in the video recordings and no separate `.3gf` file exists, so the `3` flag has no effect.

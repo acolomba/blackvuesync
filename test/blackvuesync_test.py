@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import email.message
 import errno
@@ -200,6 +201,26 @@ def test_to_recording(
     recording = blackvuesync.to_recording(filename, "none")
 
     assert expected_recording == recording
+
+
+def test_to_dashcam_recordings() -> None:
+    """verifies dashcam filenames convert to recordings."""
+    recordings = blackvuesync.to_dashcam_recordings(
+        ["20181029_131513_NF.mp4", "20181029_131513_NR.mp4"], "none"
+    )
+
+    assert [r.filename for r in recordings] == [
+        "20181029_131513_NF.mp4",
+        "20181029_131513_NR.mp4",
+    ]
+
+
+def test_to_dashcam_recordings_raises_on_unrecognized_filename() -> None:
+    """verifies an unrecognized filename in the dashcam recording list raises instead of being dropped."""
+    with pytest.raises(RuntimeError, match="recording list"):
+        blackvuesync.to_dashcam_recordings(
+            ["20181029_131513_NF.mp4", "bogus.txt"], "none"
+        )
 
 
 @pytest.mark.parametrize(
@@ -906,18 +927,60 @@ def test_is_legacy_camera_current_on_ok_response(
     assert blackvuesync.is_legacy_camera("http://dashcam/") is False
 
 
-@pytest.mark.parametrize("status_code", [404, 500, 503])
-def test_is_legacy_camera_legacy_on_http_error(
+def test_is_legacy_camera_legacy_on_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a 404 from the /accessible probe selects the legacy api."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/accessible", 404)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    assert blackvuesync.is_legacy_camera("http://dashcam/") is True
+
+
+@pytest.mark.parametrize("status_code", [401, 500, 503])
+def test_is_legacy_camera_raises_on_unexpected_http_error(
     monkeypatch: pytest.MonkeyPatch, status_code: int
 ) -> None:
-    """verifies any http error from the /accessible probe selects the legacy api."""
+    """verifies http errors other than 404 from the /accessible probe propagate instead of selecting an api."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
         raise _http_error("http://dashcam/accessible", status_code)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    assert blackvuesync.is_legacy_camera("http://dashcam/") is True
+    with pytest.raises(urllib.error.HTTPError):
+        blackvuesync.is_legacy_camera("http://dashcam/")
+
+
+def test_is_legacy_camera_raises_on_unexpected_status_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a non-200 success response from the /accessible probe fails instead of selecting an api."""
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda _request: _FakeUrlResponse(status_code=204),
+    )
+
+    with pytest.raises(RuntimeError, match="status code : 204"):
+        blackvuesync.is_legacy_camera("http://dashcam/")
+
+
+def test_get_dashcam_filenames_runtime_error_on_probe_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies an unexpected probe response fails the run like any recording-list error."""
+
+    def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
+        raise _http_error("http://dashcam/accessible", 500)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="Cannot obtain list of recordings"):
+        blackvuesync.get_dashcam_filenames("http://dashcam/")
 
 
 def test_is_legacy_camera_propagates_dropped_connection(
@@ -1029,6 +1092,77 @@ def test_download_file_no_marker_on_network_error(
         assert not glob.glob(os.path.join(destination, "*.failed"))
 
 
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_download_metadata_file_writes_decoded_payload(
+    monkeypatch: pytest.MonkeyPatch, wrapped: bool
+) -> None:
+    """verifies a valid /vodMetadata response, plain or line-wrapped, is decoded and written to the destination."""
+    content = b"thumbnail data"
+    encoded = base64.b64encode(content).decode("ascii")
+    if wrapped:
+        encoded = "\r\n".join(encoded[i : i + 4] for i in range(0, len(encoded), 4))
+    body = json.dumps({"metadata": {"thumbnail": encoded}}).encode("utf-8")
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(
+            urllib.request, "urlopen", lambda _request: _FakeUrlResponse(body)
+        )
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            None,
+            metrics,
+        )
+
+        assert (downloaded, speed) == (True, None)
+        destination_filepath = os.path.join(destination, "20181029_131513_NF.thm")
+        with open(destination_filepath, "rb") as f:
+            assert f.read() == content
+        assert not os.path.exists(os.path.join(destination, ".20181029_131513_NF.thm"))
+        assert not glob.glob(os.path.join(destination, "*.failed"))
+
+
+def test_download_metadata_file_writes_decoded_payload_into_group_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """verifies a valid /vodMetadata response lands in the group directory with no temp dotfile left behind."""
+    content = b"thumbnail data"
+    encoded = base64.b64encode(content).decode("ascii")
+    body = json.dumps({"metadata": {"thumbnail": encoded}}).encode("utf-8")
+
+    with tempfile.TemporaryDirectory() as destination:
+        monkeypatch.setattr(
+            urllib.request, "urlopen", lambda _request: _FakeUrlResponse(body)
+        )
+        monkeypatch.setattr(blackvuesync, "dry_run", False)
+        metrics = _sync_metrics()
+
+        downloaded, speed = blackvuesync.download_metadata_file(
+            "http://dashcam/",
+            "20181029_131513_NF.mp4",
+            "20181029_131513_NF.thm",
+            "thumbnail",
+            destination,
+            "2018-10-29",
+            metrics,
+        )
+
+        assert (downloaded, speed) == (True, None)
+        destination_filepath = os.path.join(
+            destination, "2018-10-29", "20181029_131513_NF.thm"
+        )
+        with open(destination_filepath, "rb") as f:
+            assert f.read() == content
+        assert not glob.glob(os.path.join(destination, ".*"))
+        assert not glob.glob(os.path.join(destination, "2018-10-29", ".*"))
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -1037,6 +1171,7 @@ def test_download_file_no_marker_on_network_error(
         b'{"metadata": {}}',
         b'{"metadata": {"thumbnail": "aGVs!bG8="}}',
         b"not json",
+        b"\x80\x81\x82",
     ],
 )
 def test_download_metadata_file_marks_failed_on_unusable_response(

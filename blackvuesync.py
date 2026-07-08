@@ -25,7 +25,6 @@ __version__ = "2.2.0a7"
 
 import argparse
 import base64
-import binascii
 import contextlib
 import datetime
 import errno
@@ -757,6 +756,21 @@ def to_recording(filename: str, grouping: str) -> Recording | None:
     )
 
 
+def to_dashcam_recordings(
+    dashcam_filenames: list[str], grouping: str
+) -> list[Recording]:
+    """converts filenames listed by the dashcam to recordings; raises for unrecognized filenames"""
+    dashcam_recordings = []
+    for dashcam_filename in dashcam_filenames:
+        if (recording := to_recording(dashcam_filename, grouping)) is None:
+            raise RuntimeError(
+                f"Unexpected filename in the recording list from the dashcam : {dashcam_filename}"
+            )
+        dashcam_recordings.append(recording)
+
+    return dashcam_recordings
+
+
 # pattern of a recording filename as returned in each line from from the dashcam index page
 file_line_re = re.compile(r"n:/Record/(?P<filename>.*\.mp4),s:1000000\r\n")
 
@@ -781,16 +795,23 @@ def _build_request(url: str) -> urllib.request.Request:
 
 
 def is_legacy_camera(base_url: str) -> bool:
-    """returns True when the /accessible probe does not answer 200; pre-V1.009
-    cameras lack the endpoint"""
+    """returns True when the /accessible probe answers 404, since pre-V1.009 cameras lack the
+    endpoint; any other error fails the run like a recording-list failure"""
     url = urllib.parse.urljoin(base_url, "accessible")
     try:
         with urllib.request.urlopen(_build_request(url)) as response:
-            legacy = bool(response.getcode() != 200)
-            probe_result = f"status code : {response.getcode()}"
+            response_status_code = response.getcode()
+            if response_status_code != 200:
+                raise RuntimeError(
+                    f"Error response from : {base_url} ; status code : {response_status_code}"
+                )
+            legacy = False
+            probe_result = f"status code : {response_status_code}"
     except urllib.error.HTTPError as e:
-        # any http error means the camera answered but does not support the endpoint;
-        # connection-level failures propagate to the shared unavailable/disconnected handling
+        # a 404 means the camera answered but lacks the endpoint, i.e. legacy firmware;
+        # other http errors and connection-level failures propagate to the shared handling
+        if e.code != 404:
+            raise
         legacy = True
         probe_result = str(e)
     logger.debug(
@@ -1155,7 +1176,8 @@ def download_metadata_file(
     group_name: str | None,
     metrics: SyncMetrics | None = None,
 ) -> tuple[bool, int | None]:
-    """downloads thumbnail or gps data via the /vodMetadata endpoint (V1.009+)"""
+    """downloads thumbnail or gps data via the /vodMetadata endpoint (V1.009+); returns whether data was
+    transferred (download speed is not measured)"""
     # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-return-statements,too-many-locals,too-many-statements
     if group_name:
         ensure_destination(os.path.join(destination, group_name))
@@ -1249,7 +1271,8 @@ def download_metadata_file(
             )
             return False, None
 
-        content = base64.b64decode(encoded, validate=True)
+        # strips whitespace so line-wrapped payloads decode; validation still rejects corrupt base64
+        content = base64.b64decode("".join(encoded.split()), validate=True)
         with open(temp_filepath, "wb") as f:
             f.write(content)
         os.rename(temp_filepath, destination_filepath)
@@ -1297,9 +1320,9 @@ def download_metadata_file(
         raise UserWarning(
             f"Timeout communicating with dashcam at address : {base_url}; error : {e}"
         ) from e
-    except (json.JSONDecodeError, binascii.Error) as e:
-        # malformed JSON or base64; the camera answered, so marks failed like
-        # the other unusable responses
+    except ValueError as e:
+        # malformed json, encoding or base64; the camera answered, so marks
+        # failed like the other unusable responses
         _handle_download_failure(
             metadata_filename,
             e,
@@ -1319,8 +1342,9 @@ def download_recording(
     metrics: SyncMetrics | None = None,
     legacy: bool = False,
 ) -> None:
-    """downloads the set of recordings, including gps data, for the given filename from the dashcam to the destination
-    directory"""
+    """downloads the video and metadata files for the given recording from the dashcam to the destination directory;
+    on V1.009+ cameras, retrieves thumbnail and gps data via /vodMetadata and skips the unavailable accelerometer
+    data"""
     # pylint: disable=too-many-branches,too-many-locals
     # first checks that we have enough room left
     disk_usage = shutil.disk_usage(destination)
@@ -1723,9 +1747,7 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
 
     base_url = f"http://{address}"
     legacy, dashcam_filenames = get_dashcam_filenames(base_url)
-    dashcam_recordings = [
-        r for x in dashcam_filenames if (r := to_recording(x, grouping)) is not None
-    ]
+    dashcam_recordings = to_dashcam_recordings(dashcam_filenames, grouping)
     if metrics:
         metrics.dashcam_recordings_seen = len(dashcam_recordings)
 

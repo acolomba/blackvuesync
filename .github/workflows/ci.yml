@@ -59,9 +59,13 @@ jobs:
         run: |
           pip install -e ".[dev]"
 
-      - name: Run Behave tests
+      - name: Run Behave tests (V1.009+ protocol)
         run: |
           behave --no-capture --format progress
+
+      - name: Run Behave tests (legacy protocol)
+        run: |
+          behave --no-capture --format progress -D legacy_api=true
 
   build:
     # builds package on all events (PRs, main, and tags) to catch build errors early

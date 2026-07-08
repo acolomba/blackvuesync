@@ -184,7 +184,12 @@ class MockDashcam:
             if self._get_legacy_api(affinity_key):
                 return flask.abort(404)
             recordings = self._get_recordings(affinity_key)
-            filelist = [{"filename": filename} for filename in recordings]
+            # the live V1.009 index lists only video recordings
+            filelist = [
+                {"filename": filename}
+                for filename in recordings
+                if filename.endswith(".mp4")
+            ]
             response = {"filelist": filelist}
             logger.debug("Response body: %s", response)
             return response, 200
@@ -242,8 +247,27 @@ class MockDashcam:
                 else None
             )
             if video_filename not in recordings or extension is None:
-                # a missing metadata object signals the error, mirroring the firmware
+                # returns no metadata object for unknown files so the client's tolerant path is exercised
                 return {}, 200
+
+            # honors configured download errors under the metadata filename the client
+            # stores, matching the legacy file-serving routes
+            video_recording = to_recording(video_filename)
+            if video_recording is not None:
+                if extension == "thm":
+                    metadata_filename = (
+                        f"{video_recording.base_filename}_{video_recording.type}"
+                        f"{video_recording.direction}.thm"
+                    )
+                else:
+                    metadata_filename = (
+                        f"{video_recording.base_filename}_{video_recording.type}.gps"
+                    )
+                if metadata_filename in self._get_download_errors(affinity_key):
+                    logger.debug(
+                        "Response: 500 Internal Server Error (configured error)"
+                    )
+                    flask.abort(500)
 
             files_dir = Path(__file__).parent / "files"
             encoded = base64.b64encode(
@@ -255,7 +279,7 @@ class MockDashcam:
 
         @self.app.route("/<filename>", methods=["GET"])
         def root_record(filename: str) -> flask.Response:
-            """serves videos from the root on V1.009; rejects non-mp4 with 'mp4 only'"""
+            """serves videos from the root on V1.009+; rejects non-mp4 with 'mp4 only'"""
             logger.debug("GET /%s", filename)
             affinity_key = self._get_affinity_key()
             if self._get_legacy_api(affinity_key):
