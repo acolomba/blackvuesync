@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support BlackVue firmware V1.009+ cameras. (#87)
+- Add `--log-format` option to select `text` or `json` log output. (#73)
+- Add Prometheus metrics export via `--metrics-file` and
+  `--metrics-pushgateway-url`, configurable with `--metrics-job`,
+  `--metrics-instance`, and `--metrics-state-file`. (#74)
 - Add `--retry-failed-after` option to retry failed downloads after a
   configurable delay. (#58)
 - Add `--skip-metadata` option to skip downloading metadata files (thumbnails,
@@ -29,8 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Close the lock file descriptor when lock acquisition fails and distinguish
   lock contention from other OS errors.
 - Ensure lock descriptor `0` is always unlocked on exit.
+- Handle `socket.timeout` surfaced as a URL error during downloads. (#75)
 
-## [2.1.1] - 2026-01-18
+## [2.1.1] - 2026-01-11
 
 ### Changed
 
@@ -91,7 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Properly removes outdated recordings with new event types and upload flags
   from May 2021 firmware. (#4)
 
-## [1.8] - 2021-05-24
+## [1.8] - 2021-05-25
 
 ### Added
 
@@ -189,7 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No more sporadically getting stuck forever trying to connect to the dashcam.
 
-## [1.0] - 2019-01-30
+## [1.0] - 2018-12-02
 
 ### Added
 
