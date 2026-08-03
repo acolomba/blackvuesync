@@ -1,6 +1,6 @@
 [project]
 name = "blackvuesync"
-version = "2.2.0a7"
+dynamic = ["version"]
 description = "Synchronize recordings from BlackVue dashcams to a local directory"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -57,6 +57,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = ["blackvuesync"]
+
+[tool.setuptools.dynamic]
+version = {attr = "blackvuesync.__version__"}
 
 [tool.black]
 line-length = 88
