@@ -22,7 +22,7 @@ Feature: Sync with the skip-metadata option
     Then the destination contains all the recordings
     Then the dashcam receives download requests for only the missing recordings
 
-  @legacy
+  @use.with_protocol=legacy
   Scenario: Skipping accelerometer data downloads the recordings without it
     Given the dashcam has recordings for the past "1d" of types "N", directions "F"
     When blackvuesync runs with skip-metadata "3"

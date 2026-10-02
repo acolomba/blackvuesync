@@ -4,7 +4,6 @@ Feature: Sync errors
   recordings, blackvuesync downloads nothing and exits with an error code. The
   mock dashcam stands in for a camera that answers the list request with an error.
 
-  @direct
   Scenario: Sync exits with an error when the dashcam fails to list its recordings
     Given the dashcam has recordings for the past "1d" of types "N", directions "F"
     Given the dashcam fails to list its recordings

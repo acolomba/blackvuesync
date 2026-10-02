@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Internal: adopt the Python blueprint for development tools, agent setup, and CI checks.
 - Internal: rework the behavioral tests to follow the behave guidelines, with whole-value checks, a fake dashcam that records requests, and new scenarios for listing errors, grouping, and partial downloads.
+- Internal: require behave 1.3.3 or later for the behavioral tests.
+
+### Fixed
+
+- Exit the Docker container with the sync status when `RUN_ONCE` is set, instead of always exiting 0.
 
 ## [2.2.0] - 2026-08-03
 

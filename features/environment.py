@@ -9,6 +9,7 @@ from pathlib import Path
 
 from behave.model import Scenario
 from behave.runner import Context
+from behave.tag_matcher import ActiveTagMatcher
 from behave.userdata import UserData
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
@@ -132,12 +133,20 @@ def before_all(context: Context) -> None:
     _configure_logging(userdata)
 
     context.legacy_api = userdata.getbool("legacy_api", False)
+    protocol = "legacy" if context.legacy_api else "v1009"
     context.implementation = userdata.get("implementation", "direct")
     if context.implementation not in ("direct", "docker"):
         raise ValueError(
             f"unknown implementation {context.implementation!r}; "
             "expected direct or docker"
         )
+
+    # skips scenarios whose active tags, such as @use.with_protocol=legacy,
+    # exclude the protocol or implementation of the run
+    context.active_tag_matcher = ActiveTagMatcher(
+        {"protocol": protocol, "implementation": context.implementation}
+    )
+    context.active_tag_matcher.use_skip_reason = True
 
     # coverage run --parallel-mode suffixes the name per process, so the files
     # match the .coverage.* pattern that coverage combine reads
@@ -146,8 +155,7 @@ def before_all(context: Context) -> None:
         userdata.getbool("collect_coverage", False)
         and context.implementation == "direct"
     ):
-        mode = "legacy" if context.legacy_api else "v1009"
-        context.coverage_file = PROJECT_ROOT / f".coverage.behave.{mode}"
+        context.coverage_file = PROJECT_ROOT / f".coverage.behave.{protocol}"
 
     context.test_run_dir = Path(tempfile.mkdtemp(prefix="blackvuesync_test_"))
     context.add_cleanup(_remove_test_run_dir, context)
@@ -161,17 +169,9 @@ def before_all(context: Context) -> None:
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """gives the scenario its own destination and mock dashcam session."""
-    # scenarios tagged @legacy exercise protocol features absent on V1.009+
-    if "legacy" in scenario.effective_tags and not context.legacy_api:
-        scenario.skip("legacy protocol only")
-        return
-    # scenarios tagged @direct assert a nonzero exit code, which docker mode
-    # cannot observe
-    if "direct" in scenario.effective_tags and context.implementation != "direct":
-        scenario.skip(
-            "direct mode only: the image's entrypoint.sh exits 0 after a RUN_ONCE "
-            "run, whatever blackvuesync's exit status"
-        )
+    matcher = context.active_tag_matcher
+    if matcher.should_skip(scenario, use_inherited=True):
+        scenario.skip(matcher.skip_reason)
         return
 
     scenario_name = scenario.name.replace(" ", "_").replace("/", "_")
