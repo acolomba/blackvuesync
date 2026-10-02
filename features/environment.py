@@ -1,253 +1,203 @@
+"""behave hooks: starts the mock dashcam for the run and isolates each scenario."""
+
+from __future__ import annotations
+
 import logging
 import shutil
 import tempfile
-import uuid
 from pathlib import Path
 
-from behave.model import Scenario, Step
+from behave.model import Scenario
 from behave.runner import Context
+from behave.userdata import UserData
 from testcontainers.core.container import DockerContainer
-from testcontainers.core.image import DockerImage
 from testcontainers.core.network import Network
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
-from features.lib.dashcam import set_legacy_api
-from features.lib.docker import get_docker_image
+from features.lib import PROJECT_ROOT
+from features.lib.dashcam import MockDashcamClient
+from features.lib.docker import build_blackvuesync_image, build_mock_dashcam_image
 from features.mock_dashcam import MockDashcam
+from features.mock_dashcam.server import MOCK_DASHCAM_PORT
 
-# logger for environment hooks
-logger = logging.getLogger("features.steps")
+logger = logging.getLogger("features.environment")
 
 
-def _setup_direct_mode(context: Context) -> None:
-    """sets up mock dashcam in direct (threaded) mode"""
-    log_level_mock_dashcam = context.config.userdata.get(
-        "log_level_mock_dashcam", "INFO"
+def _configure_logging(userdata: UserData) -> None:
+    """prints the records of the features loggers at the configured levels."""
+    suite_logger = logging.getLogger("features")
+    suite_logger.setLevel(userdata.get("log_level", "INFO").upper())
+    # the suite prints its own records, so behave's log capture never repeats them
+    suite_logger.propagate = False
+    if not suite_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        suite_logger.addHandler(handler)
+
+    logging.getLogger("features.mock_dashcam").setLevel(
+        userdata.get("log_level_mock_dashcam", "INFO").upper()
     )
-    mock_dashcam_port = int(context.config.userdata.get("mock_dashcam_port", "5000"))
-
-    context.mock_dashcam = MockDashcam(
-        port=mock_dashcam_port, log_level=log_level_mock_dashcam
+    logging.getLogger("werkzeug").setLevel(
+        userdata.get("log_level_http", "WARN").upper()
     )
-    context.mock_dashcam.start()
-    context.mock_dashcam_url = f"http://127.0.0.1:{mock_dashcam_port}"
-    context.mock_dashcam_address = f"127.0.0.1:{mock_dashcam_port}"
 
+
+def _start_direct_mode(context: Context) -> None:
+    """serves the mock dashcam from a thread on an ephemeral loopback port."""
+    mock_dashcam = MockDashcam()
+    mock_dashcam.start()
+    context.add_cleanup(mock_dashcam.stop)
+
+    context.mock_dashcam_address = f"127.0.0.1:{mock_dashcam.port}"
+    context.mock_dashcam_url = f"http://{context.mock_dashcam_address}"
     logger.info("mock dashcam running at: %s", context.mock_dashcam_url)
 
 
-def _setup_docker_mode(context: Context) -> None:
-    """sets up docker mode with containerized mock dashcam"""
-    # builds blackvuesync docker image
+def _start_docker_mode(context: Context) -> None:
+    """runs the mock dashcam in a container on a network.
+
+    the blackvuesync containers join the same network.
+    """
     image_name = context.config.userdata.get("image_name")
-    context.docker_image, image_tag = get_docker_image(image_name)
-    logger.info("docker implementation enabled with image: %s", image_tag)
+    if image_name:
+        logger.info("using existing docker image: %s", image_name)
+        context.docker_image_tag = image_name
+    else:
+        context.docker_image_tag = build_blackvuesync_image()
 
-    # builds mock dashcam docker image
-    project_root = Path(__file__).parent.parent
-    mock_dashcam_dockerfile = project_root / "features" / "mock_dashcam"
-
-    logger.info("building mock dashcam docker image")
-    context.mock_dashcam_image = DockerImage(
-        path=str(project_root),
-        dockerfile_path=str(mock_dashcam_dockerfile / "Dockerfile"),
-        tag="blackvuesync-mock-dashcam:test",
-    )
-    context.mock_dashcam_image.build()
-    logger.info("mock dashcam docker image built successfully")
-
-    # creates docker network for container communication
     context.docker_network = Network()
     context.docker_network.create()
-    logger.info("docker network created: %s", context.docker_network.name)
+    context.add_cleanup(context.docker_network.remove)
 
-    # starts mock dashcam container
-    context.mock_dashcam_container = DockerContainer(
-        image=context.mock_dashcam_image.tag
+    container = (
+        DockerContainer(image=build_mock_dashcam_image())
+        # publishes the port on an ephemeral host port, on loopback only
+        .with_bind_ports(MOCK_DASHCAM_PORT, ("127.0.0.1", None))
+        .with_network(context.docker_network)
+        .waiting_for(LogMessageWaitStrategy("mock dashcam listening"))
     )
-    context.mock_dashcam_container.with_exposed_ports(5000)
-    context.mock_dashcam_container.with_network(context.docker_network)
+    # registered first so a container that fails its wait strategy is removed
+    context.add_cleanup(container.stop)
+    container.start()
 
-    logger.info("starting mock dashcam container")
-    context.mock_dashcam_container.start()
-
-    # gets container's network alias (short container ID)
-    container_id = context.mock_dashcam_container.get_wrapped_container().short_id
-
-    # gets exposed port on host for test runner to connect to
-    host_port = context.mock_dashcam_container.get_exposed_port(5000)
-
-    # sets addresses:
-    # - mock_dashcam_address: used by blackvuesync container (container ID on network)
-    # - mock_dashcam_url: used by test runner on host (localhost with mapped port)
-    context.mock_dashcam_address = f"{container_id}:5000"
+    # blackvuesync containers reach the mock by container id on the network;
+    # the test runner reaches it through the port mapped on the host
+    container_id = container.get_wrapped_container().short_id
+    context.mock_dashcam_address = f"{container_id}:{MOCK_DASHCAM_PORT}"
+    host_port = container.get_exposed_port(MOCK_DASHCAM_PORT)
     context.mock_dashcam_url = f"http://127.0.0.1:{host_port}"
-
-    # waits for mock dashcam to be ready
-    import time
-
-    import requests
-
-    max_attempts = 50
-    for attempt in range(max_attempts):
-        try:
-            response = requests.get(
-                f"{context.mock_dashcam_url}/mock/ping", timeout=1.0
-            )
-            if response.status_code == 200:
-                logger.info("mock dashcam container is ready")
-                break
-        except (requests.ConnectionError, requests.Timeout) as e:
-            if attempt < max_attempts - 1:
-                time.sleep(0.1)
-                continue
-            raise RuntimeError(
-                f"mock dashcam container did not become ready within {max_attempts * 0.1}s"
-            ) from e
-
     logger.info(
-        "mock dashcam container running - container_id: %s, host: %s, network: %s",
-        container_id,
+        "mock dashcam container running at: %s (network address %s)",
         context.mock_dashcam_url,
-        f"http://{context.mock_dashcam_address}",
+        context.mock_dashcam_address,
     )
+
+
+def _remove_test_run_dir(context: Context) -> None:
+    """removes the test run directory unless it holds a failed scenario's directory.
+
+    passing scenarios remove their own directories, so any directory left holds
+    a failed scenario, including one that failed in a hook; context.failed
+    covers only step failures.
+    """
+    if any(context.test_run_dir.iterdir()):
+        logger.warning(
+            "failed scenarios' run logs and destinations preserved under: %s",
+            context.test_run_dir,
+        )
+        return
+    shutil.rmtree(context.test_run_dir)
+
+
+def _remove_scenario_dir(scenario: Scenario, scenario_dir: Path) -> None:
+    """removes the directory of a scenario, keeping it when the scenario failed.
+
+    behave runs the cleanups after after_scenario, once the status is final.
+    """
+    if scenario.status.has_failed():
+        logger.warning(
+            "scenario %r failed; run logs and destination preserved at: %s",
+            scenario.name,
+            scenario_dir,
+        )
+        return
+    # docker mode runs blackvuesync with PUID and PGID of the test runner, so
+    # the runner owns the files in the destination
+    shutil.rmtree(scenario_dir)
 
 
 def before_all(context: Context) -> None:
-    """before all"""
-    # step definitions logging
-    log_level = context.config.userdata.get("log_level", "INFO")
-    logger.setLevel(getattr(logging, log_level.upper()))
+    """configures logging and starts the mock dashcam for the run."""
+    userdata = context.config.userdata
+    _configure_logging(userdata)
 
-    # werkzeug (flask) logging
-    log_level_http = context.config.userdata.get("log_level_http", "INFO")
-    logging.getLogger("werkzeug").setLevel(getattr(logging, log_level_http.upper()))
+    context.legacy_api = userdata.getbool("legacy_api", False)
+    context.implementation = userdata.get("implementation", "direct")
+    if context.implementation not in ("direct", "docker"):
+        raise ValueError(
+            f"unknown implementation {context.implementation!r}; "
+            "expected direct or docker"
+        )
 
-    # creates a temporary directory for test artifacts
+    # coverage run --parallel-mode suffixes the name per process, so the files
+    # match the .coverage.* pattern that coverage combine reads
+    context.coverage_file = None
+    if (
+        userdata.getbool("collect_coverage", False)
+        and context.implementation == "direct"
+    ):
+        mode = "legacy" if context.legacy_api else "v1009"
+        context.coverage_file = PROJECT_ROOT / f".coverage.behave.{mode}"
+
     context.test_run_dir = Path(tempfile.mkdtemp(prefix="blackvuesync_test_"))
+    context.add_cleanup(_remove_test_run_dir, context)
     logger.info("test run directory: %s", context.test_run_dir)
 
-    # checks implementation mode
-    implementation = context.config.userdata.get("implementation", "direct")
-
-    if implementation == "docker":
-        # docker mode: runs mock dashcam in container
-        _setup_docker_mode(context)
+    if context.implementation == "docker":
+        _start_docker_mode(context)
     else:
-        # direct mode: runs mock dashcam in thread
-        _setup_direct_mode(context)
-
-
-def after_all(context: Context) -> None:
-    """after all"""
-    # combines coverage data if collection was enabled (direct mode only)
-    collect_coverage = context.config.userdata.getbool("collect_coverage", False)
-    implementation = context.config.userdata.get("implementation", "direct")
-    if (
-        collect_coverage
-        and implementation == "direct"
-        and hasattr(context, "test_run_dir")
-    ):
-        legacy_api = context.config.userdata.getbool("legacy_api", False)
-        _combine_coverage(context.test_run_dir, "legacy" if legacy_api else "v1009")
-
-    # stops mock dashcam (threaded or containerized)
-    if hasattr(context, "mock_dashcam"):
-        # direct mode: stops threaded server
-        context.mock_dashcam.stop()
-
-    if hasattr(context, "mock_dashcam_container"):
-        # docker mode: stops and removes container
-        logger.info("stopping mock dashcam container")
-        context.mock_dashcam_container.stop()
-
-    if hasattr(context, "docker_network"):
-        # docker mode: removes network
-        logger.info("removing docker network")
-        context.docker_network.remove()
-
-    # cleans up test run directory
-    if hasattr(context, "test_run_dir") and context.test_run_dir.exists():
-        shutil.rmtree(context.test_run_dir)
-
-    # ensures all logging handlers flush before exit
-    for handler in logging.root.handlers:
-        handler.flush()
-
-
-def _combine_coverage(test_run_dir: Path, mode: str) -> None:
-    """copies all coverage files from scenario directories to project root.
-
-    the mode discriminates the destination filenames so that consecutive runs
-    against different protocols accumulate instead of overwriting each other.
-    """
-    # finds all .coverage files in scenario directories
-    coverage_files = list(test_run_dir.glob("*/coverage/.coverage*"))
-
-    if not coverage_files:
-        logger.warning("no coverage files found to copy")
-        return
-
-    logger.info("found %d coverage file(s) to copy", len(coverage_files))
-
-    # copies all coverage files to project root for combining
-    project_root = Path(__file__).parent.parent
-    for i, coverage_file in enumerate(coverage_files):
-        dest = project_root / f".coverage.behave.{mode}.{i}"
-        shutil.copy2(coverage_file, dest)
-        logger.info("copied %s to %s", coverage_file, dest)
-
-    logger.info("coverage files ready for combining")
+        _start_direct_mode(context)
 
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
-    """before scenario"""
-    # scenario-specific directories
-    scenario_name = scenario.name.replace(" ", "_").replace("/", "_")
-    context.scenario_dir = context.test_run_dir / scenario_name
-    context.scenario_dir.mkdir(parents=True, exist_ok=True)
-
-    # download destination directory
-    context.dest_dir = context.scenario_dir / "destination"
-    context.dest_dir.mkdir(parents=True, exist_ok=True)
-
-    # skip_metadata defaults to empty; steps that set --skip-metadata will populate it
-    context.skip_metadata = set()
-
-    # logs directory
-    context.log_dir = context.scenario_dir / "logs"
-    context.log_dir.mkdir(parents=True, exist_ok=True)
-
-    # generates scenario affinity token (unique id for this scenario)
-    context.scenario_token = f"{scenario_name}_{uuid.uuid4()}"
-
-    # legacy_api defaults to the launcher-level protocol mode; the legacy step overrides it
-    context.legacy_api = context.config.userdata.getbool("legacy_api", False)
-    if context.legacy_api:
-        set_legacy_api(context.mock_dashcam_url, context.scenario_token, True)
-
+    """gives the scenario its own destination and mock dashcam session."""
     # scenarios tagged @legacy exercise protocol features absent on V1.009+
     if "legacy" in scenario.effective_tags and not context.legacy_api:
         scenario.skip("legacy protocol only")
+        return
+    # scenarios tagged @direct assert a nonzero exit code, which docker mode
+    # cannot observe
+    if "direct" in scenario.effective_tags and context.implementation != "direct":
+        scenario.skip(
+            "direct mode only: the image's entrypoint.sh exits 0 after a RUN_ONCE "
+            "run, whatever blackvuesync's exit status"
+        )
+        return
 
+    scenario_name = scenario.name.replace(" ", "_").replace("/", "_")
+    context.scenario_dir = Path(
+        tempfile.mkdtemp(dir=context.test_run_dir, prefix=f"{scenario_name}_")
+    )
+    context.add_cleanup(_remove_scenario_dir, scenario, context.scenario_dir)
+    context.dest_dir = context.scenario_dir / "destination"
+    context.dest_dir.mkdir()
 
-def after_scenario(context: Context, scenario: Scenario) -> None:
-    """after scenario"""
-    # clears recordings from mock dashcam (direct mode only)
-    # in docker mode, each scenario uses affinity key isolation, and container is destroyed in after_all
-    if hasattr(context, "mock_dashcam"):
-        # direct mode: clears via method call
-        context.mock_dashcam.clear_session(context.scenario_token)
+    # the unique directory name also keys the scenario's dashcam session
+    context.dashcam = MockDashcamClient(
+        context.mock_dashcam_url, context.scenario_dir.name
+    )
+    context.add_cleanup(context.dashcam.delete_session)
+    context.dashcam.set_legacy_api(context.legacy_api)
 
-    # if scenario failed, preserve the directory for debugging
-    if scenario.status == "failed":
-        logger.info("scenario failed. artifacts preserved at: %s", context.scenario_dir)
-
-
-def before_step(context: Context, step: Step) -> None:
-    """before each step"""
-    pass
-
-
-def after_step(context: Context, step: Step) -> None:
-    """after each step"""
-    pass
+    # recording files the dashcam lists
+    context.dashcam_recordings = []
+    # recording files in the destination before blackvuesync runs
+    context.preexisting_recordings = set()
+    # recording files the dashcam fails to serve
+    context.failed_recordings = set()
+    # --skip-metadata codes of the latest run
+    context.skip_metadata = set()
+    # --grouping of the latest run
+    context.grouping = "none"
+    # numbers the run logs of the scenario
+    context.run_count = 0

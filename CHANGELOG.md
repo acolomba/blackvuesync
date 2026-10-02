@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Internal: adopt the Python blueprint for development tools, agent setup, and CI checks.
+- Internal: rework the behavioral tests to follow the behave guidelines, with whole-value checks, a fake dashcam that records requests, and new scenarios for listing errors, grouping, and partial downloads.
 
 ## [2.2.0] - 2026-08-03
 

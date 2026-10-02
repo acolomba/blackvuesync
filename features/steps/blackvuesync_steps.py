@@ -1,355 +1,81 @@
-"""blackvuesync execution step definitions"""
+"""blackvuesync run step definitions."""
 
 from __future__ import annotations
 
-import logging
-import os
-import subprocess
-from pathlib import Path
+import datetime
+import re
 
 from behave import when
 from behave.runner import Context
-from testcontainers.core.container import DockerContainer
 
-logger = logging.getLogger("features.steps")
+from features.lib.runner import RunResult, run_direct, run_docker
+
+# one or more long options with quoted values: include "N" exclude "NR"
+OPTIONS_RE = re.compile(r'[a-z-]+ "[^"]*"(?: [a-z-]+ "[^"]*")*')
+OPTION_RE = re.compile(r'([a-z-]+) "([^"]*)"')
 
 
-def execute_blackvuesync(
-    context: Context,
-    address: str,
-    destination: str,
-    affinity_key: str,
-    grouping: str | None = None,
-    keep: str | None = None,
-    priority: str | None = None,
-    include: str | None = None,
-    exclude: str | None = None,
-    max_used_disk: int | None = None,
-    timeout: float | None = None,
-    verbose: int | None = None,
-    quiet: bool = False,
-    cron: bool = False,
-    dry_run: bool = False,
-    retry_failed_after: str | None = None,
-    skip_metadata: str | None = None,
-) -> None:
-    """executes blackvuesync with specified parameters and stores results in context."""
-    implementation = context.config.userdata.get("implementation", "direct")
+def _write_run_log(context: Context, result: RunResult) -> None:
+    """writes the output of the run to a numbered log in the scenario directory.
 
-    if implementation == "docker":
-        _execute_docker(
-            context,
-            address,
-            destination,
-            affinity_key,
-            grouping,
-            keep,
-            priority,
-            include,
-            exclude,
-            max_used_disk,
-            timeout,
-            verbose,
-            quiet,
-            cron,
-            dry_run,
-            retry_failed_after,
-            skip_metadata,
+    the log stays with the scenario's preserved artifacts when it fails.
+    """
+    context.run_count += 1
+    run_log = context.scenario_dir / f"run-{context.run_count}.log"
+    run_log.write_text(
+        f"exit code: {result.exit_code}\n"
+        f"--- stdout ---\n{result.stdout}\n"
+        f"--- stderr ---\n{result.stderr}\n"
+    )
+
+
+def _run_blackvuesync(context: Context, options: dict[str, str]) -> None:
+    """runs blackvuesync against the scenario's dashcam session and destination."""
+    # blackvuesync reads the date once at start-up, so a run that crosses
+    # midnight has either date
+    started_on = datetime.date.today()
+    context.skip_metadata = set(options.get("skip-metadata", ""))
+    context.grouping = options.get("grouping", "none")
+    # the request log then covers this run only
+    context.dashcam.clear_requests()
+
+    if context.implementation == "docker":
+        context.result = run_docker(
+            context.docker_image_tag,
+            context.docker_network,
+            context.mock_dashcam_address,
+            context.dest_dir,
+            context.dashcam.affinity_key,
+            options,
         )
     else:
-        _execute_direct(
-            context,
-            address,
-            destination,
-            affinity_key,
-            grouping,
-            keep,
-            priority,
-            include,
-            exclude,
-            max_used_disk,
-            timeout,
-            verbose,
-            quiet,
-            cron,
-            dry_run,
-            retry_failed_after,
-            skip_metadata,
+        context.result = run_direct(
+            context.mock_dashcam_address,
+            context.dest_dir,
+            context.dashcam.affinity_key,
+            options,
+            context.coverage_file,
         )
-
-
-def _execute_direct(
-    context: Context,
-    address: str,
-    destination: str,
-    affinity_key: str,
-    grouping: str | None = None,
-    keep: str | None = None,
-    priority: str | None = None,
-    include: str | None = None,
-    exclude: str | None = None,
-    max_used_disk: int | None = None,
-    timeout: float | None = None,
-    verbose: int | None = None,
-    quiet: bool = False,
-    cron: bool = False,
-    dry_run: bool = False,
-    retry_failed_after: str | None = None,
-    skip_metadata: str | None = None,
-) -> None:
-    """executes blackvuesync directly via python."""
-    # locates blackvuesync.py
-    project_root = Path(__file__).parent.parent.parent
-    blackvuesync_script = project_root / "blackvuesync.py"
-
-    # checks if coverage collection is enabled
-    collect_coverage = context.config.userdata.getbool("collect_coverage", False)
-
-    # builds command
-    if collect_coverage:
-        cmd = [
-            "coverage",
-            "run",
-            "--parallel-mode",
-            "--source=blackvuesync",
-            str(blackvuesync_script),
-            address,
-            "-d",
-            destination,
-            "--affinity-key",
-            affinity_key,
-        ]
-    else:
-        cmd = [
-            "python3",
-            str(blackvuesync_script),
-            address,
-            "-d",
-            destination,
-            "--affinity-key",
-            affinity_key,
-        ]
-
-    if grouping:
-        cmd.extend(["-g", grouping])
-
-    if keep:
-        cmd.extend(["-k", keep])
-
-    if priority:
-        cmd.extend(["-p", priority])
-
-    if include:
-        cmd.extend(["-i", include])
-
-    if exclude:
-        cmd.extend(["-e", exclude])
-
-    if max_used_disk is not None:
-        cmd.extend(["-u", str(max_used_disk)])
-
-    if timeout is not None:
-        cmd.extend(["-t", str(timeout)])
-
-    if verbose is not None:
-        cmd.extend(["-v"] * verbose)
-
-    if quiet:
-        cmd.append("-q")
-
-    if cron:
-        cmd.append("--cron")
-
-    if dry_run:
-        cmd.append("--dry-run")
-
-    if retry_failed_after:
-        cmd.extend(["--retry-failed-after", retry_failed_after])
-
-    if skip_metadata:
-        cmd.extend(["--skip-metadata", skip_metadata])
-
-    logger.info("Running (direct): %s", cmd)
-
-    # prepares environment for coverage collection
-    env = os.environ.copy()
-    if collect_coverage:
-        # stores coverage data in scenario directory
-        coverage_dir = context.scenario_dir / "coverage"
-        coverage_dir.mkdir(parents=True, exist_ok=True)
-        env["COVERAGE_FILE"] = str(coverage_dir / ".coverage")
-        logger.info("Coverage data will be saved to: %s", env["COVERAGE_FILE"])
-
-    # runs blackvuesync with timeout
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=120,  # 2 minute timeout
-            env=env,
-        )
-    except subprocess.TimeoutExpired as e:
-        logger.error("blackvuesync timed out after 120 seconds")
-
-        if e.stdout:
-            logger.error("stdout: %r", e.stdout)
-
-        if e.stderr:
-            logger.error("stderr: %r", e.stderr)
-        raise RuntimeError(
-            "blackvuesync did not complete within 120 seconds. The process may be hanging or encountering an infinite loop."
-        ) from e
-
-    # stores results in context
-    context.exit_code = result.returncode
-    context.stdout = result.stdout
-    context.stderr = result.stderr
-
-    logger.info("blackvuesync exited with code %s", result.returncode)
-
-
-def _execute_docker(
-    context: Context,
-    address: str,
-    destination: str,
-    affinity_key: str,
-    grouping: str | None = None,
-    keep: str | None = None,
-    priority: str | None = None,
-    include: str | None = None,
-    exclude: str | None = None,
-    max_used_disk: int | None = None,
-    timeout: float | None = None,
-    verbose: int | None = None,
-    quiet: bool = False,
-    cron: bool = False,
-    dry_run: bool = False,
-    retry_failed_after: str | None = None,
-    skip_metadata: str | None = None,
-) -> None:
-    """executes blackvuesync via docker container."""
-    # uses address as-is (should be mock dashcam container name on docker network)
-    docker_address = address
-
-    # gets current user's UID/GID
-    puid = os.getuid()
-    pgid = os.getgid()
-
-    # creates container from pre-built image
-    container = DockerContainer(image=context.docker_image.tag)
-
-    # joins the same network as mock dashcam container
-    container.with_network(context.docker_network)
-
-    # configures volume mounting
-    container.with_volume_mapping(str(destination), "/recordings", mode="rw")
-
-    # configures core environment variables
-    container.with_env("PYTHONUNBUFFERED", "1")
-    container.with_env("ADDRESS", docker_address)
-    container.with_env("AFFINITY_KEY", affinity_key)
-    container.with_env("PUID", str(puid))
-    container.with_env("PGID", str(pgid))
-
-    # syncs timezone with host to ensure date calculations match
-    # gets host timezone from TZ env var or system default
-    if "TZ" in os.environ:
-        host_tz = os.environ["TZ"]
-    else:
-        from tzlocal import get_localzone_name
-
-        host_tz = get_localzone_name()
-
-    logger.debug("setting docker container timezone to: %s", host_tz)
-    container.with_env("TZ", host_tz)
-
-    # sets RUN_ONCE=1 only if not in cron mode
-    if not cron:
-        container.with_env("RUN_ONCE", "1")
-
-    # configures optional parameters
-    if grouping:
-        container.with_env("GROUPING", grouping)
-
-    if keep:
-        container.with_env("KEEP", keep)
-
-    if priority:
-        container.with_env("PRIORITY", priority)
-
-    if include:
-        container.with_env("INCLUDE", include)
-
-    if exclude:
-        container.with_env("EXCLUDE", exclude)
-
-    if max_used_disk is not None:
-        container.with_env("MAX_USED_DISK", str(max_used_disk))
-
-    if timeout is not None:
-        container.with_env("TIMEOUT", str(timeout))
-
-    if verbose is not None:
-        container.with_env("VERBOSE", str(verbose))
-
-    if quiet:
-        container.with_env("QUIET", "1")
-
-    if cron:
-        container.with_env("CRON", "1")
-
-    if dry_run:
-        container.with_env("DRY_RUN", "1")
-
-    if retry_failed_after:
-        container.with_env("RETRY_FAILED_AFTER", retry_failed_after)
-
-    if skip_metadata:
-        container.with_env("SKIP_METADATA", skip_metadata)
-
-    logger.info("Starting docker container with image: %s", context.docker_image.tag)
-
-    # starts container and waits for completion
-    try:
-        with container:
-            # waits for container to exit (max 120 seconds)
-            result = container.get_wrapped_container().wait(timeout=120)
-
-            # extracts exit code from result (can be int or dict with 'StatusCode')
-            if isinstance(result, dict):
-                exit_code = result.get("StatusCode", 1)
-            else:
-                exit_code = result
-
-            # retrieves logs
-            stdout = container.get_logs()[0].decode("utf-8")
-            stderr = container.get_logs()[1].decode("utf-8")
-
-    except Exception as e:
-        logger.error("docker container execution failed: %s", e)
-        raise RuntimeError(f"docker container execution failed: {e}") from e
-
-    # logs on failure
-    if exit_code != 0:
-        logger.error("docker container failed")
-        logger.error("stdout: %r (len=%d)", stdout, len(stdout))
-        logger.error("stderr: %r (len=%d)", stderr, len(stderr))
-
-    # stores results in context
-    context.exit_code = exit_code
-    context.stdout = stdout
-    context.stderr = stderr
-
-    logger.info("docker container exited with code %s", exit_code)
+    context.run_dates = sorted({started_on, datetime.date.today()})
+    _write_run_log(context, context.result)
 
 
 @when("blackvuesync runs")
 def run_blackvuesync(context: Context) -> None:
-    """executes blackvuesync with configured parameters."""
-    execute_blackvuesync(
-        context,
-        context.mock_dashcam_address,
-        str(context.dest_dir),
-        context.scenario_token,
-    )
+    """runs blackvuesync with the default options."""
+    _run_blackvuesync(context, {})
+
+
+@when("blackvuesync runs with {options}")
+def run_blackvuesync_with_options(context: Context, options: str) -> None:
+    """runs blackvuesync with long options written as name "value" pairs.
+
+    examples: keep "3d", or include "N" exclude "NR".
+    """
+    if not OPTIONS_RE.fullmatch(options):
+        raise ValueError(f'expected name "value" option pairs, got: {options}')
+    pairs = OPTION_RE.findall(options)
+    parsed = dict(pairs)
+    if len(parsed) != len(pairs):
+        raise ValueError(f"expected distinct option names, got: {options}")
+    _run_blackvuesync(context, parsed)
