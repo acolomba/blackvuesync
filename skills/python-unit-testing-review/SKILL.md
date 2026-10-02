@@ -17,8 +17,8 @@ Run `scripts/check.sh` only when the change touched a shared contract, fake, `co
 
 ## Tools
 
-- Runner, fixtures, `monkeypatch`, `tmp_path`, and `pytest.raises()` come from pytest; assertions are plain `assert` statements; strict interaction mocks come from `unittest.mock.create_autospec()` and spies from `Mock(wraps=...)`; coverage comes from pytest-cov.
-- `unittest.TestCase`, PyHamcrest, `pytest-mock`, `pytest-asyncio`, `freezegun`, `responses`, or a snapshot plugin in a unit test is a finding.
+- Runner, fixtures, `monkeypatch`, `tmp_path`, and `pytest.raises()` come from pytest; assertions are PyHamcrest `assert_that()` calls with matchers; strict interaction mocks come from `unittest.mock.create_autospec()` and spies from `Mock(wraps=...)`; coverage comes from pytest-cov.
+- `unittest.TestCase`, `pytest-mock`, `pytest-asyncio`, `freezegun`, `responses`, or a snapshot plugin in a unit test is a finding.
 
 ## Pairing and coverage
 
@@ -43,8 +43,9 @@ Run `scripts/check.sh` only when the change touched a shared contract, fake, `co
 
 ## Assertions
 
+- Conditions are stated with `assert_that(actual, matcher)`, so the matcher names the condition and a failure reports the expected and the actual value. A plain `assert` where a matcher states the condition is a finding; a plain `assert` for a condition that no matcher states is not. A reason passed as the third argument adds a fact the matcher does not report.
 - The public result and public state are asserted before any interaction check; a call assertion never replaces a result assertion. A relocated case keeps its assertions unless the contract changed -- a revision that weakens assertions is a finding even when the tests still pass.
-- Whole values compared with `==`; asserting existence, length, or one attribute at a time when the whole value is the promise is a finding. A standalone negative assertion (`assert x is not None`, `assert x != y`, a bare `assert x`) passes for almost any value; the test must assert what the value *is*.
+- Whole values compared with `equal_to()`, lists whose order is not the promise with `contains_inanyorder()`, identity with `same_instance()`. Asserting existence, length, or one attribute at a time when the whole value is the promise is a finding, and so is a matcher that passes for a partial value: `has_item()`, `has_items()`, `has_entries()`, `has_length()`, `instance_of()`. A standalone negative assertion (`assert_that(x, not_none())`, `assert_that(x, is_not(y))`) passes for almost any value; the test must assert what the value *is*.
 - Errors asserted by class with `pytest.raises()` and by structured fields afterwards, not by message text; `match=` is a finding.
 - When bytes are the contract (file, packet, archive, encoded value), the complete bytes are compared, with no decoding or normalizing consumers do not perform.
 - Expected values are built independently: no calling the production formatter or serializer, no transforming the adapter result, no asking a harness for the answer, no snapshot assertions.
@@ -68,9 +69,9 @@ Check the tool matches the role:
 - **Mocks** are `create_autospec()`, only where the interaction is public behavior (charging, publishing, notifying, transaction control, callbacks, commands):
   - created inside the case as `create_autospec(Port, instance=True, spec_set=True)` -- a bare `Mock()`/`MagicMock()`, or one missing `spec_set`, accepts calls and attributes the port does not have;
   - every return value and error the module uses is set; an unset autospecced method returns a `MagicMock` that hides the gap;
-  - the case ends with a whole-list assertion, `assert port.mock_calls == [call...]`, after result and state assertions; `assert_called()`, `assert_called_once()`, `assert_any_call()`, `assert_has_calls()`, or a bare `call_count` passes with extra calls and is a finding; so is an assertion hidden in a fixture teardown or shared helper;
+  - the case ends with a whole-list assertion, `assert_that(port.mock_calls, equal_to([call...]))`, after result and state assertions; `assert_called()`, `assert_called_once()`, `assert_any_call()`, `assert_has_calls()`, or a bare `call_count` passes with extra calls and is a finding; so is an assertion hidden in a fixture teardown or shared helper;
   - `ANY` only for an argument that cannot be compared by value, with its meaningful properties asserted separately;
-  - an empty expected list, `assert port.mock_calls == []`, is a legitimate proof that the module does not touch that port.
+  - an empty expected list, `assert_that(port.mock_calls, equal_to([]))`, is a legitimate proof that the module does not touch that port.
 - When order across mocks is the promise, every mock is attached to one recorder with `attach_mock()` and the recorder's whole `mock_calls` list is compared.
 - Plain data (`Cart`, `Order`) is a real instance, not a double. Logging gets a silent stub or goes unobserved; log records are asserted only in a module whose job is logging.
 - Every double comes from the case or a function-scoped fixture, and every attribute, item, or environment change goes through `monkeypatch`. Patching a module's names (`mock.patch("blackvuesync.orders.datetime")`, `monkeypatch.setattr("blackvuesync.orders.requests", ...)`) is a finding -- the dependency gets injected instead.
@@ -105,7 +106,7 @@ Check the tool matches the role:
 ## Patterns
 
 - **Type-only modules:** the paired test holds typed assignments under `if TYPE_CHECKING:` and negatives marked with a specific `# type: ignore[code]`, which mypy `--strict` reports once it stops suppressing an error; zero runtime cases is correct -- added runtime assertions to look active are a finding.
-- **Re-exports:** an existing re-exporting `__init__.py` gets a test asserting each re-export is its source object with `is`.
+- **Re-exports:** an existing re-exporting `__init__.py` gets a test asserting each re-export is its source object with `same_instance()`.
 - **Filesystem:** real filesystem when files are the behavior, in the case's own `tmp_path`; `tmp_path_factory`, shared directories, or writes into the repository, home directory, or a fixed path are findings.
 - **HTTP adapters:** the transport is a parameter, stubbed with a **fresh** response per call; when the request is the promise, its method, URL, headers, and body are asserted from the recorded request; a real client runs only against a loopback server the case owns.
 - **Time:** an injected clock and an injected `sleep` whose requested delays are compared as a whole list; patching `time` or `datetime`, a real sleep, or polling is a finding.
@@ -115,4 +116,4 @@ Check the tool matches the role:
 ## Classifying findings
 
 - **BLOCKER** -- the suite lies or breaks: a case a wrong implementation would pass (weak, missing, or replaced assertions; expected values computed by production code; a partial mock-call assertion; a never-awaited coroutine), a changed source module with no paired test module, direct pair coverage below the configured floor, a hermeticity break (live network, shared global state, leaked filesystem writes), a committed `skip`/`xfail` outside a contract's negative control, or a test-only hook added to production code.
-- **WARNING** -- structure and readability: naming, AAA comments, test class shape, data style, support organization, double named after its kind.
+- **WARNING** -- structure and readability: a plain `assert` where a matcher states the condition, naming, AAA comments, test class shape, data style, support organization, double named after its kind.

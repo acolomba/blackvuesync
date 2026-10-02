@@ -1,33 +1,31 @@
 Feature: Retention policy
 
-  Scenario: Keep recordings within retention period
-    Given recordings for the past "7d" of types "N", directions "F"
+  Protects the --keep option: blackvuesync skips dashcam recordings older than
+  the retention period and deletes older ones from the destination. Recordings
+  dated relative to today stand in for days of driving.
+
+  Scenario: Keep downloads only the recordings within the retention period
+    Given the dashcam has recordings for the past "7d" of types "N", directions "F"
     When blackvuesync runs with keep "3d"
     Then blackvuesync exits with code 0
-    Then recordings between "3d" and "0d" ago are downloaded
-    Then no recordings between "7d" and "4d" ago exist
+    Then the destination contains only the recordings between "3d" and "0d" ago
 
-  Scenario: Keep all recordings when period is longer than available
-    Given recordings for the past "2d" of types "N", directions "F"
+  Scenario: Keep longer than the dashcam history downloads every recording
+    Given the dashcam has recordings for the past "2d" of types "N", directions "F"
     When blackvuesync runs with keep "7d"
     Then blackvuesync exits with code 0
-    Then all the recordings are downloaded
+    Then the destination contains all the recordings
 
   Scenario: Keep preserves pre-existing recent recordings
-    Given downloaded recordings for the past "2d" of types "N", directions "F"
-    Given recordings for the past "5d" of types "N", directions "F"
+    Given the destination has recordings for the past "2d" of types "N", directions "F"
+    Given the dashcam has recordings for the past "5d" of types "N", directions "F"
     When blackvuesync runs with keep "3d"
     Then blackvuesync exits with code 0
-    Then all the downloaded recordings exist
-    Then recordings between "3d" and "0d" ago are downloaded
-    Then no recordings between "5d" and "4d" ago exist
+    Then the destination contains only the recordings between "3d" and "0d" ago
 
   Scenario: Keep removes old pre-existing recordings
-    Given downloaded recordings for the past "7d" of types "N", directions "F"
-    Given recordings for the past "2d" of types "N", directions "F"
+    Given the destination has recordings for the past "7d" of types "N", directions "F"
+    Given the dashcam has recordings for the past "2d" of types "N", directions "F"
     When blackvuesync runs with keep "3d"
     Then blackvuesync exits with code 0
-    Then recordings between "3d" and "0d" ago are downloaded
-    Then no recordings between "7d" and "4d" ago exist
-    Then downloaded recordings between "3d" and "0d" ago exist
-    Then no downloaded recordings between "7d" and "4d" ago exist
+    Then the destination contains only the recordings between "3d" and "0d" ago

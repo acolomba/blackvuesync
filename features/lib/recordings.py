@@ -1,4 +1,4 @@
-"""recording file generation and management for tests"""
+"""recording filename generation, selection, and destination listing for tests."""
 
 from __future__ import annotations
 
@@ -6,241 +6,256 @@ import datetime
 import random
 import re
 import shutil
-from collections.abc import Generator
-from pathlib import Path
+from collections.abc import Collection, Iterable, Iterator
+from pathlib import Path, PurePosixPath
+
+from features.lib import PROJECT_ROOT
+
+# fixture files the mock dashcam serves for every recording, one per extension
+MOCK_FILES_DIR = PROJECT_ROOT / "features" / "mock_dashcam" / "files"
+
+# BlackVue recording filename: YYYYMMDD_HHMMSS_<type>[<direction>][<upload>].<ext>;
+# .3gf and .gps files have no direction since one file covers every camera
+RECORDING_FILENAME_RE = re.compile(
+    r"""(?P<base_filename>(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})_\d{6})
+    _(?P<type>[NEPMIOATBRXGDLYF])
+    (?P<direction>[FRIO]?)
+    (?P<upload>[LS]?)
+    \.(?P<extension>mp4|thm|3gf|gps)""",
+    re.VERBOSE,
+)
+
+# the lock file blackvuesync creates in the destination and leaves behind
+LOCK_FILENAME = ".blackvuesync.lock"
+
+# --skip-metadata codes and the extensions they skip
+SKIP_METADATA_EXTENSIONS = {"t": ".thm", "3": ".3gf", "g": ".gps"}
 
 
 def parse_period(period: str) -> datetime.timedelta:
-    """parses a period string (e.g., "1d", "2w") into a timedelta"""
+    """parses a period such as "1d" or "2w" into a timedelta; days without a unit."""
     period_match = re.fullmatch(r"(?P<range>\d+)(?P<unit>[dw]?)", period)
     if not period_match:
         raise ValueError(
-            f"invalid period format: '{period}'. "
-            f"expected format: <number>[d|w] (e.g., '1d', '2d', '1w'). "
-            f"d=days, w=weeks"
+            f"invalid period {period!r}; expected <number>[d|w], e.g. '1d', '2w'"
         )
 
     period_range = int(period_match.group("range"))
-
-    if period_range < 0:
-        raise ValueError(f"period range must be >= 0, got {period_range} in '{period}'")
-
-    period_unit = period_match.group("unit") or "d"
-
-    if period_unit == "d":
-        return datetime.timedelta(days=period_range)
-
-    if period_unit == "w":
+    if period_match.group("unit") == "w":
         return datetime.timedelta(weeks=period_range)
+    return datetime.timedelta(days=period_range)
 
-    # this indicates a coding error since the regex only allows [dw]
-    raise ValueError(f"unexpected period unit: '{period_unit}' in '{period}'")
+
+def _date_range(
+    from_period: str, to_period: str, today: datetime.date | None = None
+) -> tuple[datetime.date, datetime.date]:
+    """returns the dates from_period and to_period before today, oldest first.
+
+    today defaults to the current date.
+    """
+    if today is None:
+        today = datetime.date.today()
+    start_date = today - parse_period(from_period)
+    end_date = today - parse_period(to_period)
+
+    if start_date > end_date:
+        raise ValueError(
+            f"from_period {from_period!r} must be further in the past than "
+            f"to_period {to_period!r}"
+        )
+
+    return start_date, end_date
 
 
 def generate_recording_filenames(
-    recording_types_str: str,
-    recording_directions_str: str,
-    recording_others_str: str,
-    from_period: str,
-    to_period: str,
-) -> Generator[str, None, None]:
-    """procedurally generates deterministic recording filenames based on criteria
+    recording_types: str, recording_directions: str, from_period: str, to_period: str
+) -> Iterator[str]:
+    """generates deterministic recording filenames dated in a period.
 
-    generates recordings between (today - from_period) and (today - to_period)
-
-    args:
-        recording_types_str: recording types (e.g., "NE")
-        recording_directions_str: recording directions (e.g., "FR")
-        recording_others_str: other flags (e.g., "LS")
-        from_period: start of time range, furthest in the past (e.g., "2w")
-        to_period: end of time range, closest to today (e.g., "1d")
+    the period runs from from_period to to_period before today, inclusive. the
+    types and directions are codes such as "N,E" and "F,R".
     """
-    today = datetime.date.today()
+    start_date, end_date = _date_range(from_period, to_period)
+    types = recording_types.replace(",", "")
+    directions = recording_directions.replace(",", "")
 
-    # determines date range
-    start_date = today - parse_period(from_period)
-    end_date = today - parse_period(to_period)
+    rng = random.Random(42)
 
-    if start_date > end_date:
-        raise ValueError(
-            f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
-        )
-
-    # calculates number of days to generate (inclusive range)
-    day_range = (end_date - start_date).days + 1
-
-    # parses recording types, tolerating comma-separated codes
-    recording_types = list(recording_types_str.replace(",", ""))
-
-    # parses recording directions, tolerating comma-separated codes
-    recording_directions = list(recording_directions_str.replace(",", ""))
-
-    # parses other flags, tolerating comma-separated codes
-    recording_others = list(recording_others_str.replace(",", ""))
-
-    # generates 5-10 recordings per day for each type
-    random.seed(42)  # deterministic generation
-
-    for day_offset in range(day_range):
+    for day_offset in range((end_date - start_date).days + 1):
         date = start_date + datetime.timedelta(days=day_offset)
-        recordings_per_day = random.randint(5, 10)
+        recordings_per_day = rng.randint(5, 10)
 
-        # picks a random starting time for this set of recordings
-        start_hour = random.randint(0, 22)
-        start_minute = random.randint(0, 59)
-        start_second = random.randint(0, 59)
-
-        # creates base datetime for this day
         base_datetime = datetime.datetime(
-            date.year, date.month, date.day, start_hour, start_minute, start_second
+            date.year,
+            date.month,
+            date.day,
+            rng.randint(0, 22),
+            rng.randint(0, 59),
+            rng.randint(0, 59),
         )
 
-        # spreads recordings over 5-10 minutes from the start time
+        # spreads recordings one minute apart, staggering types by one second
         for i in range(recordings_per_day):
-            # calculates timestamp: adds i minutes to base time
-            recording_datetime = base_datetime + datetime.timedelta(minutes=i)
-
-            # generates recordings for each type, staggered by 1 second
-            for type_offset, recording_type in enumerate(recording_types):
-                # staggers each type by 1 second
-                type_datetime = recording_datetime + datetime.timedelta(
-                    seconds=type_offset
+            for type_offset, recording_type in enumerate(types):
+                recording_datetime = base_datetime + datetime.timedelta(
+                    minutes=i, seconds=type_offset
                 )
+                base_filename = recording_datetime.strftime("%Y%m%d_%H%M%S")
 
-                # builds base filename with timestamp and type
-                base_filename = f"{type_datetime.year:04d}{type_datetime.month:02d}{type_datetime.day:02d}_{type_datetime.hour:02d}{type_datetime.minute:02d}{type_datetime.second:02d}"
+                for direction in directions:
+                    yield f"{base_filename}_{recording_type}{direction}.mp4"
+                    yield f"{base_filename}_{recording_type}{direction}.thm"
 
-                # yields video and thumbnail files for each direction (includes direction in filename)
-                for recording_direction in recording_directions:
-                    # generates files for each upload flag, or once if no flags
-                    for recording_other in recording_others or [""]:
-                        yield f"{base_filename}_{recording_type}{recording_direction}{recording_other}.mp4"
-                        yield f"{base_filename}_{recording_type}{recording_direction}{recording_other}.thm"
-
-                # yields metadata files (no direction in filename)
-                for recording_other in recording_others or [""]:
-                    yield f"{base_filename}_{recording_type}{recording_other}.3gf"
-                    yield f"{base_filename}_{recording_type}{recording_other}.gps"
+                yield f"{base_filename}_{recording_type}.3gf"
+                yield f"{base_filename}_{recording_type}.gps"
 
 
-def extract_date_from_recording_filename(filename: str) -> datetime.date:
-    """extracts the date from a recording filename.
-
-    args:
-        filename: recording filename (e.g., "20190219_104220_NF.mp4")
-
-    returns:
-        date extracted from filename
-
-    raises:
-        ValueError: if filename doesn't match expected pattern
-    """
-    pattern = re.compile(r"^(\d{4})(\d{2})(\d{2})_\d{6}_")
-    if not (match := pattern.match(filename)):
-        raise ValueError(
-            f"invalid recording filename format: '{filename}'. "
-            f"expected format: YYYYMMDD_HHMMSS_<type><direction>.<ext>"
-        )
-
-    year = int(match.group(1))
-    month = int(match.group(2))
-    day = int(match.group(3))
-    return datetime.date(year, month, day)
-
-
-def filter_recording_filenames_by_period(
-    filenames: list[str],
-    from_period: str,
-    to_period: str,
-) -> list[str]:
-    """filters recording filenames to those within the specified time period.
-
-    args:
-        filenames: list of recording filenames to filter
-        from_period: start of time range, furthest in the past (e.g., "2w")
-        to_period: end of time range, closest to today (e.g., "1d"), inclusive
-
-    returns:
-        filtered list of filenames within the period [start_date, end_date]
-
-    raises:
-        ValueError: if any filename doesn't match expected pattern
-    """
-    today = datetime.date.today()
-    start_date = today - parse_period(from_period)
-    end_date = today - parse_period(to_period)
-
-    if start_date > end_date:
-        raise ValueError(
-            f"from_period ({from_period}) must be further in the past than to_period ({to_period})"
-        )
-
-    return [
-        filename
-        for filename in filenames
-        if start_date <= extract_date_from_recording_filename(filename) <= end_date
-    ]
-
-
-def get_mock_file_for_extension(mock_dir: Path, extension: str) -> Path:
-    """returns the path to the mock file for a given extension.
-
-    args:
-        mock_dir: directory containing mock files
-        extension: file extension (e.g., "mp4", "gps")
-
-    returns:
-        path to mock.{extension} in mock_dir
-    """
-    return mock_dir / f"mock.{extension}"
-
-
-def filter_available_metadata_filenames(
-    filenames: list[str] | set[str], legacy: bool
-) -> set[str]:
-    """returns the filenames a camera actually serves.
-
-    V1.009+ (non-legacy) cameras have no accelerometer endpoint, so .3gf files
-    are never retrievable there.
-    """
-    if legacy:
-        return set(filenames)
-    return {filename for filename in filenames if not filename.endswith(".3gf")}
+def copy_fixture_files(dest_dir: Path, filenames: Iterable[str]) -> None:
+    """copies the fixture file for each recording filename into dest_dir."""
+    for filename in filenames:
+        extension = filename.rsplit(".", 1)[-1]
+        shutil.copy2(MOCK_FILES_DIR / f"mock.{extension}", dest_dir / filename)
 
 
 def create_recording_files(
     dest_dir: Path,
     recording_types: str,
     recording_directions: str,
-    recording_other: str,
     from_period: str,
     to_period: str,
 ) -> list[str]:
-    """creates recording files in the destination directory.
+    """copies the fixture files into dest_dir under generated recording filenames.
 
-    generates filenames based on the criteria and copies mock files from
-    mock_dashcam/files to the destination with the generated names.
-
-    returns the list of created filenames.
+    Returns:
+        the generated filenames.
     """
-    # generate filenames using the same logic as mock dashcam
     filenames = list(
         generate_recording_filenames(
-            recording_types,
-            recording_directions,
-            recording_other,
-            from_period,
-            to_period,
+            recording_types, recording_directions, from_period, to_period
         )
     )
-
-    # copies mock files to destination with generated filenames
-    mock_dir = Path(__file__).parent.parent / "mock_dashcam" / "files"
-    for filename in filenames:
-        extension = filename.split(".")[-1]
-        source_file = get_mock_file_for_extension(mock_dir, extension)
-        dest_path = dest_dir / filename
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_file, dest_path)
-
+    copy_fixture_files(dest_dir, filenames)
     return filenames
+
+
+def _relative_paths(directory: Path, pattern: str) -> set[str]:
+    """returns the paths, relative to directory, of the files matching pattern."""
+    return {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob(pattern)
+        if path.is_file()
+    }
+
+
+def list_files(directory: Path) -> set[str]:
+    """returns the relative paths of the files under directory, dotfiles included."""
+    return _relative_paths(directory, "*")
+
+
+def list_failure_markers(directory: Path) -> set[str]:
+    """returns the relative paths of the .failed marker files under directory."""
+    return _relative_paths(directory, "*.failed")
+
+
+def _parse(filename: str) -> re.Match[str]:
+    """matches a recording filename, raising ValueError for anything else."""
+    if (match := RECORDING_FILENAME_RE.fullmatch(filename)) is None:
+        raise ValueError(f"invalid recording filename {filename!r}")
+    return match
+
+
+def _recording_date(filename: str) -> datetime.date:
+    """returns the date in a recording filename."""
+    match = _parse(filename)
+    return datetime.date(
+        int(match.group("year")), int(match.group("month")), int(match.group("day"))
+    )
+
+
+def grouped_path(filename: str, grouping: str) -> str:
+    """returns the path, relative to the destination, of a downloaded recording file.
+
+    mirrors --grouping: daily and weekly directories are named after the day
+    and the monday of its week, YYYY-MM-DD; monthly after YYYY-MM; yearly
+    after YYYY; none puts the file in the destination itself.
+    """
+    if grouping == "none":
+        return filename
+
+    date = _recording_date(filename)
+    group_names = {
+        "daily": date.isoformat(),
+        "weekly": (date - datetime.timedelta(days=date.weekday())).isoformat(),
+        "monthly": date.strftime("%Y-%m"),
+        "yearly": date.strftime("%Y"),
+    }
+    return f"{group_names[grouping]}/{filename}"
+
+
+def servable_filenames(
+    filenames: Collection[str], legacy_api: bool, skip_metadata: Collection[str]
+) -> set[str]:
+    """returns the filenames blackvuesync downloads from a dashcam listing them.
+
+    V1.009+ cameras have no accelerometer endpoint, so they never serve .3gf
+    files; --skip-metadata drops the skipped extensions.
+    """
+    excluded = {SKIP_METADATA_EXTENSIONS[code] for code in skip_metadata}
+    if not legacy_api:
+        excluded.add(".3gf")
+
+    return {
+        filename for filename in filenames if not filename.endswith(tuple(excluded))
+    }
+
+
+def select_by_period(
+    filenames: Collection[str],
+    from_period: str,
+    to_period: str,
+    today: datetime.date | None = None,
+) -> set[str]:
+    """returns the recording files dated in a period.
+
+    the files are filenames or paths relative to the destination. the period
+    runs from from_period to to_period before today, inclusive. today defaults
+    to the current date.
+    """
+    start_date, end_date = _date_range(from_period, to_period, today)
+    return {
+        filename
+        for filename in filenames
+        if start_date <= _recording_date(PurePosixPath(filename).name) <= end_date
+    }
+
+
+def _matches_code(match: re.Match[str], code: str) -> bool:
+    """tests a recording against a --include/--exclude code such as "N" or "NF"."""
+    return f"{match.group('type')}{match.group('direction')}".startswith(code)
+
+
+def select_by_codes(filenames: Collection[str], codes: Collection[str]) -> set[str]:
+    """returns the files of the recordings matching any of the codes.
+
+    a .3gf or .gps file has no direction, so it belongs to a selected recording
+    when a selected video shares its timestamp and type.
+    """
+    matches = [_parse(filename) for filename in filenames]
+
+    selected = {
+        match.string
+        for match in matches
+        if match.group("direction") and any(_matches_code(match, c) for c in codes)
+    }
+    selected_keys = {
+        (match.group("base_filename"), match.group("type"))
+        for match in matches
+        if match.string in selected
+    }
+
+    return selected | {
+        match.string
+        for match in matches
+        if not match.group("direction")
+        and (match.group("base_filename"), match.group("type")) in selected_keys
+    }

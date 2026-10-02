@@ -1,277 +1,222 @@
-"""flask-based mock dashcam server for functional testing"""
+"""flask-based mock BlackVue dashcam for behavioral testing.
+
+every request carries an X-Affinity-Key header naming the scenario's session,
+so scenarios share one server without seeing each other's state.
+the /mock/ routes let scenarios configure a session and read what it received.
+"""
 
 from __future__ import annotations
 
 import base64
-import datetime
 import logging
-import re
 import threading
-import time
 from collections import defaultdict
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass, field
 
 import flask
-import requests
+from werkzeug.exceptions import BadRequest
+from werkzeug.serving import make_server
 
-from features.lib.recordings import generate_recording_filenames
+from features.lib.recordings import MOCK_FILES_DIR, RECORDING_FILENAME_RE
 
-# logger for mock dashcam
 logger = logging.getLogger("features.mock_dashcam")
 
-# dashcam filename pattern
-filename_re = re.compile(
-    r"""(?P<base_filename>(?P<year>\d\d\d\d)(?P<month>\d\d)(?P<day>\d\d)
-    _(?P<hour>\d\d)(?P<minute>\d\d)(?P<second>\d\d))
-    _(?P<type>[NEPMIOATBRXGDLYF])
-    (?P<direction>[FRIO]?)
-    (?P<upload>[LS]?)
-    \.(?P<extension>(3gf|gps|mp4|thm))""",
-    re.VERBOSE,
-)
+# port the mock dashcam listens on in its container; matches EXPOSE in the
+# Dockerfile
+MOCK_DASHCAM_PORT = 5000
+
+# metadata types the /vodMetadata endpoint serves, and their file extensions
+METADATA_EXTENSIONS = {"thumbnail": "thm", "gps": "gps"}
 
 
-@dataclass(frozen=True)
-class Recording:
-    """represents a recording: filename and metadata"""
+@dataclass
+class _Session:
+    """the state of one scenario's session."""
 
-    filename: str
-    base_filename: str
-    datetime: datetime.datetime
-    type: str
-    direction: str
-    extension: str
+    recordings: list[str] = field(default_factory=list)
+    download_errors: set[str] = field(default_factory=set)
+    # answers the recording list requests with a 500 error
+    listing_error: bool = False
+    legacy_api: bool = False
+    # recording filenames blackvuesync requested, in order
+    requested_files: list[str] = field(default_factory=list)
 
 
-def to_recording(filename: str) -> Recording | None:
-    """extracts recording information from a filename"""
-    if (filename_match := re.fullmatch(filename_re, filename)) is None:
-        return None
+def _metadata_filename(video_filename: str, metadata_type: str) -> str:
+    """returns the filename blackvuesync stores a video's metadata under.
 
-    year = int(filename_match.group("year"))
-    month = int(filename_match.group("month"))
-    day = int(filename_match.group("day"))
-    hour = int(filename_match.group("hour"))
-    minute = int(filename_match.group("minute"))
-    second = int(filename_match.group("second"))
-    recording_datetime = datetime.datetime(year, month, day, hour, minute, second)
+    Raises:
+        BadRequest: the video filename or the metadata type is invalid.
+    """
+    match = RECORDING_FILENAME_RE.fullmatch(video_filename)
+    if match is None or match.group("extension") != "mp4":
+        raise BadRequest(f"invalid video filename {video_filename!r}")
+    if metadata_type not in METADATA_EXTENSIONS:
+        raise BadRequest(f"invalid metadata type {metadata_type!r}")
 
-    recording_base_filename = filename_match.group("base_filename")
-    recording_type = filename_match.group("type")
-    recording_direction = filename_match.group("direction")
-    recording_extension = filename_match.group("extension")
-
-    return Recording(
-        filename,
-        recording_base_filename,
-        recording_datetime,
-        recording_type,
-        recording_direction,
-        recording_extension,
-    )
+    extension = METADATA_EXTENSIONS[metadata_type]
+    prefix = f"{match.group('base_filename')}_{match.group('type')}"
+    if extension == "thm":
+        return f"{prefix}{match.group('direction')}.thm"
+    return f"{prefix}.gps"
 
 
 class MockDashcam:
-    """mock blackvue dashcam server"""
+    """a mock dashcam serving the legacy and V1.009+ protocols over HTTP.
 
-    def __init__(
-        self, port: int = 5000, log_level: str = "INFO", host: str = "127.0.0.1"
-    ):
-        # validates port
-        if not (4001 <= port <= 65535):
-            raise ValueError(f"Port must be between 4001 and 65535, got {port}")
+    binding to port 0 picks a free ephemeral port, available as `port`.
+    """
 
-        self.port = port
-        self.host = host
-        self.log_level = log_level
+    def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
         self.app = flask.Flask(__name__)
-        self.server_thread: threading.Thread | None = None
-        self._sessions_lock = threading.RLock()
-        self._recordings_by_session: defaultdict[str, list[str]] = defaultdict(list)
-        self._download_errors_by_session: defaultdict[str, set[str]] = defaultdict(set)
-        self._legacy_api_by_session: defaultdict[str, bool] = defaultdict(bool)
-
-        # sets up routes
+        self._lock = threading.Lock()
+        self._sessions: defaultdict[str, _Session] = defaultdict(_Session)
         self._setup_routes()
 
-    def _get_affinity_key(self) -> str:
-        """extracts affinity key from request header, raises 400 if missing"""
-        affinity_key = flask.request.headers.get("X-Affinity-Key")
+        self._server = make_server(host, port, self.app, threaded=True)
+        self.port = self._server.server_port
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
 
+    def start(self) -> None:
+        """serves requests on a background thread."""
+        self._thread.start()
+
+    def stop(self) -> None:
+        """stops the background thread and closes the listening socket."""
+        self._server.shutdown()
+        self._thread.join()
+        self._server.server_close()
+
+    def serve_forever(self) -> None:
+        """serves requests on the calling thread until the process ends."""
+        self._server.serve_forever()
+
+    def _affinity_key(self) -> str:
+        """returns the request's affinity key; aborts 400 without one."""
+        affinity_key = flask.request.headers.get("X-Affinity-Key")
         if not affinity_key:
             flask.abort(400, description="X-Affinity-Key header is required")
-
         return affinity_key
 
-    def _get_recordings(self, affinity_key: str) -> list[str]:
-        """thread-safe read access to session-specific recordings"""
-        with self._sessions_lock:
-            return self._recordings_by_session[affinity_key].copy()
+    def _session(self) -> _Session:
+        """returns the session named by the request's affinity key."""
+        affinity_key = self._affinity_key()
+        with self._lock:
+            return self._sessions[affinity_key]
 
-    def _set_recordings(self, affinity_key: str, recordings: list[str]) -> None:
-        """thread-safe write access to session-specific recordings"""
-        with self._sessions_lock:
-            self._recordings_by_session[affinity_key] = recordings
+    def _serve_recording_file(self, session: _Session, filename: str) -> flask.Response:
+        """serves the fixture for a listed recording, or aborts 404/500 as configured."""
+        with self._lock:
+            listed = filename in session.recordings
+            failing = filename in session.download_errors
 
-    def _get_download_errors(self, affinity_key: str) -> set[str]:
-        """thread-safe read access to session-specific download errors"""
-        with self._sessions_lock:
-            return self._download_errors_by_session[affinity_key].copy()
-
-    def _set_download_errors(self, affinity_key: str, filenames: set[str]) -> None:
-        """thread-safe write access to session-specific download errors"""
-        with self._sessions_lock:
-            self._download_errors_by_session[affinity_key] = filenames
-
-    def _get_legacy_api(self, affinity_key: str) -> bool:
-        """thread-safe read access to the session-specific legacy-api flag"""
-        with self._sessions_lock:
-            return self._legacy_api_by_session[affinity_key]
-
-    def _set_legacy_api(self, affinity_key: str, legacy_api: bool) -> None:
-        """thread-safe write access to the session-specific legacy-api flag"""
-        with self._sessions_lock:
-            self._legacy_api_by_session[affinity_key] = legacy_api
-
-    def _serve_recording_file(self, affinity_key: str, filename: str) -> flask.Response:
-        """serves the mock file for a recording, or aborts 404/500 as configured"""
-        recordings = self._get_recordings(affinity_key)
-        if filename not in recordings:
-            logger.debug("Response: 404 Not Found (not in session recordings)")
-            return flask.abort(404)
-
-        download_errors = self._get_download_errors(affinity_key)
-        if filename in download_errors:
-            logger.debug("Response: 500 Internal Server Error (configured error)")
+        if not listed:
+            logger.debug("answers %s with 404: not in the session recordings", filename)
+            flask.abort(404)
+        if failing:
+            logger.info("answers %s with 500: configured download error", filename)
             flask.abort(500)
 
-        if recording := to_recording(filename):
-            files_dir = Path(__file__).parent / "files"
-            filepath = files_dir / f"mock.{recording.extension}"
-            if filepath.exists():
-                logger.debug(
-                    "Response: %s (%s bytes)", filepath.name, filepath.stat().st_size
-                )
-                return flask.send_file(filepath)
+        extension = filename.rsplit(".", 1)[-1]
+        return flask.send_file(MOCK_FILES_DIR / f"mock.{extension}")
 
-        logger.debug("Response: 404 Not Found")
-        return flask.abort(404)
+    def _abort_on_listing_error(self, session: _Session) -> None:
+        """aborts 500 when the session is configured to fail its recording list."""
+        with self._lock:
+            failing = session.listing_error
+        if failing:
+            logger.info(
+                "answers %s with 500: configured listing error", flask.request.path
+            )
+            flask.abort(500)
+
+    def _record_request(self, session: _Session, filename: str) -> None:
+        """appends a requested recording filename to the session's request log."""
+        with self._lock:
+            session.requested_files.append(filename)
 
     def _setup_routes(self) -> None:
-        """sets up flask routes"""
-
-        @self.app.route("/mock/ping", methods=["GET"])
-        def ping() -> tuple[dict[str, str], int]:
-            """health check endpoint for server startup verification"""
-            return {"status": "ok"}, 200
+        """registers the dashcam and /mock/ control routes."""
 
         @self.app.route("/accessible", methods=["GET"])
-        def accessible() -> flask.Response | tuple[dict[str, str], int]:
-            """reports the new-style API is reachable; absent on legacy firmware"""
-            logger.debug("GET /accessible")
-            affinity_key = self._get_affinity_key()
-            if self._get_legacy_api(affinity_key):
-                return flask.abort(404)
+        def accessible() -> tuple[dict[str, str], int]:
+            """reports the V1.009+ API is reachable; absent on legacy firmware."""
+            if self._session().legacy_api:
+                flask.abort(404)
             return {"accessible": "OK", "message": "Access possible."}, 200
 
         @self.app.route("/vodList", methods=["GET"])
-        def vod_list() -> flask.Response | tuple[dict[str, Any], int]:
-            """returns the index of recordings as JSON (new style)"""
-            logger.debug("GET /vodList")
-            affinity_key = self._get_affinity_key()
-            if self._get_legacy_api(affinity_key):
-                return flask.abort(404)
-            recordings = self._get_recordings(affinity_key)
-            # the live V1.009 index lists only video recordings
-            filelist = [
-                {"filename": filename}
-                for filename in recordings
-                if filename.endswith(".mp4")
-            ]
-            response = {"filelist": filelist}
-            logger.debug("Response body: %s", response)
-            return response, 200
+        def vod_list() -> tuple[dict[str, object], int]:
+            """returns the index of video recordings as JSON (V1.009+)."""
+            session = self._session()
+            self._abort_on_listing_error(session)
+            if session.legacy_api:
+                flask.abort(404)
+            with self._lock:
+                filelist = [
+                    {"filename": filename}
+                    for filename in session.recordings
+                    if filename.endswith(".mp4")
+                ]
+            return {"filelist": filelist}, 200
 
         @self.app.route("/blackvue_vod.cgi", methods=["GET"])
         def vod() -> flask.Response | str:
-            """returns the index of recordings"""
-            logger.debug("GET /blackvue_vod.cgi")
-            affinity_key = self._get_affinity_key()
-            if not self._get_legacy_api(affinity_key):
+            """returns the index of all recording files (legacy firmware)."""
+            session = self._session()
+            self._abort_on_listing_error(session)
+            if not session.legacy_api:
                 # firmware V1.009+ deprecated this endpoint
                 return flask.Response("mp4 only", status=415, mimetype="text/plain")
 
-            # format: n:/Record/filename.ext,s:1000000
-            # we'll use a fixed size for simplicity
-            lines = ["v:1.00"]
-            recordings = self._get_recordings(affinity_key)
-            for filename in recordings:
-                lines.append(f"n:/Record/{filename},s:1000000")
-
-            response = "\r\n".join(lines) + "\r\n"
-            logger.debug("Response body:\n%s", response)
-
-            return response
+            with self._lock:
+                lines = ["v:1.00"] + [
+                    f"n:/Record/{filename},s:1000000" for filename in session.recordings
+                ]
+            return "\r\n".join(lines) + "\r\n"
 
         @self.app.route("/Record/<filename>", methods=["GET"])
         def record(filename: str) -> flask.Response:
-            """serves any file associated to recordings (legacy firmware only)"""
-            logger.debug("GET /Record/%s", filename)
-            affinity_key = self._get_affinity_key()
-            if not self._get_legacy_api(affinity_key):
+            """serves any recording file (legacy firmware)."""
+            session = self._session()
+            self._record_request(session, filename)
+            if not session.legacy_api:
                 # firmware V1.009+ moved downloads to the root
-                return flask.abort(400)
-            return self._serve_recording_file(affinity_key, filename)
+                flask.abort(400)
+            return self._serve_recording_file(session, filename)
 
         @self.app.route("/vodMetadata", methods=["POST"])
-        def vod_metadata() -> flask.Response | tuple[dict[str, Any], int]:
-            """returns base64-encoded thumbnail/gps metadata (new style)"""
-            logger.debug("POST /vodMetadata")
-            affinity_key = self._get_affinity_key()
-            if self._get_legacy_api(affinity_key):
-                return flask.abort(404)
+        def vod_metadata() -> tuple[dict[str, object], int]:
+            """returns base64-encoded thumbnail or gps data (V1.009+)."""
+            session = self._session()
+            # indexes strictly, so a malformed request fails with an error
+            # instead of passing as a request for missing metadata
+            data = flask.request.get_json()
+            video_filename: str = data["file"]
+            (metadata_type,) = data["types"]
+            metadata_filename = _metadata_filename(video_filename, metadata_type)
+            self._record_request(session, metadata_filename)
 
-            data = flask.request.get_json() or {}
-            logger.debug("Request body: %s", data)
-            video_filename = data.get("file")
-            types = data.get("types", [])
-            metadata_type = types[0] if types else None
+            if session.legacy_api:
+                flask.abort(404)
 
-            recordings = self._get_recordings(affinity_key)
-            extension_map = {"thumbnail": "thm", "gps": "gps"}
-            extension = (
-                extension_map.get(metadata_type)
-                if isinstance(metadata_type, str)
-                else None
-            )
-            if video_filename not in recordings or extension is None:
-                # returns no metadata object for unknown files so the client's tolerant path is exercised
+            with self._lock:
+                listed = video_filename in session.recordings
+                failing = metadata_filename in session.download_errors
+
+            if not listed:
+                # blackvuesync requests metadata only for listed videos; it would
+                # treat this empty object as missing metadata and mark it failed
                 return {}, 200
+            if failing:
+                logger.info(
+                    "answers %s with 500: configured download error", metadata_filename
+                )
+                flask.abort(500)
 
-            # honors configured download errors under the metadata filename the client
-            # stores, matching the legacy file-serving routes
-            video_recording = to_recording(video_filename)
-            if video_recording is not None:
-                if extension == "thm":
-                    metadata_filename = (
-                        f"{video_recording.base_filename}_{video_recording.type}"
-                        f"{video_recording.direction}.thm"
-                    )
-                else:
-                    metadata_filename = (
-                        f"{video_recording.base_filename}_{video_recording.type}.gps"
-                    )
-                if metadata_filename in self._get_download_errors(affinity_key):
-                    logger.debug(
-                        "Response: 500 Internal Server Error (configured error)"
-                    )
-                    flask.abort(500)
-
-            files_dir = Path(__file__).parent / "files"
+            extension = METADATA_EXTENSIONS[metadata_type]
             encoded = base64.b64encode(
-                (files_dir / f"mock.{extension}").read_bytes()
+                (MOCK_FILES_DIR / f"mock.{extension}").read_bytes()
             ).decode("ascii")
 
             # the firmware nests the base64 payload under "metadata", keyed by type
@@ -279,184 +224,67 @@ class MockDashcam:
 
         @self.app.route("/<filename>", methods=["GET"])
         def root_record(filename: str) -> flask.Response:
-            """serves videos from the root on V1.009+; rejects non-mp4 with 'mp4 only'"""
-            logger.debug("GET /%s", filename)
-            affinity_key = self._get_affinity_key()
-            if self._get_legacy_api(affinity_key):
+            """serves videos from the root (V1.009+); rejects non-mp4 with 'mp4 only'."""
+            session = self._session()
+            self._record_request(session, filename)
+            if session.legacy_api:
                 # legacy firmware serves downloads only under /Record/
-                return flask.abort(404)
+                flask.abort(404)
             if not filename.endswith(".mp4"):
                 return flask.Response("mp4 only", status=415, mimetype="text/plain")
-            return self._serve_recording_file(affinity_key, filename)
+            return self._serve_recording_file(session, filename)
 
-        @self.app.route("/mock/recordings", methods=["POST"])
-        def create_recordings() -> tuple[dict[str, Any], int]:
-            """generates and stores recordings based on criteria"""
-            data = flask.request.get_json() or {}
-            logger.debug("POST /mock/recordings")
-            logger.debug("Request body: %s", data)
-            affinity_key = self._get_affinity_key()
+        @self.app.route("/mock/recordings", methods=["PUT"])
+        def set_recordings() -> tuple[dict[str, object], int]:
+            """replaces the session's recording files."""
+            session = self._session()
+            with self._lock:
+                session.recordings = list(flask.request.get_json()["recordings"])
+            return {"count": len(session.recordings)}, 200
 
-            period_start = data.get("period_start", "0d")
-            period_end = data.get("period_end", "0d")
-            recording_types = data.get("recording_types", "")
-            recording_directions = data.get("recording_directions", "")
-            recording_others = data.get("recording_others", "")
+        @self.app.route("/mock/legacy-api", methods=["PUT"])
+        def set_legacy_api() -> tuple[dict[str, object], int]:
+            """makes the session behave as a legacy camera or a V1.009+ one."""
+            session = self._session()
+            with self._lock:
+                session.legacy_api = bool(flask.request.get_json()["legacy_api"])
+            return {"legacy_api": session.legacy_api}, 200
 
-            filenames = list(
-                generate_recording_filenames(
-                    recording_types,
-                    recording_directions,
-                    recording_others,
-                    from_period=period_start,
-                    to_period=period_end,
-                )
-            )
+        @self.app.route("/mock/download-errors", methods=["PUT"])
+        def set_download_errors() -> tuple[dict[str, object], int]:
+            """replaces the recording files the session answers with a 500 error."""
+            session = self._session()
+            with self._lock:
+                session.download_errors = set(flask.request.get_json()["filenames"])
+            return {"count": len(session.download_errors)}, 200
 
-            # stores in session-specific server state
-            self._set_recordings(affinity_key, filenames)
+        @self.app.route("/mock/listing-error", methods=["PUT"])
+        def set_listing_error() -> tuple[dict[str, object], int]:
+            """makes the session fail or serve its recording list."""
+            session = self._session()
+            with self._lock:
+                session.listing_error = bool(flask.request.get_json()["failing"])
+            return {"failing": session.listing_error}, 200
 
-            response = {"recordings": filenames, "count": len(filenames)}
-            logger.debug("Response body: %s", response)
+        @self.app.route("/mock/requests", methods=["GET"])
+        def get_requests() -> tuple[dict[str, object], int]:
+            """returns the recording filenames the session received requests for."""
+            session = self._session()
+            with self._lock:
+                return {"filenames": list(session.requested_files)}, 200
 
-            return response, 201
+        @self.app.route("/mock/requests", methods=["DELETE"])
+        def clear_requests() -> tuple[dict[str, object], int]:
+            """clears the session's request log."""
+            session = self._session()
+            with self._lock:
+                session.requested_files.clear()
+            return {}, 200
 
-        @self.app.route("/mock/recordings", methods=["DELETE"])
-        def clear_recordings_route() -> tuple[dict[str, str], int]:
-            """clears all recordings from server state"""
-            logger.debug("DELETE /mock/recordings")
-            affinity_key = self._get_affinity_key()
-            self._set_recordings(affinity_key, [])
-            logger.debug("Response body: {'status': 'cleared'}")
-            return {"status": "cleared"}, 200
-
-        @self.app.route("/mock/recordings/filenames", methods=["POST"])
-        def set_recordings() -> tuple[dict[str, Any], int]:
-            """sets recordings directly from a provided list"""
-            data = flask.request.get_json() or {}
-            logger.debug("POST /mock/recordings/filenames")
-            logger.debug("Request body: %s", data)
-            affinity_key = self._get_affinity_key()
-
-            recordings = data.get("recordings", [])
-
-            # stores in session-specific server state
-            self._set_recordings(affinity_key, recordings)
-
-            response = {"recordings": recordings, "count": len(recordings)}
-            logger.debug("Response body: %s", response)
-
-            return response, 201
-
-        @self.app.route("/mock/downloads/errors", methods=["POST"])
-        def set_download_errors() -> tuple[dict[str, Any], int]:
-            """configures which files return download errors"""
-            data = flask.request.get_json() or {}
-            logger.debug("POST /mock/downloads/errors")
-            logger.debug("Request body: %s", data)
-            affinity_key = self._get_affinity_key()
-
-            filenames = set(data.get("filenames", []))
-            self._set_download_errors(affinity_key, filenames)
-
-            response = {"status": "configured", "count": len(filenames)}
-            logger.debug("Response body: %s", response)
-
-            return response, 201
-
-        @self.app.route("/mock/legacy-api", methods=["POST"])
-        def set_legacy_api() -> tuple[dict[str, Any], int]:
-            """configures whether the session behaves as a legacy camera
-            (blackvue_vod.cgi index, /Record/ downloads, plain metadata files)
-            or V1.009+"""
-            data = flask.request.get_json() or {}
-            logger.debug("POST /mock/legacy-api")
-            logger.debug("Request body: %s", data)
-            affinity_key = self._get_affinity_key()
-
-            legacy_api = bool(data.get("legacy_api", False))
-            self._set_legacy_api(affinity_key, legacy_api)
-
-            response = {"status": "configured", "legacy_api": legacy_api}
-            logger.debug("Response body: %s", response)
-
-            return response, 201
-
-        @self.app.route("/mock/downloads/errors", methods=["DELETE"])
-        def clear_download_errors_route() -> tuple[dict[str, str], int]:
-            """clears download errors for the session"""
-            logger.debug("DELETE /mock/downloads/errors")
-            affinity_key = self._get_affinity_key()
-            self._set_download_errors(affinity_key, set())
-            logger.debug("Response body: {'status': 'cleared'}")
-            return {"status": "cleared"}, 200
-
-    def start(self) -> None:
-        """starts the flask server in a background thread"""
-        if self.server_thread is not None:
-            return
-
-        # configures mock dashcam logging
-        mock_logger = logging.getLogger("features.mock_dashcam")
-        mock_logger.setLevel(getattr(logging, self.log_level.upper()))
-
-        # ensures logger has a handler (console output)
-        if not mock_logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            mock_logger.addHandler(handler)
-
-        def run_server() -> None:
-            # runs flask dev server - if it fails, thread dies and HTTP check will timeout
-            self.app.run(host=self.host, port=self.port, use_reloader=False)
-
-        self.server_thread = threading.Thread(target=run_server, daemon=True)
-        self.server_thread.start()
-
-        # verifies server started by pinging the health check endpoint
-        max_attempts = 50
-        retry_interval = 0.1
-        for _ in range(max_attempts):
-            time.sleep(retry_interval)
-
-            try:
-                response = requests.get(
-                    f"http://127.0.0.1:{self.port}/mock/ping",
-                    timeout=1.0,
-                )
-                if response.status_code == 200:
-                    logger.info(
-                        f"Mock dashcam server started successfully on port {self.port}"
-                    )
-                    return
-            except requests.ConnectionError:
-                # server not ready yet, continues waiting
-                continue
-            except requests.RequestException as e:
-                # unexpected HTTP error - let it bubble up for visibility
-                raise RuntimeError(
-                    f"Unexpected HTTP error during health check on port {self.port}: {e}"
-                ) from e
-
-        raise RuntimeError(
-            f"Mock dashcam server did not start within {max_attempts * retry_interval:.0f}s on port "
-            f"{self.port}"
-        )
-
-    def stop(self) -> None:
-        """stops the flask server"""
-        # intentionally skipping graceful shutdown for test simplicity
-        # daemon threads will terminate automatically when the test process exits
-        self.server_thread = None
-
-    def clear_session(self, affinity_key: str | None = None) -> None:
-        """clears all session state for the session or globally"""
-        with self._sessions_lock:
-            if affinity_key:
-                self._recordings_by_session[affinity_key] = []
-                self._download_errors_by_session[affinity_key] = set()
-                self._legacy_api_by_session[affinity_key] = False
-            else:
-                self._recordings_by_session.clear()
-                self._download_errors_by_session.clear()
-                self._legacy_api_by_session.clear()
+        @self.app.route("/mock/session", methods=["DELETE"])
+        def delete_session() -> tuple[dict[str, object], int]:
+            """discards all of the session's state."""
+            affinity_key = self._affinity_key()
+            with self._lock:
+                self._sessions.pop(affinity_key, None)
+            return {}, 200

@@ -1,7 +1,7 @@
-"""mock blackvue dashcam for integration testing"""
+"""mock BlackVue dashcam for behavioral testing."""
 
 from __future__ import annotations
 
-from .server import MockDashcam
+from features.mock_dashcam.server import MockDashcam
 
 __all__ = ["MockDashcam"]

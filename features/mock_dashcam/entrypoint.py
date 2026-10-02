@@ -1,27 +1,16 @@
-#!/usr/bin/env python3
-"""entrypoint for mock dashcam container"""
+"""entrypoint for the mock dashcam container."""
 
 import logging
-import sys
 
-# adds parent directory to path so we can import modules
-sys.path.insert(0, "/app")
-
-from features.mock_dashcam.server import MockDashcam
-
-# configures logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
-logger = logging.getLogger(__name__)
+from features.mock_dashcam.server import MOCK_DASHCAM_PORT, MockDashcam
 
 if __name__ == "__main__":
-    logger.info("starting mock dashcam server on 0.0.0.0:5000")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
-    # creates dashcam instance (binds to 0.0.0.0 for container access)
-    dashcam = MockDashcam(port=5000, log_level="INFO", host="0.0.0.0")
-
-    # runs flask server directly (blocking)
-    dashcam.app.run(host=dashcam.host, port=dashcam.port, use_reloader=False)
+    dashcam = MockDashcam(host="0.0.0.0", port=MOCK_DASHCAM_PORT)
+    # the test runner waits for this line before sending requests
+    logging.getLogger(__name__).info("mock dashcam listening on port %d", dashcam.port)
+    dashcam.serve_forever()

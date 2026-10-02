@@ -9,7 +9,7 @@ Behavioral tests under `features/` describe the project from the outside: each s
 
 ## Tools
 
-Use behave for the runner, plain `assert` statements or PyHamcrest's `assert_that()` for assertions, and behave's `context` for scenario state. `behave.ini` configures the run, and `features/environment.py` holds the hooks.
+Use behave for the runner, PyHamcrest's `assert_that()` and its matchers for assertions, and behave's `context` for scenario state. `behave.ini` configures the run, and `features/environment.py` holds the hooks.
 
 ```bash
 behave
@@ -32,7 +32,8 @@ behave
 - Order the definitions in each module `@given`, then `@when`, then `@then`.
 - Keep each step short, and name its function after its role: a `@given` after the thing given (`configured_service`), a `@when` after the action taken (`run_application`), and a `@then` `assert_` followed by the condition asserted (`assert_exit_code`).
 - Annotate every step: `def run_application(context: Context) -> None:`.
-- Compare whole values, and put the observed output in the failure message so a failing scenario explains itself.
+- Prefer `assert_that(actual, matcher)` to state the condition; a plain `assert` is the exception, for a condition that no matcher states.
+- Compare whole values with `equal_to()`, not with matchers that pass for a partial value, such as `has_items()`. Pass the observed output that the matcher does not report, such as the application's stdout or the difference between two sets, as the reason, so a failing scenario explains itself.
 
 ## The context
 

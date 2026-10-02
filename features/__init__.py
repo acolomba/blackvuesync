@@ -1,1 +1,1 @@
-"""behave features"""
+"""behave features."""
