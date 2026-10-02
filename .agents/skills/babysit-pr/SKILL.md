@@ -1,6 +1,6 @@
 ---
 name: babysit-pr
-description: After a PR is opened, drive it to a clean state -- pass the project's Python review skills under skills/ and the pr-review-toolkit review, then get the SonarQube PR quality gate green -- with the heavy work delegated to subagents. Invoke manually; not automatic.
+description: After a PR is opened, drive it to a clean state -- pass the project's Python review skills under skills/, then get the SonarQube PR quality gate green -- with the heavy work delegated to subagents. Invoke manually; not automatic.
 argument-hint: "[PR number] (defaults to the current branch's PR)"
 disable-model-invocation: true
 model: sonnet
@@ -31,7 +31,7 @@ Converge the PR's diff to review-clean before Sonar even runs. One review pass i
 
    Batch units (files or source-test pairs) into groups of 5-10 per subagent instead of one per file -- group by module/directory where the split allows it, sizing toward 5 for large or complex files and toward 10 for small ones, so a large PR does not spend its context on a subagent per file. Spawn one subagent per batch, in parallel only over disjoint file sets. Each subagent loops over its batch: run the applicable skill(s) on each file, fix every finding at its root, run the skill again, and stop on a file only when the skill comes back clean for it -- cap three passes per file. A subagent edits only its own files and does not commit; when the batch returns, run the project's checks once and commit the pass, staging explicit paths (never `git add -A`). A file that has not converged after three passes is reported, not ground on.
 
-3. **Toolkit review.** Run `/pr-review-toolkit:review-pr` over all applicable aspects. Its specialized reviewers run as subagents. It sorts findings into **Critical** (must fix), **Important** (should fix), **Suggestions** (advisory), and **Strengths**.
+3. **Broader review.** Review the full diff for bugs, error handling, test gaps, and misleading comments. Delegate independent areas to subagents. Classify findings as **Critical** or **Important** when they need fixes, or **Suggestions** when they are advisory.
 
 4. **Triage.** Separate Critical + Important (actionable now) from Suggestions (advisory -- these never block finishing).
 
@@ -39,7 +39,7 @@ Converge the PR's diff to review-clean before Sonar even runs. One review pass i
 
 6. **Re-review.** Return to step 2 for every `.py` file the fixes touched, then to step 3. The re-review is the point: it confirms the fixes landed and catches anything they introduced.
 
-7. **Finish on advisory-only.** When the Python loop is clean for every changed file and the toolkit review returns no Critical or Important findings, make one pass over the Suggestions -- apply the ones that clearly improve the code, and note in one line why you leave the rest -- then stop. Optionally run the `simplify` aspect as a final polish; the toolkit is built to run that once a change passes review.
+7. **Finish on advisory-only.** When the Python loop is clean for every changed file and the broader review returns no Critical or Important findings, make one pass over the Suggestions -- apply the ones that clearly improve the code, and note in one line why you leave the rest -- then stop.
 
 Cap at about four fix rounds. If a round does not reduce the combined Critical and Important count, or a just-fixed finding reappears, stop and report rather than thrash.
 

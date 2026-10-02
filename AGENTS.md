@@ -76,7 +76,6 @@ Before creating a PR, offer to bump the version in `blackvuesync.py` and `sonar-
 - Keep the Alpine Docker image, cron entrypoint, environment options, and user switching.
 - Test both V1.009+ and legacy camera protocols; Docker tests run in `docker-build.yml`.
 - Use `venv/bin/python`, `venv/bin/pip`, `venv/bin/pytest`, and `venv/bin/behave` directly; shell activation does not persist between tool calls.
-- The local PR review toolkit is `.codex/skills/pr-review-toolkit/SKILL.md`.
 
 ## Architecture
 
