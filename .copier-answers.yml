@@ -1,0 +1,17 @@
+# changes here will be overwritten by copier
+_commit: 7de3b9c813d1de7fd1284b6f74fb36cac5ddf451
+_src_path: gh:acolomba/blueprint-python
+agents:
+- claude
+- codex
+- pi
+author_email: acolomba@colomba.org
+author_name: Alessandro Colomba
+codegraph: false
+copyright_license: MIT
+description: Synchronize recordings from BlackVue dashcams to a local directory
+github_owner: acolomba
+gsd: false
+package_name: blackvuesync
+project_name: blackvuesync
+python_version: '3.9'

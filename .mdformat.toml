@@ -1,0 +1,5 @@
+wrap = "no"
+number = true
+end_of_line = "keep"
+
+extensions = ["frontmatter", "gfm", "gfm_alerts", "footnote"]

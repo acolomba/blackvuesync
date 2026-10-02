@@ -1,14 +1,6 @@
 # BlackVue Sync
 
-[![CI](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml)
-[![Build Docker image](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
-[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
+[![CI](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/ci.yml) [![Build Docker image](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml/badge.svg?branch=main)](https://github.com/acolomba/blackvuesync/actions/workflows/docker-build.yml) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_blackvuesync&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_blackvuesync)
 
 Synchronizes recordings from a BlackVue dashcam with a local directory over a LAN.
 
@@ -21,23 +13,23 @@ A typical setup would be a periodic cron job or a Docker container running on a 
 > [!IMPORTANT]
 > As of version 2.2.0, supports the new API in BlackVue firmware V1.009+.
 
-* **Portable runtimes:**
-  * A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
-  * A [docker image](#docker) that runs periodically via an internal cron job. Supports amd64 (Intel), arm64 (Apple Silicon, Raspberry Pi 4+) and armv7 (Raspberry Pi 2/3).
-* **Smart**: Only downloads recordings that haven't already been downloaded.
-* **Resilient**: If a download interrupts for whatever reason, the script resumes where it left off the next time it runs. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
-* **Hands-off**: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
-* **Cron-friendly**: Only one process is allowed to run at any given time for a specific download destination.
-* **Safe**: Stops executing if the destination disk is almost full.
-* **Friendly error reporting**: Communicates a range of known error conditions with sensible verbosity.
+- **Portable runtimes:**
+  - A [single, self-contained Python script](https://github.com/acolomba/blackvuesync/blob/master/blackvuesync.py) with no third-party dependencies. It can be copied and run anywhere, either [manually](#manual-usage) or [periodically](#unattended-usage).
+  - A [docker image](#docker) that runs periodically via an internal cron job. Supports amd64 (Intel), arm64 (Apple Silicon, Raspberry Pi 4+) and armv7 (Raspberry Pi 2/3).
+- **Smart**: Only downloads recordings that haven't already been downloaded.
+- **Resilient**: If a download interrupts for whatever reason, the script resumes where it left off the next time it runs. This is especially useful for possibly unreliable Wi-Fi connections from a garage.
+- **Hands-off**: Optionally retains recordings for a set amount of time. Outdated recordings are automatically removed.
+- **Cron-friendly**: Only one process is allowed to run at any given time for a specific download destination.
+- **Safe**: Stops executing if the destination disk is almost full.
+- **Friendly error reporting**: Communicates a range of known error conditions with sensible verbosity.
 
 ## Prerequisites
 
 ### Software
 
-* [Python](https://www.python.org/) 3.9+ or [Docker](https://docs.docker.com/).
-* Sufficient disk space on a file system local to the script. Plan for about 5GB/hr per camera.
-* [BlackVue Viewer](https://blackvue.com/kr/download/) or a media player to view the recordings.
+- [Python](https://www.python.org/) 3.9+ or [Docker](https://docs.docker.com/).
+- Sufficient disk space on a file system local to the script. Plan for about 5GB/hr per camera.
+- [BlackVue Viewer](https://blackvue.com/kr/download/) or a media player to view the recordings.
 
 ### Hardware
 
@@ -85,10 +77,10 @@ Another way is by browsing to: `http://dashcam.example.net/blackvue_vod.cgi`.
 
 BlackVue Sync is a single script, and can be obtained in a number of ways:
 
-* **[uv](https://docs.astral.sh/uv/)**: Run with `uvx blackvuesync <args>`, or install with `uv tool install blackvuesync` and run with `blackvuesync <args>`.
-* **[Pip](https://pypi.org/project/pip/):** Install with `pip install blackvuesync` and run with `blackvuesync <args>`.
-* **Direct:** [Download from GitHub](https://raw.githubusercontent.com/acolomba/blackvuesync/refs/heads/main/blackvuesync.py), save to the desired location, and either run it with `python3 blackvuesync.py <args>`, or mark it executable and run it with `blackvuesync.py <args>`.
-* **Docker Hub:** The [Docker image](https://hub.docker.com/r/acolomba/blackvuesync) can be pulled with `docker pull acolomba/blackvuesync`.
+- **[uv](https://docs.astral.sh/uv/)**: Run with `uvx blackvuesync <args>`, or install with `uv tool install blackvuesync` and run with `blackvuesync <args>`.
+- **[Pip](https://pypi.org/project/pip/):** Install with `pip install blackvuesync` and run with `blackvuesync <args>`.
+- **Direct:** [Download from GitHub](https://raw.githubusercontent.com/acolomba/blackvuesync/refs/heads/main/blackvuesync.py), save to the desired location, and either run it with `python3 blackvuesync.py <args>`, or mark it executable and run it with `blackvuesync.py <args>`.
+- **Docker Hub:** The [Docker image](https://hub.docker.com/r/acolomba/blackvuesync) can be pulled with `docker pull acolomba/blackvuesync`.
 
 The interactive instructions assume a uv or Pip installation.
 
@@ -120,59 +112,59 @@ blackvuesync dashcam.example.net --destination /data/dashcam --keep 2w
 
 Other options:
 
-* `--grouping`: Groups downloaded recordings in directories according to different schemes. Grouping speeds up loading recordings in the BlackVue Viewer app. The supported groupings are:
-  * `daily`:  By day, e.g. 2018-10-26;
-  * `weekly`: By week, with the directory indicating the date of that week's monday, e.g. 2018-10-22;
-  * `monthly`: By month, e.g. 2018-10;
-  * `yearly`: By year, e.g. 2018;
-  * `none`: No grouping, the default.
-* `--priority`: Downloads recordings with different priorities: `date` downloads oldest to newest; `rdate` downloads newest to oldest; `type` downloads manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `date`.
-* `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
-* `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
-* `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
-* `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
-* `--include`: Downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `--include P,NF` downloads all Parking recordings and Normal Front recordings. See the table below for valid codes.
-* `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
-* `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
-* `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
-* `--log-format`: Sets log output format. Supported values are `text` and `json`; defaults to `text`.
-* `--metrics-file`: Writes Prometheus text format metrics to the given path.
-* `--metrics-pushgateway-url`: Pushes Prometheus text format metrics to the given Pushgateway URL.
-* `--metrics-job`: Sets the Pushgateway job grouping value. Defaults to `blackvuesync`.
-* `--metrics-instance`: Sets the Pushgateway instance grouping value. Defaults to the dashcam address.
-* `--metrics-state-file`: Persists cross-run metrics state at the given path. Defaults to `.blackvuesync.metrics-state.json` under the destination when metrics are enabled.
+- `--grouping`: Groups downloaded recordings in directories according to different schemes. Grouping speeds up loading recordings in the BlackVue Viewer app. The supported groupings are:
+  - `daily`: By day, e.g. 2018-10-26;
+  - `weekly`: By week, with the directory indicating the date of that week's monday, e.g. 2018-10-22;
+  - `monthly`: By month, e.g. 2018-10;
+  - `yearly`: By year, e.g. 2018;
+  - `none`: No grouping, the default.
+- `--priority`: Downloads recordings with different priorities: `date` downloads oldest to newest; `rdate` downloads newest to oldest; `type` downloads manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `date`.
+- `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
+- `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
+- `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
+- `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
+- `--include`: Downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `--include P,NF` downloads all Parking recordings and Normal Front recordings. See the table below for valid codes.
+- `--exclude`: Excludes recordings matching the given codes, same format as `--include`. Takes priority over `--include`. For example, `--include N,E --exclude NR` downloads all Normal and Event recordings except Normal Rear.
+- `--quiet`: Quiets down output messages, except for unexpected errors. Takes precedence over `--verbose`.
+- `--verbose`: Increases verbosity. Can be specified multiple times to indicate additional verbosity.
+- `--log-format`: Sets log output format. Supported values are `text` and `json`; defaults to `text`.
+- `--metrics-file`: Writes Prometheus text format metrics to the given path.
+- `--metrics-pushgateway-url`: Pushes Prometheus text format metrics to the given Pushgateway URL.
+- `--metrics-job`: Sets the Pushgateway job grouping value. Defaults to `blackvuesync`.
+- `--metrics-instance`: Sets the Pushgateway instance grouping value. Defaults to the dashcam address.
+- `--metrics-state-file`: Persists cross-run metrics state at the given path. Defaults to `.blackvuesync.metrics-state.json` under the destination when metrics are enabled.
 
 #### Recording type and direction codes
 
 Recording type codes:
 
-| Code | Type |
-| ---- | ---- |
-| N | Normal |
-| E | Event |
-| P | Parking |
-| M | Manual |
-| I | Impact |
-| O | Overspeed |
-| A | Acceleration |
-| T | Cornering |
-| B | Braking |
-| R | Geofence (R) |
-| X | Geofence (X) |
-| G | Geofence (G) |
-| D | DMS (D) |
-| L | DMS (L) |
-| Y | DMS (Y) |
-| F | DMS (F) |
+| Code | Type         |
+| ---- | ------------ |
+| N    | Normal       |
+| E    | Event        |
+| P    | Parking      |
+| M    | Manual       |
+| I    | Impact       |
+| O    | Overspeed    |
+| A    | Acceleration |
+| T    | Cornering    |
+| B    | Braking      |
+| R    | Geofence (R) |
+| X    | Geofence (X) |
+| G    | Geofence (G) |
+| D    | DMS (D)      |
+| L    | DMS (L)      |
+| Y    | DMS (Y)      |
+| F    | DMS (F)      |
 
 Direction codes:
 
 | Code | Direction |
 | ---- | --------- |
-| F | Front |
-| R | Rear |
-| I | Interior |
-| O | Optional |
+| F    | Front     |
+| R    | Rear      |
+| I    | Interior  |
+| O    | Optional  |
 
 ### Unattended Usage
 
@@ -194,28 +186,19 @@ If cron jobs overlap, the script recognizes that another instance is currently r
 
 #### Prometheus metrics
 
-BlackVueSync can emit Prometheus text format metrics at the end of each run.
-For a host or Docker setup, write a metrics file that can be collected by
-node_exporter's textfile collector:
+BlackVueSync can emit Prometheus text format metrics at the end of each run. For a host or Docker setup, write a metrics file that can be collected by node_exporter's textfile collector:
 
 ```sh
 blackvuesync dashcam.example.net --destination /data/dashcam --cron --metrics-file /var/lib/node_exporter/textfile_collector/blackvuesync.prom
 ```
 
-For Kubernetes CronJob-style deployments, push the same metrics payload to a
-Pushgateway:
+For Kubernetes CronJob-style deployments, push the same metrics payload to a Pushgateway:
 
 ```sh
 blackvuesync dashcam.example.net --destination /data/dashcam --cron --metrics-pushgateway-url http://pushgateway.monitoring.svc:9091
 ```
 
-Metrics are opt-in. When enabled, BlackVueSync persists the last successful file
-pull timestamp in `.blackvuesync.metrics-state.json` under the destination
-unless `--metrics-state-file` is set. Metrics delivery failures are logged as
-warnings and do not replace the sync exit result.
-Run-level failures such as dashcam index timeouts are exposed through
-`blackvuesync_last_run_failure{reason="..."}`. Per-file failures are exposed
-through `blackvuesync_file_download_failures_last_run{reason="..."}`.
+Metrics are opt-in. When enabled, BlackVueSync persists the last successful file pull timestamp in `.blackvuesync.metrics-state.json` under the destination unless `--metrics-state-file` is set. Metrics delivery failures are logged as warnings and do not replace the sync exit result. Run-level failures such as dashcam index timeouts are exposed through `blackvuesync_last_run_failure{reason="..."}`. Per-file failures are exposed through `blackvuesync_file_download_failures_last_run{reason="..."}`.
 
 Useful alert expressions include:
 
@@ -294,33 +277,33 @@ docker compose up -d
 
 These options are required for the docker image to operate correctly:
 
-* The `/recordings` volume mapped to the desired destination of the downloaded recordings.
-* The `ADDRESS` parameter set to the dashcam address.
-* The `PUID` and `PGID` parameters set to the desired destination directory's user id and group id.
-* The `TZ` parameter set to the same [timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
+- The `/recordings` volume mapped to the desired destination of the downloaded recordings.
+- The `ADDRESS` parameter set to the dashcam address.
+- The `PUID` and `PGID` parameters set to the desired destination directory's user id and group id.
+- The `TZ` parameter set to the same [timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) as the dashcam. Note that BlackVue dashcams do not respect Daylight Savings Time, so their clock needs to be adjusted periodically.
 
 Other parameters:
 
-* `GROUPING`: Groups downloaded recordings in directories, `daily`, `weekly`, `monthly`, `yearly` and `none` are supported. (Default: `none`.)
-* `KEEP`: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
-* `PRIORITY`: Sets the priority to download recordings. Pick `date` to download from oldest to newest; pick `rdate` to download from newset to oldest; pick `type` to download manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `date`.
-* `MAX_USED_DISK`: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value.  (Default: `90`, i.e. 90%.)
-* `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
-* `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
-* `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
-* `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
-* `INCLUDE`: If set, downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `P,NF` downloads all Parking recordings and Normal Front recordings. (Default: empty, meaning all recordings are downloaded.)
-* `EXCLUDE`: If set, excludes recordings matching the given codes, same format as `INCLUDE`. Takes priority over `INCLUDE`. For example, setting `INCLUDE=N` and `EXCLUDE=NR` downloads all Normal recordings except Normal Rear. (Default: empty.)
-* `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
-* `LOG_FORMAT`: If set, changes log output format. Supported values are `text` and `json`. (Default: empty, meaning `text`.)
-* `METRICS_FILE`: If set, writes Prometheus text format metrics to this path. (Default: empty.)
-* `METRICS_PUSHGATEWAY_URL`: If set, pushes Prometheus text format metrics to this Pushgateway URL. (Default: empty.)
-* `METRICS_JOB`: Sets the Pushgateway job grouping value. (Default: `blackvuesync`.)
-* `METRICS_INSTANCE`: Sets the Pushgateway instance grouping value. (Default: empty, meaning the dashcam address.)
-* `METRICS_STATE_FILE`: If set, stores cross-run metrics state at this path. (Default: empty, meaning `.blackvuesync.metrics-state.json` under the destination when metrics are enabled.)
-* `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
-* `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
-* `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty. Not supported in Docker Compose.)
+- `GROUPING`: Groups downloaded recordings in directories, `daily`, `weekly`, `monthly`, `yearly` and `none` are supported. (Default: `none`.)
+- `KEEP`: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
+- `PRIORITY`: Sets the priority to download recordings. Pick `date` to download from oldest to newest; pick `rdate` to download from newset to oldest; pick `type` to download manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `date`.
+- `MAX_USED_DISK`: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value. (Default: `90`, i.e. 90%.)
+- `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
+- `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
+- `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
+- `SKIP_METADATA`: If set, skips downloading the indicated metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `t3g` skips all metadata files. (Default: empty.)
+- `INCLUDE`: If set, downloads only recordings matching the given codes. Each code is a recording type letter optionally followed by a camera direction letter, comma-separated. For example, `P,NF` downloads all Parking recordings and Normal Front recordings. (Default: empty, meaning all recordings are downloaded.)
+- `EXCLUDE`: If set, excludes recordings matching the given codes, same format as `INCLUDE`. Takes priority over `INCLUDE`. For example, setting `INCLUDE=N` and `EXCLUDE=NR` downloads all Normal recordings except Normal Rear. (Default: empty.)
+- `QUIET`: If set to any value, quiets down logs: only unexpected errors will be logged. (Default: empty.)
+- `LOG_FORMAT`: If set, changes log output format. Supported values are `text` and `json`. (Default: empty, meaning `text`.)
+- `METRICS_FILE`: If set, writes Prometheus text format metrics to this path. (Default: empty.)
+- `METRICS_PUSHGATEWAY_URL`: If set, pushes Prometheus text format metrics to this Pushgateway URL. (Default: empty.)
+- `METRICS_JOB`: Sets the Pushgateway job grouping value. (Default: `blackvuesync`.)
+- `METRICS_INSTANCE`: Sets the Pushgateway instance grouping value. (Default: empty, meaning the dashcam address.)
+- `METRICS_STATE_FILE`: If set, stores cross-run metrics state at this path. (Default: empty, meaning `.blackvuesync.metrics-state.json` under the destination when metrics are enabled.)
+- `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
+- `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
+- `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty. Not supported in Docker Compose.)
 
 ## License
 

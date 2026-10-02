@@ -91,6 +91,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.9"
 strict = true
+explicit_package_bases = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -102,7 +103,7 @@ module = ["requests", "hamcrest", "testcontainers.*", "tzlocal"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "blackvuesync_test"
+module = "test.blackvuesync_test"
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
@@ -121,10 +122,16 @@ disallow_untyped_decorators = false
 module = "features.mock_dashcam.server"
 warn_return_any = false
 
+[tool.pytest.ini_options]
+testpaths = ["test"]
+addopts = ["--import-mode=importlib"]
+filterwarnings = ["error"]
+
 [tool.coverage.run]
 # uses parallel mode to create separate coverage files that can be combined
 parallel = true
-source = ["."]
+branch = true
+source = ["blackvuesync"]
 # excludes test and mock code from coverage collection
 omit = [
     "test/*",
@@ -132,6 +139,9 @@ omit = [
 ]
 
 [tool.coverage.report]
+# preserves the existing unit suite baseline during blueprint adoption
+fail_under = 71
+precision = 2
 # excludes test and mock code from coverage reports
 omit = [
     "test/*",

@@ -7,3 +7,5 @@ config:
   # allows duplicate headings under different parents
   MD024:
     siblings_only: true
+  # trailing punctuation allowed in headings
+  MD026: false

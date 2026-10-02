@@ -1,3 +1,11 @@
+# agent tooling rewrites these directories; the hooks under .claude/hooks/ stay
+# checked
+exclude: ^(\.agents/|\.claude/(?!hooks/)|\.codex/|\.pi/)
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -31,16 +39,17 @@ repos:
       # python-specific
       - id: debug-statements
       - id: check-builtin-literals
+      # test/ holds test modules and conftest.py files only
       - id: name-tests-test
+        args: ['--pytest']
+        files: '^test/.+\.py$'
 
       # file organization
       - id: file-contents-sorter
       - id: pretty-format-json
         args: ['--autofix', '--indent=4']
-        exclude: '^\.claude/'
-      - id: pretty-format-json
-        args: ['--autofix', '--indent=2']
-        files: '^\.claude/settings(\.local)?\.json$'
+        # other tools write these files
+        exclude: '^(\.sonarlint/)'
       - id: requirements-txt-fixer
       - id: sort-simple-yaml
 
@@ -49,7 +58,7 @@ repos:
       - id: forbid-submodules
       - id: forbid-new-submodules
       - id: no-commit-to-branch
-        args: ['--branch', 'main', '--pattern', 'features/.*', '--pattern', 'releases/.*']
+        args: ['--branch', 'main', '--pattern', 'releases/.*']
 
   - repo: https://github.com/psf/black
     rev: 25.11.0
@@ -67,6 +76,7 @@ repos:
     rev: v1.14.1
     hooks:
       - id: mypy
+        additional_dependencies: ['pytest']
 
   - repo: https://github.com/pycqa/pylint
     rev: v3.3.9
@@ -104,13 +114,45 @@ repos:
     hooks:
       - id: yamllint
         args: ['-d', '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}']
+        exclude: ^\.copier-answers\.yml$
 
   - repo: https://github.com/google/yamlfmt
     rev: v0.20.0
     hooks:
       - id: yamlfmt
+        exclude: ^\.copier-answers\.yml$
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          - mdformat-frontmatter
+          - mdformat-gfm
+          - mdformat-gfm-alerts
+          - mdformat-footnote
+        exclude: ^\.github/ISSUE_TEMPLATE/
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.20.0
     hooks:
       - id: markdownlint-cli2
+        exclude: ^\.github/ISSUE_TEMPLATE/
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor
+        # --no-progress is repeated here. Setting args replaces the upstream list
+        # instead of adding to it.
+        args: ["--no-progress", "--config", "zizmor.yml"]
+
+  - repo: local
+    hooks:
+      # fails when a source module has no paired test module, or the reverse
+      - id: check-corresponding-tests
+        name: check corresponding tests
+        entry: python3 scripts/check_corresponding_tests.py
+        language: system
+        pass_filenames: false
+        files: '^(blackvuesync\.py|test/.*\.py)$'

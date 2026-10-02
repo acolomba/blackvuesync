@@ -8,7 +8,7 @@ rm -f .coverage .coverage.* coverage.xml
 rm -rf coverage_report/
 
 echo "==> Running unit tests with coverage..."
-COVERAGE_FILE=.coverage.pytest pytest test/blackvuesync_test.py --cov=. --cov-report= -v
+COVERAGE_FILE=.coverage.pytest pytest test/blackvuesync_test.py --cov=blackvuesync --cov-report= -v
 
 echo ""
 echo "==> Running integration tests with coverage..."
