@@ -10,7 +10,7 @@ Feature: Sync with grouping
     When blackvuesync runs with grouping "daily"
     Then blackvuesync exits with code 0
     Then the destination contains all the recordings
-    Then the "mp4" files in the destination match the mock fixture
+    Then the "mp4" files in the destination match the files on the dashcam
 
   Scenario: Weekly grouping downloads the recordings into a directory per week
     Given the dashcam has recordings for the past "2w" of types "N", directions "F"

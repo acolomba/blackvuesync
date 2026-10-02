@@ -279,11 +279,12 @@ def assert_no_failure_markers(context: Context) -> None:
     _assert_same_files(list_failure_markers(context.dest_dir), set(), "failure markers")
 
 
-@then('the "{extension}" files in the destination match the mock fixture')
-def assert_files_match_fixture(context: Context, extension: str) -> None:
-    """verifies each expected file with the extension holds the fixture content.
+@then('the "{extension}" files in the destination match the files on the dashcam')
+def assert_files_match_dashcam(context: Context, extension: str) -> None:
+    """verifies each expected file with the extension has the content the dashcam serves.
 
-    the check compares full sha256 digests; the failure message shortens them.
+    the mock dashcam serves one fixture per extension. the check compares full
+    sha256 digests; the failure message shortens them.
     """
     expected_names = {
         f for f in _expected_recordings(context) if f.endswith(f".{extension}")
@@ -302,6 +303,6 @@ def assert_files_match_fixture(context: Context, extension: str) -> None:
     assert_that(
         actual,
         equal_to(expected),
-        f".{extension} files differ from the fixture (digest {fixture_digest[:16]}); "
+        f".{extension} files differ from the dashcam's (digest {fixture_digest[:16]}); "
         f"mismatched: {mismatched}; missing: {sorted(expected.keys() - actual.keys())}",
     )

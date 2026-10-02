@@ -9,9 +9,9 @@ Feature: Basic sync operations
     When blackvuesync runs
     Then blackvuesync exits with code 0
     Then the destination contains all the recordings
-    Then the "mp4" files in the destination match the mock fixture
-    Then the "thm" files in the destination match the mock fixture
-    Then the "gps" files in the destination match the mock fixture
+    Then the "mp4" files in the destination match the files on the dashcam
+    Then the "thm" files in the destination match the files on the dashcam
+    Then the "gps" files in the destination match the files on the dashcam
 
   Scenario: Sync keeps destination recordings the dashcam does not list
     Given the destination has recordings between "2d" and "1d" ago of types "N,E", directions "F,R"
