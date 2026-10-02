@@ -1,14 +1,35 @@
+# ai harnesses
+# third-party skills; scripts/init.sh fetches the latest version of each
+/.agents/skills/humanizer/
+/.agents/skills/simple-english/
+# fetch record for the skills above, not a version pin
+/skills-lock.json
+
+# claude
+**/.claude/settings.local.json
+/.claude/jobs/
+/.claude/skills/humanizer
+/.claude/skills/simple-english
+
+# pi
+/.pi/git/
+/.pi/npm/
+/.pi/sessions/
+/.pi-lens
+
 # python
-/*.egg-info/
+*.egg-info/
 /dist/
 /build/
 
 # testing
 /.pytest_cache
 /tmp
-# While running, lock file and .prom metric files may be created.
+
+# sync runtime files
 .blackvuesync.lock
 *.prom
+
 # coverage
 .coverage
 .coverage.*
@@ -19,9 +40,13 @@ coverage_report/
 /.idea
 __pycache__
 /venv
+/.venv
+
+# environment
+.env
+
+# logs
+*.log
 
 # mac
 .DS_Store
-
-# secrets
-/.claude/settings.local.json

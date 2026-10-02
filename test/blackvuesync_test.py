@@ -8,6 +8,7 @@ import errno
 import fcntl
 import glob
 import http.client
+import io
 import json
 import logging
 import os
@@ -914,7 +915,7 @@ def _file_download_failures(reason: str) -> dict[str, int]:
 def _http_error(url: str, status_code: int) -> urllib.error.HTTPError:
     """creates an http error with empty headers for fake urlopen functions"""
     return urllib.error.HTTPError(
-        url, status_code, "error", email.message.Message(), None
+        url, status_code, "error", email.message.Message(), io.BytesIO()
     )
 
 
@@ -933,7 +934,8 @@ def test_is_legacy_camera_legacy_on_not_found(
     """verifies a 404 from the /accessible probe selects the legacy api."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
-        raise _http_error("http://dashcam/accessible", 404)
+        with _http_error("http://dashcam/accessible", 404) as error:
+            raise error
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
@@ -947,7 +949,8 @@ def test_is_legacy_camera_raises_on_unexpected_http_error(
     """verifies http errors other than 404 from the /accessible probe propagate instead of selecting an api."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
-        raise _http_error("http://dashcam/accessible", status_code)
+        with _http_error("http://dashcam/accessible", status_code) as error:
+            raise error
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
@@ -975,7 +978,8 @@ def test_get_dashcam_filenames_runtime_error_on_probe_http_error(
     """verifies an unexpected probe response fails the run like any recording-list error."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
-        raise _http_error("http://dashcam/accessible", 500)
+        with _http_error("http://dashcam/accessible", 500) as error:
+            raise error
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
@@ -1046,7 +1050,8 @@ def test_download_file_marks_failed_on_http_error(
     """verifies http download errors record the http metric and mark the file failed."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
-        raise _http_error("http://dashcam/20181029_131513_NF.mp4", 500)
+        with _http_error("http://dashcam/20181029_131513_NF.mp4", 500) as error:
+            raise error
 
     with tempfile.TemporaryDirectory() as destination:
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
@@ -1212,7 +1217,8 @@ def test_download_metadata_file_marks_failed_on_http_error(
     """verifies http errors from /vodMetadata record the http metric and mark the file failed."""
 
     def fake_urlopen(_request: urllib.request.Request) -> _FakeUrlResponse:
-        raise _http_error("http://dashcam/vodMetadata", 500)
+        with _http_error("http://dashcam/vodMetadata", 500) as error:
+            raise error
 
     with tempfile.TemporaryDirectory() as destination:
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)

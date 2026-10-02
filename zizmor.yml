@@ -1,0 +1,9 @@
+# Actions published by GitHub itself may stay on a version tag. Everything from
+# another owner must name a full commit hash, so a moved upstream tag cannot
+# swap in different code.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin
+        "*": hash-pin

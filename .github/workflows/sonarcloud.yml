@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,29 +19,32 @@ concurrency:
 
 jobs:
   sonarcloud:
-    # skips for Dependabot PRs as secrets are not available
-    if: github.actor != 'dependabot[bot]'
+    # secrets are unavailable to Dependabot and fork-originated PRs.
+    if: >-
+      github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # disables shallow clone for better analysis
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.9'
+          python-version: "3.9"
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
 
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+        run: pip install -e ".[dev]"
 
       - name: Run unit tests with coverage
         run: |
-          COVERAGE_FILE=.coverage.pytest pytest test/blackvuesync_test.py --cov=. --cov-report= -v
+          COVERAGE_FILE=.coverage.pytest pytest test/blackvuesync_test.py --cov=blackvuesync --cov-report= -v
 
       - name: Run integration tests with coverage (V1.009+ protocol)
         run: |
@@ -57,8 +61,13 @@ jobs:
           coverage report
 
       - name: SonarCloud Scan
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: SonarSource/sonarqube-scan-action@v8
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        with:
+          # push and pull_request already carry branch/PR context in the event, and
+          # naming a branch on a pull_request breaks PR decoration. workflow_dispatch
+          # carries no such context, so without this the run is recorded against the
+          # project's main branch.
+          args: ${{ github.event_name == 'workflow_dispatch' && format('-Dsonar.branch.name={0}', github.ref_name) || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

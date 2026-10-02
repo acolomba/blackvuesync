@@ -20,11 +20,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
+        # mdformat needs Python 3.10 or newer, whatever the project's minimum.
         uses: actions/setup-python@v7
         with:
-          python-version: '3.9'
+          python-version: "3.12"
 
       - name: Run pre-commit
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1

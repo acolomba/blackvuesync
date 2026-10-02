@@ -1,0 +1,2 @@
+# raises the per-file instructions budget from the 32 KiB default.
+project_doc_max_bytes = 65536

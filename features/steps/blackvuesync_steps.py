@@ -111,7 +111,7 @@ def _execute_direct(
             "coverage",
             "run",
             "--parallel-mode",
-            "--source=.",
+            "--source=blackvuesync",
             str(blackvuesync_script),
             address,
             "-d",

@@ -15,6 +15,7 @@
     ],
     "cucumberautocomplete.strictGherkinCompletion": true,
     "cucumberautocomplete.strictGherkinValidation": true,
+    "files.eol": "\n",
     "sonarlint.connectedMode.project": {
         "connectionId": "acolomba",
         "projectKey": "acolomba_blackvuesync"

@@ -13,44 +13,5 @@
         ]
       }
     ]
-  },
-  "permissions": {
-    "allow": [
-      "Bash(behave:*)",
-      "Bash(gh:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git pull:*)",
-      "Bash(git push:*)",
-      "Bash(pre-commit:*)",
-      "Skill(pr-review-toolkit:review-pr:*)",
-      "Skill(pr-review-toolkit:review-pr)",
-      "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:docs.sonarcloud.io)",
-      "WebFetch(domain:docs.sonarsource.com)",
-      "WebFetch(domain:files.pythonhosted.org)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:githubstatus.com)",
-      "WebFetch(domain:pypi.org)",
-      "WebFetch(domain:registry-1.docker.io)",
-      "WebFetch(domain:results-receiver.actions.githubusercontent.com)",
-      "WebSearch"
-    ]
-  },
-  "sandbox": {
-    "autoAllowBashIfSandboxed": true,
-    "enabled": true,
-    "excludedCommands": [
-      "docker",
-      "gh",
-      "git",
-      "pre-commit"
-    ],
-    "network": {
-      "allowLocalBinding": true,
-      "allowUnixSockets": [
-        "/var/run/docker.sock"
-      ]
-    }
   }
 }

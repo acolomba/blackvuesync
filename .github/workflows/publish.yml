@@ -1,0 +1,83 @@
+name: Publish
+
+# pushing a `v*.*.*` tag is the sole trigger, so a release is always a
+# deliberate act. `workflow_dispatch` is deliberately absent: a manual run
+# carries a branch ref, which would defeat the version/tag guard.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+# the group name starts with a literal, not `github.workflow`. Inside a called
+# workflow, `github.workflow` resolves to the CALLER's name, so a callee whose
+# group is built from it waits on a group the caller already holds, and the run
+# deadlocks before any job starts.
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # run the full gate on the tagged commit before publishing. It also builds,
+  # scans, and uploads the `dist` artifact this workflow publishes.
+  ci:
+    uses: $/.github/workflows/ci.yml
+
+  publish:
+    needs: [ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/project/blackvuesync/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Verify the package version matches the tag
+        # a PyPI release cannot be replaced. Without this check, tagging v0.1.2
+        # while blackvuesync.py still reads 0.1.1 publishes 0.1.1 under a v0.1.2 tag.
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          PKG_VERSION="$(python3 -c 'import blackvuesync; print(blackvuesync.__version__)')"
+          TAG_VERSION="${TAG#v}"
+          echo "blackvuesync.py version: $PKG_VERSION"
+          echo "tag version:            $TAG_VERSION"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::blackvuesync.py version $PKG_VERSION does not match tag $TAG"
+            exit 1
+          fi
+
+      - name: Download the built artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        # authenticates via PyPI Trusted Publishing (OIDC), so no stored secret exists
+        # in this file. A trusted publisher naming this repo, this workflow file, and
+        # the `pypi` environment must be configured in the project's PyPI settings.
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  release:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes
