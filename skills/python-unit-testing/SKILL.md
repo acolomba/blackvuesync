@@ -11,15 +11,16 @@ Every case must discriminate the behavior named in its title: a wrong implementa
 
 ## Tools
 
-Use pytest for the runner, fixtures, and the built-in `monkeypatch`, `tmp_path`, and `capsys` fixtures; plain `assert` statements, which pytest rewrites to report both sides, for assertions; `pytest.raises()` for errors; `unittest.mock.create_autospec()` for strict interaction mocks and `unittest.mock.Mock(wraps=...)` for spies; pytest-cov for coverage.
+Use pytest for the runner, fixtures, and the built-in `monkeypatch`, `tmp_path`, and `capsys` fixtures; PyHamcrest's `assert_that()` and its matchers for assertions; `pytest.raises()` for errors; `unittest.mock.create_autospec()` for strict interaction mocks and `unittest.mock.Mock(wraps=...)` for spies; pytest-cov for coverage.
 
 ```python
 from unittest.mock import call, create_autospec
 
 import pytest
+from hamcrest import assert_that, equal_to
 ```
 
-Do not add another runner, assertion library, or mocking library: no `unittest.TestCase`, PyHamcrest (it serves the behave steps), `pytest-mock`, `pytest-asyncio`, `freezegun`, `responses`, or snapshot plugins.
+Do not add another runner, assertion library, or mocking library: no `unittest.TestCase`, `pytest-mock`, `pytest-asyncio`, `freezegun`, `responses`, or snapshot plugins.
 
 ## Pairing and coverage
 
@@ -83,18 +84,21 @@ class TestPlace:
         order = order_service.place(cart)
 
         # assert
-        assert order == placed_order
-        assert orders.get("order-123") == placed_order
-        assert payments.mock_calls == [call.charge("customer-1", 25)]
-        assert events.mock_calls == [call.publish(OrderPlaced("order-123", total=25))]
+        assert_that(order, equal_to(placed_order))
+        assert_that(orders.get("order-123"), equal_to(placed_order))
+        assert_that(payments.mock_calls, equal_to([call.charge("customer-1", 25)]))
+        assert_that(
+            events.mock_calls, equal_to([call.publish(OrderPlaced("order-123", total=25))])
+        )
 ```
 
-A mock whose expected call list is empty proves that the module does not touch that port: `assert events.mock_calls == []`.
+A mock whose expected call list is empty proves that the module does not touch that port: `assert_that(events.mock_calls, equal_to([]))`.
 
 ## Assertions
 
+- Prefer PyHamcrest's `assert_that(actual, matcher)` to state the condition. The matcher names the condition, and a failure reports the expected and the actual value. Pass a reason as the third argument only when it adds a fact the matcher does not report. A plain `assert` is the exception, for a condition that no matcher states.
 - Assert the public result and public state before any interaction. Do not replace a result assertion with a call assertion. When relocating a case, preserve its assertions unless the contract changed.
-- Compare whole values with `==`. Do not assert existence, length, or one attribute at a time when the whole value is the promise. A standalone negative assertion (`assert order is not None`, `assert order != cancelled`, a bare `assert order`) passes for almost any value; assert what the value is.
+- Compare whole values with `equal_to()`. Use `contains_inanyorder()` for a list whose order is not part of the promise, and `same_instance()` for identity. Do not assert existence, length, or one attribute at a time when the whole value is the promise: `has_item()`, `has_items()`, `has_entries()`, `has_length()`, and `instance_of()` pass for a partial value. A standalone negative assertion (`assert_that(order, not_none())`, `assert_that(order, is_not(cancelled))`) passes for almost any value; assert what the value is.
 - Assert errors by class and structured fields, not by message text; do not pass `match=` to `pytest.raises()`:
 
 ```python
@@ -103,7 +107,10 @@ with pytest.raises(OrderNotFoundError) as raised:
     order_service.cancel("order-999")
 
 # assert
-assert (raised.value.code, raised.value.order_id) == ("ORDER_NOT_FOUND", "order-999")
+assert_that(
+    (raised.value.code, raised.value.order_id),
+    equal_to(("ORDER_NOT_FOUND", "order-999")),
+)
 ```
 
 - When bytes are the contract (a file, packet, archive, encoded value), compare the complete bytes. Do not decode or normalize the output unless consumers do.
@@ -131,7 +138,7 @@ Use the tool that matches the role. Do not turn a stub into a mock by asserting 
 
 - Create `create_autospec(Port, instance=True, spec_set=True)` inside the case. Autospec rejects a call that does not match the port's signature, and `spec_set` rejects an attribute the port does not have. A bare `Mock()` or `MagicMock()` accepts anything.
 - Set every return value and error the module uses: `payments.charge.return_value = receipt`, `payments.charge.side_effect = PaymentDeclinedError("customer-1")`. An autospecced method returns a `MagicMock` by default, which hides a missing setup.
-- Assert the complete call list with `==` at the end of the case, after result and state assertions: `assert payments.mock_calls == [call.charge("customer-1", 25)]`. It fails on a missing, extra, reordered, or differently argued call.
+- Assert the complete call list with `equal_to()` at the end of the case, after result and state assertions: `assert_that(payments.mock_calls, equal_to([call.charge("customer-1", 25)]))`. It fails on a missing, extra, reordered, or differently argued call.
 - Do not use `assert_called()`, `assert_called_once()`, `assert_any_call()`, or `assert_has_calls()`, which pass with extra calls, or a bare `call_count`. Do not assert in a fixture teardown or shared helper.
 - Use `unittest.mock.ANY` only for an argument that cannot be compared by value (a callback, a stream), and assert its meaningful properties separately.
 
@@ -142,10 +149,15 @@ calls = Mock()
 calls.attach_mock(payments, "payments")
 calls.attach_mock(events, "events")
 # ...
-assert calls.mock_calls == [
-    call.payments.charge("customer-1", 25),
-    call.events.publish(OrderPlaced("order-123", total=25)),
-]
+assert_that(
+    calls.mock_calls,
+    equal_to(
+        [
+            call.payments.charge("customer-1", 25),
+            call.events.publish(OrderPlaced("order-123", total=25)),
+        ]
+    ),
+)
 ```
 
 **Not doubles.** Plain data (`Cart`, `Order`, `OrderPlaced`) is a real instance. Logging gets a silent stub or goes unobserved; assert log records (`caplog`) only in a module whose job is logging.
@@ -176,7 +188,7 @@ def test_totals_the_lines(lines: list[Line], total: int) -> None:
     calculated_total = cart_total(lines)
 
     # assert
-    assert calculated_total == total
+    assert_that(calculated_total, equal_to(total))
 ```
 
 ## Types and hermeticity
@@ -230,12 +242,15 @@ if TYPE_CHECKING:
 
 ```python
 # wrong: pins the field list so a fourth field "cannot be added silently"
-assert [f.name for f in dataclasses.fields(EdgeDeps)] == ["git_ops", "plugin_update", "import_claude_settings"]
+assert_that(
+    [f.name for f in dataclasses.fields(EdgeDeps)],
+    equal_to(["git_ops", "plugin_update", "import_claude_settings"]),
+)
 # right: pin the contract that carries meaning -- which fields are optional
 EdgeDeps(git_ops=git_ops, plugin_update=plugin_update)
 ```
 
-**Re-exports.** Prefer importing concrete modules. An existing re-exporting `__init__.py` gets a test module that asserts each re-export is the same object as its source with `is`.
+**Re-exports.** Prefer importing concrete modules. An existing re-exporting `__init__.py` gets a test module that asserts each re-export is the same object as its source with `same_instance()`.
 
 **Filesystem.** Use the real filesystem when stored files, paths, permissions, encoding, or rendered bytes are the behavior. Use the case's own `tmp_path`, which pytest creates for each case. Do not share a directory across cases (`tmp_path_factory`) or write into the repository, the home directory, or a fixed path.
 
@@ -273,7 +288,7 @@ A unit-test change is complete when:
 - [ ] Every changed production module, including `__init__.py`, `__main__.py`, and type-only modules, has one corresponding test module that imports it.
 - [ ] Each test uses public production behavior only; no name was made public and no reset hook, mutator, or state reader was added for testing.
 - [ ] Any production refactor created a coherent module, an explicit dependency, a narrow port, or removed hidden global state.
-- [ ] Tests are independent pytest functions with plain `assert` statements, with no `skip` or `xfail` beyond a contract's negative control.
+- [ ] Tests are independent pytest functions that state conditions with `assert_that()` and a matcher, with no `skip` or `xfail` beyond a contract's negative control.
 - [ ] Every case marks its phases with `# arrange`, `# act`, and `# assert`; `# act & assert` appears only for a `pytest.raises()` block that is the whole assertion.
 - [ ] Any test class is top-level, names a public entrypoint, and owns no state; each stateful case gets fresh dependencies from the case or a function-scoped fixture.
 - [ ] Case names state public behavior; values and doubles are named after their production role.

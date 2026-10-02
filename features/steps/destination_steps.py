@@ -8,6 +8,7 @@ from collections.abc import Iterable, Set
 
 from behave import given, then, when
 from behave.runner import Context
+from hamcrest import assert_that, equal_to
 
 from features.lib.recordings import (
     LOCK_FILENAME,
@@ -65,9 +66,11 @@ def _destination_files(context: Context) -> set[str]:
 
 def _assert_same_files(actual: Set[str], expected: Set[str], label: str) -> None:
     """asserts two sets of filenames are equal, listing the differences."""
-    assert actual == expected, (
+    assert_that(
+        actual,
+        equal_to(expected),
         f"{label} differ; missing: {sorted(expected - actual)}; "
-        f"unexpected: {sorted(actual - expected)}"
+        f"unexpected: {sorted(actual - expected)}",
     )
 
 
@@ -296,7 +299,9 @@ def assert_files_match_fixture(context: Context, extension: str) -> None:
     }
     expected = dict.fromkeys(expected_names, fixture_digest)
     mismatched = {name: d[:16] for name, d in actual.items() if expected.get(name) != d}
-    assert actual == expected, (
+    assert_that(
+        actual,
+        equal_to(expected),
         f".{extension} files differ from the fixture (digest {fixture_digest[:16]}); "
-        f"mismatched: {mismatched}; missing: {sorted(expected.keys() - actual.keys())}"
+        f"mismatched: {mismatched}; missing: {sorted(expected.keys() - actual.keys())}",
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from behave import given, then, when
 from behave.runner import Context
+from hamcrest import assert_that, equal_to
 
 from features.lib.recordings import (
     generate_recording_filenames,
@@ -85,8 +86,7 @@ def stop_failing_downloads(context: Context) -> None:
 @then("the dashcam receives no download requests")
 def assert_no_download_requests(context: Context) -> None:
     """verifies the latest run requests no recording file."""
-    requested = context.dashcam.requested_files()
-    assert requested == [], f"expected no download requests, got: {requested}"
+    assert_that(context.dashcam.requested_files(), equal_to([]))
 
 
 @then("the dashcam receives download requests for only the missing recordings")
@@ -99,9 +99,9 @@ def assert_missing_download_requests(context: Context) -> None:
         - context.preexisting_recordings
     )
     requested = context.dashcam.requested_files()
-    assert sorted(requested) == sorted(missing), (
-        f"expected requests for the missing files; "
+    assert_that(
+        sorted(requested),
+        equal_to(sorted(missing)),
         f"not requested: {sorted(missing.difference(requested))}; "
-        f"unexpected: {sorted(set(requested) - missing)}; "
-        f"requested: {sorted(requested)}"
+        f"unexpected: {sorted(set(requested) - missing)}",
     )
