@@ -312,7 +312,7 @@ Other parameters:
 For a camera verified to serve the legacy index:
 
 ```sh
-blackvuesync 192.168.1.112 --camera-api legacy --destination /path/to/recordings
+blackvuesync dashcam.example.net --camera-api legacy --destination /path/to/recordings
 ```
 
 In Docker or Portainer, set `CAMERA_API=legacy` (Compose: `CAMERA_API: legacy`). Leave it unset or use `CAMERA_API=auto` to retain automatic detection. Set `CAMERA_API=modern` only for a camera serving `/vodList`; recheck this choice after a firmware update. Forced modes do not fall back to another API on failure.
@@ -320,8 +320,6 @@ In Docker or Portainer, set `CAMERA_API=legacy` (Compose: `CAMERA_API: legacy`).
 The selected mode is logged at INFO level at startup, including in the default Docker cron mode; normal verbosity and quiet settings still apply. Only the mode is included in this new log message.
 
 Skipping the probe removes one request per synchronization. It does not fix an unreachable host or another network failure; inventory and download requests still require camera connectivity.
-
-See [custom image and Portainer deployment preparation](docs/portainer-camera-api.md) for build, update, and rollback instructions. These instructions do not deploy anything automatically.
 
 ## License
 
