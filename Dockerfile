@@ -19,6 +19,7 @@ COPY entrypoint.sh /entrypoint.sh
 COPY crontab /var/spool/cron/crontabs/dashcam
 
 ENV ADDRESS="" \
+    CAMERA_API=auto \
     PUID="" \
     PGID="" \
     KEEP="" \

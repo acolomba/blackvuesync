@@ -120,6 +120,7 @@ Other options:
   - `none`: No grouping, the default.
 - `--priority`: Downloads recordings with different priorities: `date` downloads oldest to newest; `rdate` downloads newest to oldest; `type` downloads manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `date`.
 - `--max-used-disk`: Downloads stop once the specified used disk percentage threshold is reached. Defaults to `90` (i.e. 90%.)
+- `--camera-api`: Selects `auto` (default), `legacy`, or `modern`. `auto` probes `/accessible` on every sync; `legacy` skips the probe and uses `/blackvue_vod.cgi`; `modern` skips the probe and uses `/vodList`. Select an explicit mode only when the camera API is known. The selected mode also preserves the matching video and metadata behavior. Invalid values are rejected.
 - `--timeout`: Sets a timeout for establishing a connection to the dashcam, in seconds. Defaults to `10.0` seconds.
 - `--retry-failed-after`: Sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. Defaults to `1d`.
 - `--skip-metadata`: Skips downloading metadata file types. Takes a string of characters: `t` for thumbnail (`.thm`), `3` for accelerometer (`.3gf`)[^1], `g` for GPS (`.gps`). For example, `--skip-metadata t3g` skips all metadata files, downloading only the `.mp4` video recordings.
@@ -288,6 +289,7 @@ Other parameters:
 - `KEEP`: Sets the retention period of downloaded recordings. Recordings prior to the retention period will be removed from the destination. Accepted units are `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: empty, meaning recordings are kept forever.)
 - `PRIORITY`: Sets the priority to download recordings. Pick `date` to download from oldest to newest; pick `rdate` to download from newset to oldest; pick `type` to download manual, event (all types), normal and (non-event) parking recordings in that order. Defaults to `date`.
 - `MAX_USED_DISK`: If set to a percentage value, stops downloading if the amount of used disk space exceeds the indicated percentage value. (Default: `90`, i.e. 90%.)
+- `CAMERA_API`: Selects the recording API: `CAMERA_API=auto` (default) detects firmware using `/accessible`; `CAMERA_API=legacy` uses `/blackvue_vod.cgi`; `CAMERA_API=modern` uses `/vodList`. Both explicit modes skip `/accessible`. Use `auto` for unknown or changing firmware, `legacy` for cameras known to serve the legacy index, and `modern` for cameras known to serve the JSON index. Values are lowercase; an empty or invalid value is rejected at container startup.
 - `TIMEOUT`: If set to a float value, sets the timeout in seconds for connecting to the dashcam. (Default: `10.0` seconds.)
 - `RETRY_FAILED_AFTER`: If set, sets the minimum elapsed time before retrying a failed download. Accepted units are `s` for seconds, `h` for hours, `d` for days and `w` for weeks. If no unit is indicated, days are assumed. (Default: `1d`.)
 - `VERBOSE`: If set to a number greater than zero, increases logging verbosity. (Default: `0`.)
@@ -304,6 +306,20 @@ Other parameters:
 - `CRON`: Set by default, makes it so downloads of normal recordings and unexpected error conditions are logged. Can be set to `""` to disable.
 - `DRY_RUN`: If set to any value, makes it so that the script communicates what it would do without actually doing anything. (Default: empty.)
 - `RUN_ONCE`: If set to any value, the docker image runs the sync operation once and exits without setting up the cron job. (Default: empty. Not supported in Docker Compose.)
+
+### Explicit camera API selection
+
+For a camera verified to serve the legacy index:
+
+```sh
+blackvuesync dashcam.example.net --camera-api legacy --destination /path/to/recordings
+```
+
+In Docker or Portainer, set `CAMERA_API=legacy` (Compose: `CAMERA_API: legacy`). Leave it unset or use `CAMERA_API=auto` to retain automatic detection. Set `CAMERA_API=modern` only for a camera serving `/vodList`; recheck this choice after a firmware update. Forced modes do not fall back to another API on failure.
+
+The selected mode is logged at INFO level at startup, including in the default Docker cron mode; normal verbosity and quiet settings still apply. Only the mode is included in this new log message.
+
+Skipping the probe removes one request per synchronization. It does not fix an unreachable host or another network failure; inventory and download requests still require camera connectivity.
 
 ## License
 
