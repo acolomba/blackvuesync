@@ -1,0 +1,6 @@
+# merges into the existing stack; cannot run as a standalone stack
+services:
+  blackvuesync_970:
+    image: blackvuesync-local:2.2.0-camera-api.1
+    environment:
+      CAMERA_API: legacy

@@ -11,6 +11,9 @@ services:
       # Dashcam address
       # ADDRESS: dashcam.example.net
 
+      # selects auto detection, legacy blackvue_vod.cgi, or modern vodList.
+      CAMERA_API: auto
+
       # Set these to the desired destination directory's user id and group id.
       PUID: 1000
       PGID: 1000

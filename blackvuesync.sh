@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-set -- "${ADDRESS}" --destination /recordings
+set -- "${ADDRESS}" --destination /recordings --camera-api "${CAMERA_API-auto}"
 
 # keep option if KEEP set
 [ -n "${KEEP:-}" ] && set -- "$@" --keep "$KEEP"

@@ -839,10 +839,18 @@ def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
     return get_filenames(file_lines)
 
 
-def get_dashcam_filenames(base_url: str) -> tuple[bool, list[str]]:
+def get_dashcam_filenames(
+    base_url: str, camera_api: str = "auto"
+) -> tuple[bool, list[str]]:
     """gets whether the camera is legacy and its recording filenames"""
+    if camera_api not in ("auto", "legacy", "modern"):
+        raise ValueError("camera_api must be auto, legacy or modern")
     try:
-        legacy = is_legacy_camera(base_url)
+        legacy = (
+            is_legacy_camera(base_url)
+            if camera_api == "auto"
+            else camera_api == "legacy"
+        )
         if legacy:
             return legacy, get_dashcam_filenames_legacy(base_url)
 
@@ -1741,12 +1749,13 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     include: tuple[str, ...] | None,
     exclude: tuple[str, ...] | None,
     metrics: SyncMetrics | None = None,
+    camera_api: str = "auto",
 ) -> None:
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
 
     base_url = f"http://{address}"
-    legacy, dashcam_filenames = get_dashcam_filenames(base_url)
+    legacy, dashcam_filenames = get_dashcam_filenames(base_url, camera_api)
     dashcam_recordings = to_dashcam_recordings(dashcam_filenames, grouping)
     if metrics:
         metrics.dashcam_recordings_seen = len(dashcam_recordings)
@@ -1857,6 +1866,12 @@ def parse_args() -> argparse.Namespace:
     )
     arg_parser.add_argument(
         "address", metavar="ADDRESS", help="dashcam IP address or name"
+    )
+    arg_parser.add_argument(
+        "--camera-api",
+        choices=["auto", "legacy", "modern"],
+        default="auto",
+        help="selects the recording API; auto detects firmware (default), legacy uses blackvue_vod.cgi, modern uses vodList",
     )
     arg_parser.add_argument(
         "-d",
@@ -2020,6 +2035,12 @@ def main() -> int:
     configure_logging(args.log_format)
     set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 
+    cron_logger.info(
+        "Camera API mode : %s",
+        args.camera_api,
+        extra={"event": "camera_api_configured", "camera_api": args.camera_api},
+    )
+
     dry_run = args.dry_run
     affinity_key = args.affinity_key
     skip_metadata = args.skip_metadata
@@ -2098,6 +2119,7 @@ def main() -> int:
                 args.include,
                 args.exclude,
                 metrics,
+                camera_api=args.camera_api,
             )
             sync_success = True
         finally:
