@@ -35,11 +35,13 @@ class _Session:
 
     recordings: list[str] = field(default_factory=list)
     download_errors: set[str] = field(default_factory=set)
-    # answers the recording list requests with a 500 error
+    # selects whether recording list requests return an error
     listing_error: bool = False
+    listing_status_code: int = 500
     legacy_api: bool = False
     # recording filenames blackvuesync requested, in order
     requested_files: list[str] = field(default_factory=list)
+    requested_paths: list[str] = field(default_factory=list)
 
 
 def _metadata_filename(video_filename: str, metadata_type: str) -> str:
@@ -121,14 +123,17 @@ class MockDashcam:
         return flask.send_file(MOCK_FILES_DIR / f"mock.{extension}")
 
     def _abort_on_listing_error(self, session: _Session) -> None:
-        """aborts 500 when the session is configured to fail its recording list."""
+        """aborts with the configured status when the recording list fails."""
         with self._lock:
             failing = session.listing_error
+            status_code = session.listing_status_code
         if failing:
             logger.info(
-                "answers %s with 500: configured listing error", flask.request.path
+                "answers %s with %s: configured listing error",
+                flask.request.path,
+                status_code,
             )
-            flask.abort(500)
+            flask.abort(status_code)
 
     def _record_request(self, session: _Session, filename: str) -> None:
         """appends a requested recording filename to the session's request log."""
@@ -137,6 +142,14 @@ class MockDashcam:
 
     def _setup_routes(self) -> None:
         """registers the dashcam and /mock/ control routes."""
+
+        @self.app.before_request
+        def record_camera_request() -> None:
+            """records camera paths separately from test control requests."""
+            if not flask.request.path.startswith("/mock/"):
+                session = self._session()
+                with self._lock:
+                    session.requested_paths.append(flask.request.path)
 
         @self.app.route("/accessible", methods=["GET"])
         def accessible() -> tuple[dict[str, str], int]:
@@ -263,15 +276,20 @@ class MockDashcam:
             """makes the session fail or serve its recording list."""
             session = self._session()
             with self._lock:
-                session.listing_error = bool(flask.request.get_json()["failing"])
+                payload = flask.request.get_json()
+                session.listing_error = bool(payload["failing"])
+                session.listing_status_code = int(payload.get("status_code", 500))
             return {"failing": session.listing_error}, 200
 
         @self.app.route("/mock/requests", methods=["GET"])
         def get_requests() -> tuple[dict[str, object], int]:
-            """returns the recording filenames the session received requests for."""
+            """returns the session's recording filenames and camera request paths."""
             session = self._session()
             with self._lock:
-                return {"filenames": list(session.requested_files)}, 200
+                return {
+                    "filenames": list(session.requested_files),
+                    "paths": list(session.requested_paths),
+                }, 200
 
         @self.app.route("/mock/requests", methods=["DELETE"])
         def clear_requests() -> tuple[dict[str, object], int]:
@@ -279,6 +297,7 @@ class MockDashcam:
             session = self._session()
             with self._lock:
                 session.requested_files.clear()
+                session.requested_paths.clear()
             return {}, 200
 
         @self.app.route("/mock/session", methods=["DELETE"])

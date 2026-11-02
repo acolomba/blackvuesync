@@ -8,16 +8,23 @@ import errno
 import fcntl
 import glob
 import http.client
+import http.server
 import io
 import json
 import logging
 import os
+import shutil
+import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
+from typing import Literal
 
 import pytest
+from hamcrest import assert_that, contains_string, equal_to, same_instance
 
 import blackvuesync
 
@@ -1567,6 +1574,7 @@ def test_main_writes_metrics_for_cron_unavailable_dashcam(
         metrics_file = os.path.join(destination, "blackvuesync.prom")
         args = argparse.Namespace(
             address="127.0.0.1",
+            camera_api="auto",
             destination=destination,
             grouping="none",
             keep=None,
@@ -1590,7 +1598,7 @@ def test_main_writes_metrics_for_cron_unavailable_dashcam(
             affinity_key=None,
         )
 
-        def get_dashcam_filenames_raises(_base_url: str) -> list[str]:
+        def get_dashcam_filenames_raises(_base_url: str, _camera_api: str) -> list[str]:
             raise UserWarning("Dashcam unavailable")
 
         monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
@@ -1616,6 +1624,7 @@ def test_main_writes_timeout_run_failure_metric(
         metrics_file = os.path.join(destination, "blackvuesync.prom")
         args = argparse.Namespace(
             address="127.0.0.1",
+            camera_api="auto",
             destination=destination,
             grouping="none",
             keep=None,
@@ -1639,7 +1648,7 @@ def test_main_writes_timeout_run_failure_metric(
             affinity_key=None,
         )
 
-        def get_dashcam_filenames_raises(_base_url: str) -> list[str]:
+        def get_dashcam_filenames_raises(_base_url: str, _camera_api: str) -> list[str]:
             raise UserWarning("Dashcam unavailable : <urlopen error timed out>")
 
         monkeypatch.setattr(blackvuesync, "parse_args", lambda: args)
@@ -1666,6 +1675,7 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
 
     args = argparse.Namespace(
         address="127.0.0.1",
+        camera_api="auto",
         destination="/tmp",
         grouping="none",
         keep=None,
@@ -1693,7 +1703,7 @@ def test_main_unlocks_fd_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(blackvuesync, "ensure_destination", lambda _destination: None)
     monkeypatch.setattr(blackvuesync, "lock", lambda _destination: 0)
 
-    def sync_noop(*_args: object) -> None:
+    def sync_noop(*_args: object, **_kwargs: object) -> None:
         pass
 
     monkeypatch.setattr(blackvuesync, "sync", sync_noop)
@@ -1754,6 +1764,7 @@ def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> 
 
     args = argparse.Namespace(
         address="127.0.0.1",
+        camera_api="auto",
         destination="/tmp",
         grouping="none",
         keep=None,
@@ -1790,3 +1801,270 @@ def test_main_skips_unlock_when_lock_raises(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert blackvuesync.main() == 1
     assert unlock_calls == []
+
+
+@pytest.mark.parametrize(
+    "options, mode",
+    [
+        ([], "auto"),
+        (["--camera-api", "auto"], "auto"),
+        (["--camera-api", "legacy"], "legacy"),
+        (["--camera-api", "modern"], "modern"),
+    ],
+    ids=["default", "auto", "legacy", "modern"],
+)
+def test_parse_args_selects_camera_api(
+    monkeypatch: pytest.MonkeyPatch, options: list[str], mode: str
+) -> None:
+    # arrange
+    monkeypatch.setattr(sys, "argv", ["blackvuesync", "dashcam", *options])
+
+    # act
+    args = blackvuesync.parse_args()
+
+    # assert
+    assert_that(args.camera_api, equal_to(mode))
+
+
+@pytest.mark.parametrize(
+    "mode", ["invalid", "LEGACY", ""], ids=["unknown", "case", "empty"]
+)
+def test_cli_rejects_invalid_camera_api(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], mode: str
+) -> None:
+    # arrange
+    monkeypatch.setattr(sys, "argv", ["blackvuesync", "dashcam", "--camera-api", mode])
+
+    # act
+    with pytest.raises(SystemExit) as raised:
+        blackvuesync.parse_args()
+
+    # assert
+    assert_that(raised.value.code, equal_to(2))
+    assert_that(capsys.readouterr().err, contains_string("--camera-api"))
+
+
+@pytest.mark.parametrize(
+    "mode, legacy, expected_paths",
+    [
+        (
+            "auto",
+            True,
+            [
+                "/accessible",
+                "/blackvue_vod.cgi",
+                "/Record/20261018_120000_NF.mp4",
+                "/Record/20261018_120000_NF.thm",
+                "/Record/20261018_120000_N.3gf",
+                "/Record/20261018_120000_N.gps",
+            ],
+        ),
+        (
+            "auto",
+            False,
+            [
+                "/accessible",
+                "/vodList",
+                "/20261018_120000_NF.mp4",
+                "/vodMetadata",
+                "/vodMetadata",
+            ],
+        ),
+        (
+            "legacy",
+            True,
+            [
+                "/blackvue_vod.cgi",
+                "/Record/20261018_120000_NF.mp4",
+                "/Record/20261018_120000_NF.thm",
+                "/Record/20261018_120000_N.3gf",
+                "/Record/20261018_120000_N.gps",
+            ],
+        ),
+        (
+            "modern",
+            False,
+            ["/vodList", "/20261018_120000_NF.mp4", "/vodMetadata", "/vodMetadata"],
+        ),
+    ],
+    ids=[
+        "default-legacy",
+        "default-modern",
+        "forced-legacy",
+        "forced-modern",
+    ],
+)
+def test_camera_api_preserves_inventory_and_downloads(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mode: Literal["auto", "legacy", "modern"],
+    legacy: bool,
+    expected_paths: list[str],
+) -> None:
+    # arrange
+    requests: list[str] = []
+    filename = "20261018_120000_NF.mp4"
+
+    class DashcamHandler(http.server.BaseHTTPRequestHandler):
+        """serves a recording and its metadata on the selected protocol."""
+
+        # matches the standard library handler API
+        def do_GET(self) -> None:  # noqa: N802
+            """serves the probe, inventory, and recording bytes."""
+            requests.append(self.path)
+            status = 200
+            if self.path == "/accessible":
+                status = 404 if legacy else 200
+                body = b""
+            elif self.path == "/blackvue_vod.cgi":
+                body = f"v:1.00\r\nn:/Record/{filename},s:1000000\r\n".encode()
+            elif self.path == "/vodList":
+                body = json.dumps({"filelist": [{"filename": filename}]}).encode()
+            else:
+                body = b"recording"
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        # matches the standard library handler API
+        def do_POST(self) -> None:  # noqa: N802
+            """serves modern metadata payloads."""
+            requests.append(self.path)
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            metadata_type = payload["types"][0]
+            body = json.dumps({"metadata": {metadata_type: "cmVjb3JkaW5n"}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format: str, *args: object) -> None:
+            """suppresses request logging."""
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), DashcamHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    usage = shutil.disk_usage(tmp_path)
+    monkeypatch.setattr(
+        shutil, "disk_usage", lambda _path: usage._replace(used=0, free=usage.total)
+    )
+    monkeypatch.setattr(blackvuesync, "max_disk_used_percent", 90)
+    monkeypatch.setattr(blackvuesync, "dry_run", False)
+    monkeypatch.setattr(blackvuesync, "cutoff_date", None)
+    monkeypatch.setattr(blackvuesync, "skip_metadata", set())
+    # act
+    try:
+        blackvuesync.sync(
+            f"127.0.0.1:{server.server_port}",
+            str(tmp_path),
+            "none",
+            "date",
+            None,
+            None,
+            camera_api=mode,
+        )
+        blackvuesync.sync(
+            f"127.0.0.1:{server.server_port}",
+            str(tmp_path),
+            "none",
+            "date",
+            None,
+            None,
+            camera_api=mode,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    # assert
+    expected_files = {
+        filename: b"recording",
+        "20261018_120000_NF.thm": b"recording",
+        "20261018_120000_N.gps": b"recording",
+    }
+    if legacy:
+        expected_files["20261018_120000_N.3gf"] = b"recording"
+    assert_that(
+        {
+            p.name: p.read_bytes()
+            for p in tmp_path.iterdir()
+            if not p.name.startswith(".")
+        },
+        equal_to(expected_files),
+    )
+    assert_that(
+        requests,
+        equal_to(expected_paths + expected_paths[: 2 if mode == "auto" else 1]),
+    )
+
+
+@pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
+def test_forced_missing_api_preserves_http_cause(
+    monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "modern"]
+) -> None:
+    # arrange
+    error = _http_error("http://dashcam/index", 404)
+
+    def unavailable_index(_request: urllib.request.Request) -> None:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+
+    # act
+    with pytest.raises(RuntimeError) as raised:
+        blackvuesync.get_dashcam_filenames("http://dashcam/", mode)
+
+    # assert
+    assert_that(raised.value.__cause__, same_instance(error))
+    assert_that(error.code, equal_to(404))
+
+
+@pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
+@pytest.mark.parametrize(
+    "error_code, error_type",
+    [(errno.EHOSTUNREACH, UserWarning), (errno.ECONNREFUSED, RuntimeError)],
+    ids=["unreachable", "refused"],
+)
+def test_forced_api_preserves_network_error_handling(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: Literal["legacy", "modern"],
+    error_code: int,
+    error_type: type[Exception],
+) -> None:
+    # arrange
+    error = urllib.error.URLError(OSError(error_code, "unavailable"))
+
+    def unavailable_index(_request: urllib.request.Request) -> None:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+
+    # act
+    with pytest.raises(error_type) as raised:
+        blackvuesync.get_dashcam_filenames("http://dashcam/", mode)
+
+    # assert
+    assert_that(raised.value.__cause__, same_instance(error))
+
+
+@pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
+def test_forced_api_preserves_other_http_error_handling(
+    monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "modern"]
+) -> None:
+    # arrange
+    error = _http_error("http://dashcam/index", 500)
+
+    def unavailable_index(_request: urllib.request.Request) -> None:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+
+    # act
+    with pytest.raises(RuntimeError) as raised:
+        blackvuesync.get_dashcam_filenames("http://dashcam/", mode)
+
+    # assert
+    assert_that(raised.value.__cause__, same_instance(error))
+    assert_that(error.code, equal_to(500))
