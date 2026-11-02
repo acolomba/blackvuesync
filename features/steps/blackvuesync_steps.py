@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import re
 
-from behave import when
+from behave import given, when
 from behave.runner import Context
 
 from features.lib.runner import RunResult, run_direct, run_docker
@@ -47,6 +47,7 @@ def _run_blackvuesync(context: Context, options: dict[str, str]) -> None:
             context.dest_dir,
             context.dashcam.affinity_key,
             options,
+            context.docker_environment,
         )
     else:
         context.result = run_direct(
@@ -58,6 +59,20 @@ def _run_blackvuesync(context: Context, options: dict[str, str]) -> None:
         )
     context.run_dates = sorted({started_on, datetime.date.today()})
     _write_run_log(context, context.result)
+
+
+@given('the docker environment variable "{name}" is empty')
+def docker_environment_empty(context: Context, name: str) -> None:
+    """sets an empty environment variable for the next Docker run."""
+    context.docker_environment[name] = ""
+
+
+@given('the docker environment variable "{name}" is unset')
+def docker_environment_unset(context: Context, name: str) -> None:
+    """unsets the camera API variable before the entrypoint runs."""
+    if name != "CAMERA_API":
+        raise ValueError("only CAMERA_API unsetting is supported")
+    context.docker_environment[name] = None
 
 
 @when("blackvuesync runs")

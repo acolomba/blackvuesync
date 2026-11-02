@@ -13,6 +13,21 @@ from features.lib.recordings import (
 )
 
 
+@given('the dashcam uses the "{protocol}" API')
+def dashcam_protocol(context: Context, protocol: str) -> None:
+    """selects the camera protocol for this scenario."""
+    if protocol not in ("legacy", "modern"):
+        raise ValueError(f"unknown camera protocol {protocol!r}")
+    context.legacy_api = protocol == "legacy"
+    context.dashcam.set_legacy_api(context.legacy_api)
+
+
+@given("the dashcam returns http {status_code:d} for its recording index")
+def dashcam_index_error(context: Context, status_code: int) -> None:
+    """sets the recording index error status."""
+    context.dashcam.fail_listing(status_code)
+
+
 @given(
     'the dashcam has recordings for the past "{period}" of types "{recording_types}", directions "{recording_directions}"'
 )
@@ -105,3 +120,20 @@ def assert_missing_download_requests(context: Context) -> None:
         f"not requested: {sorted(missing.difference(requested))}; "
         f"unexpected: {sorted(set(requested) - missing)}",
     )
+
+
+@then("the dashcam receives these api selection requests:")
+def assert_api_selection_requests(context: Context) -> None:
+    """compares the complete probe and index request sequence."""
+    paths = [
+        path
+        for path in context.dashcam.requested_paths()
+        if path in ("/accessible", "/blackvue_vod.cgi", "/vodList")
+    ]
+    assert_that(paths, equal_to([row["path"] for row in context.table]))
+
+
+@then("the dashcam receives no api requests")
+def assert_no_api_requests(context: Context) -> None:
+    """verifies invalid configuration never reaches the camera."""
+    assert_that(context.dashcam.requested_paths(), equal_to([]))

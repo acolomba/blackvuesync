@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-case "${CAMERA_API-auto}" in
+case "${CAMERA_API:-auto}" in
     auto|legacy|modern) ;;
     *) echo "Invalid CAMERA_API: expected auto, legacy or modern" >&2; exit 2 ;;
 esac

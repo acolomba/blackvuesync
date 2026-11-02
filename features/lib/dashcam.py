@@ -16,7 +16,9 @@ class MockDashcamClient:
         self._url = url
 
     # JSON responses are untyped, hence Any
-    def _request(self, method: str, path: str, json: object = None) -> dict[str, Any]:
+    def _request(
+        self, method: str, path: str, json: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """sends a control request and returns the decoded JSON response."""
         response = requests.request(
             method,
@@ -41,14 +43,21 @@ class MockDashcamClient:
         """makes the dashcam answer downloads of the filenames with a 500 error."""
         self._request("PUT", "/mock/download-errors", {"filenames": list(filenames)})
 
-    def fail_listing(self) -> None:
-        """makes the dashcam answer requests for its recording list with a 500 error."""
-        self._request("PUT", "/mock/listing-error", {"failing": True})
+    def fail_listing(self, status_code: int = 500) -> None:
+        """makes the dashcam answer recording list requests with the given status."""
+        self._request(
+            "PUT", "/mock/listing-error", {"failing": True, "status_code": status_code}
+        )
 
     def requested_files(self) -> list[str]:
         """returns the recording filenames requested since the log was cleared."""
         filenames: list[str] = self._request("GET", "/mock/requests")["filenames"]
         return filenames
+
+    def requested_paths(self) -> list[str]:
+        """returns all camera paths requested since the log was cleared."""
+        paths: list[str] = self._request("GET", "/mock/requests")["paths"]
+        return paths
 
     def clear_requests(self) -> None:
         """clears the session's request log."""

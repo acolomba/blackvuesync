@@ -46,6 +46,9 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
+
+CAMERA_API_MODES = ("auto", "legacy", "modern")
 
 # logging
 TEXT_LOG_FORMAT = "%(asctime)s: %(levelname)s %(message)s"
@@ -840,11 +843,9 @@ def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
 
 
 def get_dashcam_filenames(
-    base_url: str, camera_api: str = "auto"
+    base_url: str, camera_api: Literal["auto", "legacy", "modern"] = "auto"
 ) -> tuple[bool, list[str]]:
     """gets whether the camera is legacy and its recording filenames"""
-    if camera_api not in ("auto", "legacy", "modern"):
-        raise ValueError("camera_api must be auto, legacy or modern")
     try:
         legacy = (
             is_legacy_camera(base_url)
@@ -871,6 +872,15 @@ def get_dashcam_filenames(
                 ) from e
 
         return legacy, filenames
+    except urllib.error.HTTPError as e:
+        if camera_api != "auto" and e.code == 404:
+            raise RuntimeError(
+                f"Recording API '{camera_api}' returned HTTP 404 at {base_url}; "
+                "try --camera-api auto (CAMERA_API=auto) to detect the camera API."
+            ) from e
+        raise RuntimeError(
+            f"Cannot obtain list of recordings from dashcam at address : {base_url}; error : {e}"
+        ) from e
     except urllib.error.URLError as e:
         if isinstance(e.reason, OSError) and (
             isinstance(e.reason, (TimeoutError, socket.timeout))
@@ -1749,7 +1759,7 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     include: tuple[str, ...] | None,
     exclude: tuple[str, ...] | None,
     metrics: SyncMetrics | None = None,
-    camera_api: str = "auto",
+    camera_api: Literal["auto", "legacy", "modern"] = "auto",
 ) -> None:
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
@@ -1869,7 +1879,7 @@ def parse_args() -> argparse.Namespace:
     )
     arg_parser.add_argument(
         "--camera-api",
-        choices=["auto", "legacy", "modern"],
+        choices=CAMERA_API_MODES,
         default="auto",
         help="selects the recording API; auto detects firmware (default), legacy uses blackvue_vod.cgi, modern uses vodList",
     )
@@ -2035,7 +2045,7 @@ def main() -> int:
     configure_logging(args.log_format)
     set_logging_levels(-1 if args.quiet else args.verbose, args.cron)
 
-    cron_logger.info(
+    logger.debug(
         "Camera API mode : %s",
         args.camera_api,
         extra={"event": "camera_api_configured", "camera_api": args.camera_api},

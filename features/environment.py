@@ -201,3 +201,4 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
     context.grouping = "none"
     # numbers the run logs of the scenario
     context.run_count = 0
+    context.docker_environment = {}

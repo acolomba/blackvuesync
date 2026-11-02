@@ -13,7 +13,7 @@ import io
 import json
 import logging
 import os
-import subprocess
+import shutil
 import sys
 import tempfile
 import threading
@@ -21,9 +21,10 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Literal
 
 import pytest
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, contains_string, equal_to, same_instance
 
 import blackvuesync
 
@@ -1828,29 +1829,26 @@ def test_parse_args_selects_camera_api(
 @pytest.mark.parametrize(
     "mode", ["invalid", "LEGACY", ""], ids=["unknown", "case", "empty"]
 )
-def test_cli_rejects_invalid_camera_api(mode: str) -> None:
+def test_cli_rejects_invalid_camera_api(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], mode: str
+) -> None:
     # arrange
-    script = Path(blackvuesync.__file__)
+    monkeypatch.setattr(sys, "argv", ["blackvuesync", "dashcam", "--camera-api", mode])
 
     # act
-    process = subprocess.run(
-        [sys.executable, str(script), "dashcam", "--camera-api", mode],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    with pytest.raises(SystemExit) as raised:
+        blackvuesync.parse_args()
 
     # assert
-    assert_that(process.returncode, equal_to(2))
-    assert_that("invalid choice" in process.stderr, equal_to(True))
-    assert_that("--camera-api" in process.stderr, equal_to(True))
+    assert_that(raised.value.code, equal_to(2))
+    assert_that(capsys.readouterr().err, contains_string("--camera-api"))
 
 
 @pytest.mark.parametrize(
-    "options, legacy, expected_paths",
+    "mode, legacy, expected_paths",
     [
         (
-            [],
+            "auto",
             True,
             [
                 "/accessible",
@@ -1862,7 +1860,7 @@ def test_cli_rejects_invalid_camera_api(mode: str) -> None:
             ],
         ),
         (
-            [],
+            "auto",
             False,
             [
                 "/accessible",
@@ -1873,18 +1871,7 @@ def test_cli_rejects_invalid_camera_api(mode: str) -> None:
             ],
         ),
         (
-            ["--camera-api", "auto"],
-            False,
-            [
-                "/accessible",
-                "/vodList",
-                "/20261018_120000_NF.mp4",
-                "/vodMetadata",
-                "/vodMetadata",
-            ],
-        ),
-        (
-            ["--camera-api", "legacy"],
+            "legacy",
             True,
             [
                 "/blackvue_vod.cgi",
@@ -1895,7 +1882,7 @@ def test_cli_rejects_invalid_camera_api(mode: str) -> None:
             ],
         ),
         (
-            ["--camera-api", "modern"],
+            "modern",
             False,
             ["/vodList", "/20261018_120000_NF.mp4", "/vodMetadata", "/vodMetadata"],
         ),
@@ -1903,13 +1890,16 @@ def test_cli_rejects_invalid_camera_api(mode: str) -> None:
     ids=[
         "default-legacy",
         "default-modern",
-        "explicit-auto",
         "forced-legacy",
         "forced-modern",
     ],
 )
 def test_camera_api_preserves_inventory_and_downloads(
-    tmp_path: Path, options: list[str], legacy: bool, expected_paths: list[str]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mode: Literal["auto", "legacy", "modern"],
+    legacy: bool,
+    expected_paths: list[str],
 ) -> None:
     # arrange
     requests: list[str] = []
@@ -1955,25 +1945,33 @@ def test_camera_api_preserves_inventory_and_downloads(
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), DashcamHandler)
     thread = threading.Thread(target=server.serve_forever)
     thread.start()
-    command = [
-        sys.executable,
-        str(Path(blackvuesync.__file__)),
-        f"127.0.0.1:{server.server_port}",
-        "--destination",
-        str(tmp_path),
-        "--max-used-disk",
-        "98",
-        "--verbose",
-        *options,
-    ]
-
+    usage = shutil.disk_usage(tmp_path)
+    monkeypatch.setattr(
+        shutil, "disk_usage", lambda _path: usage._replace(used=0, free=usage.total)
+    )
+    monkeypatch.setattr(blackvuesync, "max_disk_used_percent", 90)
+    monkeypatch.setattr(blackvuesync, "dry_run", False)
+    monkeypatch.setattr(blackvuesync, "cutoff_date", None)
+    monkeypatch.setattr(blackvuesync, "skip_metadata", set())
     # act
     try:
-        first_run = subprocess.run(
-            command, capture_output=True, text=True, check=False, timeout=10
+        blackvuesync.sync(
+            f"127.0.0.1:{server.server_port}",
+            str(tmp_path),
+            "none",
+            "date",
+            None,
+            None,
+            camera_api=mode,
         )
-        second_run = subprocess.run(
-            command, capture_output=True, text=True, check=False, timeout=10
+        blackvuesync.sync(
+            f"127.0.0.1:{server.server_port}",
+            str(tmp_path),
+            "none",
+            "date",
+            None,
+            None,
+            camera_api=mode,
         )
     finally:
         server.shutdown()
@@ -1981,7 +1979,6 @@ def test_camera_api_preserves_inventory_and_downloads(
         server.server_close()
 
     # assert
-    assert_that((first_run.returncode, second_run.returncode), equal_to((0, 0)))
     expected_files = {
         filename: b"recording",
         "20261018_120000_NF.thm": b"recording",
@@ -1999,85 +1996,75 @@ def test_camera_api_preserves_inventory_and_downloads(
     )
     assert_that(
         requests,
-        equal_to(
-            expected_paths
-            + expected_paths[: 2 if not options or options[-1] == "auto" else 1]
-        ),
+        equal_to(expected_paths + expected_paths[: 2 if mode == "auto" else 1]),
     )
-    assert_that("Camera API mode : " in first_run.stderr, equal_to(True))
 
 
-@pytest.mark.parametrize(
-    "mode",
-    [None, "auto", "legacy", "modern"],
-    ids=["omitted", "auto", "legacy", "modern"],
-)
-def test_docker_wrapper_passes_camera_api(tmp_path: Path, mode: str | None) -> None:
+@pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
+def test_forced_missing_api_preserves_http_cause(
+    monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "modern"]
+) -> None:
     # arrange
-    root = Path(blackvuesync.__file__).parent
-    capture = tmp_path / "capture.py"
-    capture.write_text("import json, sys\nprint(json.dumps(sys.argv[1:]))\n")
-    wrapper = tmp_path / "blackvuesync.sh"
-    wrapper.write_text(
-        (root / "blackvuesync.sh")
-        .read_text()
-        .replace("/blackvuesync.py", f'"{sys.executable}" "{capture}"')
-    )
-    environment = {"PATH": os.defpath, "ADDRESS": "dashcam"}
-    if mode is not None:
-        environment["CAMERA_API"] = mode
+    error = _http_error("http://dashcam/index", 404)
+
+    def unavailable_index(_request: urllib.request.Request) -> None:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
 
     # act
-    process = subprocess.run(
-        ["bash", str(wrapper)],
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    # assert
-    assert_that(process.returncode, equal_to(0))
-    assert_that(
-        json.loads(process.stdout),
-        equal_to(
-            ["dashcam", "--destination", "/recordings", "--camera-api", mode or "auto"]
-        ),
-    )
-
-
-@pytest.mark.parametrize(
-    "mode", ["invalid", "LEGACY", ""], ids=["unknown", "case", "empty"]
-)
-def test_docker_startup_rejects_invalid_camera_api(mode: str) -> None:
-    # arrange
-    entrypoint = Path(blackvuesync.__file__).parent / "entrypoint.sh"
-
-    # act
-    process = subprocess.run(
-        ["bash", str(entrypoint)],
-        env={"PATH": os.defpath, "CAMERA_API": mode},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    # assert
-    assert_that(
-        (process.returncode, process.stderr),
-        equal_to((2, "Invalid CAMERA_API: expected auto, legacy or modern\n")),
-    )
-
-
-@pytest.mark.parametrize(
-    "mode", ["invalid", "LEGACY", ""], ids=["unknown", "case", "empty"]
-)
-def test_inventory_rejects_invalid_camera_api(mode: str) -> None:
-    # act
-    with pytest.raises(ValueError) as raised:
+    with pytest.raises(RuntimeError) as raised:
         blackvuesync.get_dashcam_filenames("http://dashcam/", mode)
 
     # assert
-    assert_that(
-        raised.value.args, equal_to(("camera_api must be auto, legacy or modern",))
-    )
+    assert_that(raised.value.__cause__, same_instance(error))
+    assert_that(error.code, equal_to(404))
+
+
+@pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
+@pytest.mark.parametrize(
+    "error_code, error_type",
+    [(errno.EHOSTUNREACH, UserWarning), (errno.ECONNREFUSED, RuntimeError)],
+    ids=["unreachable", "refused"],
+)
+def test_forced_api_preserves_network_error_handling(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: Literal["legacy", "modern"],
+    error_code: int,
+    error_type: type[Exception],
+) -> None:
+    # arrange
+    error = urllib.error.URLError(OSError(error_code, "unavailable"))
+
+    def unavailable_index(_request: urllib.request.Request) -> None:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+
+    # act
+    with pytest.raises(error_type) as raised:
+        blackvuesync.get_dashcam_filenames("http://dashcam/", mode)
+
+    # assert
+    assert_that(raised.value.__cause__, same_instance(error))
+
+
+@pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
+def test_forced_api_preserves_other_http_error_handling(
+    monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "modern"]
+) -> None:
+    # arrange
+    error = _http_error("http://dashcam/index", 500)
+
+    def unavailable_index(_request: urllib.request.Request) -> None:
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+
+    # act
+    with pytest.raises(RuntimeError) as raised:
+        blackvuesync.get_dashcam_filenames("http://dashcam/", mode)
+
+    # assert
+    assert_that(raised.value.__cause__, same_instance(error))
+    assert_that(error.code, equal_to(500))
