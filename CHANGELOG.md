@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Add `--camera-api` and Docker `CAMERA_API` to select automatic, legacy, or modern recording APIs.
+- The new `--camera-api` option and Docker `CAMERA_API` variable force the `legacy` or `modern` recording API and skip the firmware check. Thanks to @jamie75. (#99)
 
 ### Changed
 

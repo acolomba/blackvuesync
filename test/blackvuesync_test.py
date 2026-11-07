@@ -21,7 +21,6 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Literal
 
 import pytest
 from hamcrest import assert_that, contains_string, equal_to, same_instance
@@ -1897,7 +1896,7 @@ def test_cli_rejects_invalid_camera_api(
 def test_camera_api_preserves_inventory_and_downloads(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    mode: Literal["auto", "legacy", "modern"],
+    mode: str,
     legacy: bool,
     expected_paths: list[str],
 ) -> None:
@@ -2002,15 +2001,15 @@ def test_camera_api_preserves_inventory_and_downloads(
 
 @pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
 def test_forced_missing_api_preserves_http_cause(
-    monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "modern"]
+    monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
     # arrange
-    error = _http_error("http://dashcam/index", 404)
+    with _http_error("http://dashcam/index", 404) as error:
 
-    def unavailable_index(_request: urllib.request.Request) -> None:
-        raise error
+        def unavailable_index(_request: urllib.request.Request) -> None:
+            raise error
 
-    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+        monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
 
     # act
     with pytest.raises(RuntimeError) as raised:
@@ -2018,7 +2017,6 @@ def test_forced_missing_api_preserves_http_cause(
 
     # assert
     assert_that(raised.value.__cause__, same_instance(error))
-    assert_that(error.code, equal_to(404))
 
 
 @pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
@@ -2029,7 +2027,7 @@ def test_forced_missing_api_preserves_http_cause(
 )
 def test_forced_api_preserves_network_error_handling(
     monkeypatch: pytest.MonkeyPatch,
-    mode: Literal["legacy", "modern"],
+    mode: str,
     error_code: int,
     error_type: type[Exception],
 ) -> None:
@@ -2051,15 +2049,15 @@ def test_forced_api_preserves_network_error_handling(
 
 @pytest.mark.parametrize("mode", ["legacy", "modern"], ids=["legacy", "modern"])
 def test_forced_api_preserves_other_http_error_handling(
-    monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "modern"]
+    monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
     # arrange
-    error = _http_error("http://dashcam/index", 500)
+    with _http_error("http://dashcam/index", 500) as error:
 
-    def unavailable_index(_request: urllib.request.Request) -> None:
-        raise error
+        def unavailable_index(_request: urllib.request.Request) -> None:
+            raise error
 
-    monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
+        monkeypatch.setattr(urllib.request, "urlopen", unavailable_index)
 
     # act
     with pytest.raises(RuntimeError) as raised:
@@ -2067,4 +2065,3 @@ def test_forced_api_preserves_other_http_error_handling(
 
     # assert
     assert_that(raised.value.__cause__, same_instance(error))
-    assert_that(error.code, equal_to(500))

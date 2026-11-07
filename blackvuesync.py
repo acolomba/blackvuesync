@@ -46,9 +46,6 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
-
-CAMERA_API_MODES = ("auto", "legacy", "modern")
 
 # logging
 TEXT_LOG_FORMAT = "%(asctime)s: %(levelname)s %(message)s"
@@ -815,6 +812,7 @@ def is_legacy_camera(base_url: str) -> bool:
         # other http errors and connection-level failures propagate to the shared handling
         if e.code != 404:
             raise
+        e.close()
         legacy = True
         probe_result = str(e)
     logger.debug(
@@ -843,7 +841,7 @@ def get_dashcam_filenames_legacy(base_url: str) -> list[str]:
 
 
 def get_dashcam_filenames(
-    base_url: str, camera_api: Literal["auto", "legacy", "modern"] = "auto"
+    base_url: str, camera_api: str = "auto"
 ) -> tuple[bool, list[str]]:
     """gets whether the camera is legacy and its recording filenames"""
     try:
@@ -1759,7 +1757,7 @@ def sync(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     include: tuple[str, ...] | None,
     exclude: tuple[str, ...] | None,
     metrics: SyncMetrics | None = None,
-    camera_api: Literal["auto", "legacy", "modern"] = "auto",
+    camera_api: str = "auto",
 ) -> None:
     """synchronizes the recordings at the dashcam address with the destination directory"""
     prepare_destination(destination, grouping)
@@ -1879,7 +1877,7 @@ def parse_args() -> argparse.Namespace:
     )
     arg_parser.add_argument(
         "--camera-api",
-        choices=CAMERA_API_MODES,
+        choices=["auto", "legacy", "modern"],
         default="auto",
         help="selects the recording API; auto detects firmware (default), legacy uses blackvue_vod.cgi, modern uses vodList",
     )
