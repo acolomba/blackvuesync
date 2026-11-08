@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The new `--camera-api` option and Docker `CAMERA_API` variable force the `legacy` or `modern` recording API and skip the firmware check. Thanks to @jamie75. (#99)
+
 ### Changed
 
 - Internal: adopt the Python blueprint for development tools, agent setup, and CI checks.

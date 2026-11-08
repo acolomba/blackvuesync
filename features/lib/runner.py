@@ -26,6 +26,9 @@ RUN_TIMEOUT = 120
 # long options with values and the environment variables blackvuesync.sh maps
 # them from in the docker image
 DOCKER_OPTION_ENV_VARS = {
+    "camera-api": "CAMERA_API",
+    "cron": "CRON",
+    "verbose": "VERBOSE",
     "exclude": "EXCLUDE",
     "grouping": "GROUPING",
     "include": "INCLUDE",
@@ -85,7 +88,12 @@ def run_direct(
         affinity_key,
     ]
     for name, value in options.items():
-        cmd += [f"--{name}", value]
+        if name == "cron":
+            cmd.append("--cron")
+        elif name == "verbose":
+            cmd += ["--verbose"] * int(value)
+        else:
+            cmd += [f"--{name}", value]
 
     logger.info("running (direct): %s", cmd)
     result = subprocess.run(
@@ -101,6 +109,7 @@ def run_docker(
     destination: Path,
     affinity_key: str,
     options: Mapping[str, str],
+    environment: Mapping[str, str | None] | None = None,
 ) -> RunResult:
     """runs the blackvuesync image once on the network.
 
@@ -132,6 +141,12 @@ def run_docker(
     )
     for name, value in options.items():
         container.with_env(DOCKER_OPTION_ENV_VARS[name], value)
+
+    for env_name, env_value in (environment or {}).items():
+        if env_value is not None:
+            container.with_env(env_name, env_value)
+    if environment and environment.get("CAMERA_API", "") is None:
+        container.with_kwargs(entrypoint=["env", "-u", "CAMERA_API", "/entrypoint.sh"])
 
     logger.info("running (docker): %s with %s", image_tag, dict(options))
     with container:
