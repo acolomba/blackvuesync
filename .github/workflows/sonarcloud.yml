@@ -61,7 +61,7 @@ jobs:
           coverage report
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
         with:
           # push and pull_request already carry branch/PR context in the event, and
           # naming a branch on a pull_request breaks PR decoration. workflow_dispatch
